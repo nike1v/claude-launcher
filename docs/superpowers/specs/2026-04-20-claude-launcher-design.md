@@ -128,7 +128,8 @@ interface HistoryEntry {
 **Persistence:**
 - `projects.json` → `~/.config/claude-launcher/projects.json`
 - Session history → read from host filesystem on demand (`~/.claude/projects/<hash>/`)
-  where `<hash>` is the SHA-256 of the absolute project path (Claude's own convention)
+  where `<hash>` is the absolute project path with `/` replaced by `-`
+  e.g. `/home/user/myproject` → `-home-user-myproject` (Claude's own convention)
 - Runtime session state → Zustand in-memory only, not persisted
 
 ---
