@@ -1,22 +1,27 @@
 import { contextBridge, ipcRenderer } from 'electron'
+import type { IpcChannels, IpcEventChannel } from '../shared/types'
 
-// Expose a typed API to the renderer via contextBridge.
-// Additional handlers will be added in later tasks.
-contextBridge.exposeInMainWorld('electronAPI', {
-  versions: {
-    node: (): string => process.versions.node,
-    chrome: (): string => process.versions.chrome,
-    electron: (): string => process.versions.electron
-  },
-  ipcRenderer: {
-    on: (channel: string, listener: (...args: unknown[]) => void) => {
-      ipcRenderer.on(channel, (_event, ...args) => listener(...args))
-    },
-    removeAllListeners: (channel: string) => {
-      ipcRenderer.removeAllListeners(channel)
-    },
-    invoke: (channel: string, ...args: unknown[]) => {
-      return ipcRenderer.invoke(channel, ...args)
-    }
+const api = {
+  invoke: <K extends keyof IpcChannels>(
+    channel: K,
+    payload: IpcChannels[K]
+  ): Promise<unknown> => ipcRenderer.invoke(channel as string, payload),
+
+  on: <K extends IpcEventChannel>(
+    channel: K,
+    handler: (payload: IpcChannels[K]) => void
+  ): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, payload: IpcChannels[K]) =>
+      handler(payload)
+    ipcRenderer.on(channel as string, listener)
+    return () => ipcRenderer.removeListener(channel as string, listener)
   }
-})
+}
+
+contextBridge.exposeInMainWorld('electronAPI', api)
+
+declare global {
+  interface Window {
+    electronAPI: typeof api
+  }
+}

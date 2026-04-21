@@ -118,5 +118,5 @@ export type IpcInvokeChannel = Extract<
 
 export type IpcEventChannel = Extract<
   keyof IpcChannels,
-  'session:event' | 'session:status' | 'projects:history'
+  'session:event' | 'session:status' | 'projects:history' | 'projects:loaded'
 >
