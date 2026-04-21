@@ -1,5 +1,4 @@
 import { useEffect } from 'react'
-import { useProjectsStore } from './store/projects'
 import { useSessionsStore } from './store/sessions'
 import { useIpcListeners } from './ipc/listeners'
 import { Sidebar } from './components/Sidebar/Sidebar'
@@ -10,7 +9,6 @@ import { StatusBar } from './components/StatusBar/StatusBar'
 export function App(): JSX.Element {
   useIpcListeners()
 
-  const { setProjects } = useProjectsStore()
   const { sessions, tabOrder, activeSessionId } = useSessionsStore()
 
   // Load projects from disk on startup — main responds via projects:loaded event

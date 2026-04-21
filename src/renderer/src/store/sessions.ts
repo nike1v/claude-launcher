@@ -35,10 +35,11 @@ export const useSessionsStore = create<SessionsStore>((set, get) => ({
 
   removeSession: (sessionId) => {
     const { tabOrder, activeSessionId } = get()
+    const idx = tabOrder.indexOf(sessionId)
     const newOrder = tabOrder.filter(id => id !== sessionId)
     const newActive =
       activeSessionId === sessionId
-        ? (newOrder[newOrder.indexOf(sessionId) - 1] ?? newOrder[0] ?? null)
+        ? (newOrder[idx - 1] ?? newOrder[0] ?? null)
         : activeSessionId
     set(state => {
       const sessions = { ...state.sessions }

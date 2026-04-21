@@ -24,12 +24,7 @@ export function ChatPanel({ sessionId }: Props): JSX.Element {
     return (
       <div className="h-full flex flex-col items-center justify-center gap-3">
         <p className="text-red-400 text-sm">{session.errorMessage ?? 'Session error'}</p>
-        <button
-          onClick={() => window.location.reload()}
-          className="px-3 py-1.5 text-xs bg-white/10 rounded hover:bg-white/20"
-        >
-          Retry
-        </button>
+        <p className="text-white/30 text-xs">Close this tab and reopen the project to retry.</p>
       </div>
     )
   }

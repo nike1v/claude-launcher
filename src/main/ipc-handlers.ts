@@ -62,6 +62,10 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): () => void {
 
   return () => {
     sessionManager.stopAll()
-    ipcMain.removeAllListeners()
+    const channels = [
+      'session:start', 'session:send', 'session:stop', 'session:permission',
+      'projects:save', 'projects:load', 'projects:history:load'
+    ]
+    channels.forEach(ch => ipcMain.removeHandler(ch))
   }
 }

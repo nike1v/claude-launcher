@@ -1,5 +1,6 @@
 import type { Project } from '../../../../shared/types'
 import { useSessionsStore } from '../../store/sessions'
+import { useProjectsStore } from '../../store/projects'
 import { startSession } from '../../ipc/bridge'
 
 interface Props {
@@ -9,8 +10,10 @@ interface Props {
 
 export function ProjectItem({ project, isActive }: Props): JSX.Element {
   const { addSession } = useSessionsStore()
+  const { setActiveProjectId } = useProjectsStore()
 
   const handleClick = async () => {
+    setActiveProjectId(project.id)
     const sessionId = await startSession(project.id)
     addSession({
       id: sessionId,

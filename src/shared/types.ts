@@ -113,7 +113,7 @@ export interface IpcChannels {
 export type IpcInvokeChannel = Extract<
   keyof IpcChannels,
   'session:start' | 'session:send' | 'session:stop' | 'session:permission' |
-  'projects:save' | 'projects:history:load'
+  'projects:save' | 'projects:history:load' | 'projects:load'
 >
 
 export type IpcEventChannel = Extract<

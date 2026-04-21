@@ -34,8 +34,8 @@ function buildListCommand(
 ): { bin: string; args: string[] } {
   // List JSONL files sorted by modification time (newest first), read first line of each
   const shellScript = [
-    `if [ -d "${historyDir}" ]; then`,
-    `  ls -t "${historyDir}"/*.jsonl 2>/dev/null | head -20 | while read f; do`,
+    `if [ -d '${historyDir}' ]; then`,
+    `  ls -t '${historyDir}'/*.jsonl 2>/dev/null | head -20 | while read f; do`,
     `    echo "FILE:$f"`,
     `    head -1 "$f" 2>/dev/null`,
     `  done`,

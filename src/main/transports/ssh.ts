@@ -15,7 +15,8 @@ export class SshTransport implements ITransport {
     if (model) claudeArgs.push('--model', model)
     if (resumeSessionId) claudeArgs.push('--resume', resumeSessionId)
 
-    const remoteCommand = `cd ${JSON.stringify(path)} && claude ${claudeArgs.join(' ')}`
+    const quotedArgs = claudeArgs.map(arg => JSON.stringify(arg)).join(' ')
+    const remoteCommand = `cd ${JSON.stringify(path)} && claude ${quotedArgs}`
 
     const sshArgs = ['-T']
     if (host.port) sshArgs.push('-p', String(host.port))
