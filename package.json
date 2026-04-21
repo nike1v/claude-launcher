@@ -2,7 +2,7 @@
   "name": "claude-launcher",
   "version": "0.0.0",
   "description": "Electron desktop app for running Claude CLI sessions",
-  "main": "dist-electron/main/index.js",
+  "main": "out/main/index.js",
   "private": true,
   "type": "module",
   "scripts": {
@@ -45,9 +45,5 @@
     "directories": {
       "output": "dist"
     }
-  },
-  "vitest": {
-    "environment": "node",
-    "include": ["tests/**/*.test.ts"]
   }
 }
