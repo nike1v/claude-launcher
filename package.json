@@ -6,7 +6,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "electron-vite dev",
+    "dev": "ELECTRON_OZONE_PLATFORM_HINT=auto electron-vite dev --noSandbox",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "test": "vitest run",
