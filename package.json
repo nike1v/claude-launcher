@@ -1,0 +1,53 @@
+{
+  "name": "claude-launcher",
+  "version": "0.0.0",
+  "description": "Electron desktop app for running Claude CLI sessions",
+  "main": "dist-electron/main/index.js",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@lexical/react": "^0.21.0",
+    "lexical": "^0.21.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-markdown": "^9.0.0",
+    "remark-gfm": "^4.0.0",
+    "zustand": "^5.0.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.0.0",
+    "@testing-library/react": "^16.0.0",
+    "@testing-library/user-event": "^14.0.0",
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "@vitest/coverage-v8": "^2.0.0",
+    "electron": "^34.0.0",
+    "electron-builder": "^25.0.0",
+    "electron-vite": "^3.0.0",
+    "happy-dom": "^15.0.0",
+    "tailwindcss": "^4.0.0",
+    "typescript": "~5.7.0",
+    "vite": "^6.0.0",
+    "vitest": "^2.0.0"
+  },
+  "build": {
+    "appId": "com.claude-launcher.app",
+    "productName": "Claude Launcher",
+    "directories": {
+      "output": "dist"
+    }
+  },
+  "vitest": {
+    "environment": "node",
+    "include": ["tests/**/*.test.ts"]
+  }
+}
