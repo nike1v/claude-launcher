@@ -1,6 +1,7 @@
 import { app, BrowserWindow, shell } from 'electron'
 import { join } from 'node:path'
 import { registerIpcHandlers } from './ipc-handlers'
+import { initAutoUpdater } from './updater'
 
 function createWindow(): BrowserWindow {
   const win = new BrowserWindow({
@@ -34,6 +35,7 @@ function createWindow(): BrowserWindow {
 app.whenReady().then(() => {
   const win = createWindow()
   const cleanup = registerIpcHandlers(win)
+  initAutoUpdater(win)
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
