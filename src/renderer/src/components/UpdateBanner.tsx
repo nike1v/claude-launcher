@@ -23,7 +23,7 @@ export function UpdateBanner(): JSX.Element | null {
           onClick={installUpdate}
           className="font-medium underline hover:no-underline"
         >
-          Restart &amp; Update
+          Restart & Update
         </button>
         <button
           onClick={() => setDismissed(true)}
