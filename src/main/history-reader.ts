@@ -3,11 +3,44 @@ import { promisify } from 'node:util'
 import { readdir, readFile, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join, sep } from 'node:path'
-import type { HistoryEntry, HostType } from '../shared/types'
+import type { HistoryEntry, HostType, StreamJsonEvent } from '../shared/types'
+import { parseStreamJsonLine } from './stream-json-parser'
 
 const execFileAsync = promisify(execFile)
 
 export class HistoryReader {
+  public async loadSessionEvents(host: HostType, projectPath: string, sessionId: string): Promise<StreamJsonEvent[]> {
+    if (host.kind === 'local') {
+      const filePath = join(localClaudeProjectDir(projectPath), `${sessionId}.jsonl`)
+      let content: string
+      try {
+        content = await readFile(filePath, 'utf-8')
+      } catch {
+        return []
+      }
+      return content.split('\n')
+        .map(line => line.trim())
+        .filter(Boolean)
+        .map(line => parseStreamJsonLine(line))
+        .filter((e): e is StreamJsonEvent => e !== null)
+    }
+
+    const filePath = `${remoteClaudeProjectDir(projectPath)}/${sessionId}.jsonl`
+    const command = buildCatCommand(host, filePath)
+    let output: string
+    try {
+      const { stdout } = await execFileAsync(command.bin, command.args, { timeout: 5000 })
+      output = stdout
+    } catch {
+      return []
+    }
+    return output.split('\n')
+      .map(line => line.trim())
+      .filter(Boolean)
+      .map(line => parseStreamJsonLine(line))
+      .filter((e): e is StreamJsonEvent => e !== null)
+  }
+
   public async loadHistory(host: HostType, projectPath: string): Promise<HistoryEntry[]> {
     if (host.kind === 'local') return loadLocalHistory(projectPath)
 
@@ -67,6 +100,18 @@ function localClaudeProjectDir(projectPath: string): string {
 function remoteClaudeProjectDir(projectPath: string): string {
   const slug = projectPath.split('/').join('-')
   return `~/.claude/projects/${slug}`
+}
+
+function buildCatCommand(host: HostType, filePath: string): { bin: string; args: string[] } {
+  const cmd = `cat '${filePath}' 2>/dev/null`
+  if (host.kind === 'wsl') {
+    return { bin: 'wsl.exe', args: ['-d', host.distro, '--', 'bash', '-c', cmd] }
+  }
+  const sshArgs = ['-T']
+  if (host.port) sshArgs.push('-p', String(host.port))
+  if (host.keyFile) sshArgs.push('-i', host.keyFile)
+  sshArgs.push(`${host.user}@${host.host}`, cmd)
+  return { bin: 'ssh', args: sshArgs }
 }
 
 function buildListCommand(

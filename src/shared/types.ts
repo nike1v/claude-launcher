@@ -111,6 +111,7 @@ export interface IpcChannels {
   'session:permission': { sessionId: string; decision: 'allow' | 'deny'; toolUseId: string }
   'projects:save': Project[]
   'projects:history:load': { projectId: string }
+  'session:history:load': { projectId: string; sessionId: string }
   'projects:load': Record<string, never>
   'updater:check': Record<string, never>
   'updater:install': Record<string, never>
@@ -126,7 +127,7 @@ export interface IpcChannels {
 export type IpcInvokeChannel = Extract<
   keyof IpcChannels,
   | 'session:start' | 'session:send' | 'session:stop' | 'session:permission'
-  | 'projects:save' | 'projects:history:load' | 'projects:load'
+  | 'projects:save' | 'projects:history:load' | 'session:history:load' | 'projects:load'
   | 'updater:check' | 'updater:install'
 >
 

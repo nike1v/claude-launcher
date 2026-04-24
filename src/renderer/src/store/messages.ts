@@ -10,6 +10,7 @@ export interface ChatMessage {
 interface MessagesStore {
   messagesBySession: Record<string, ChatMessage[]>
   appendEvent: (sessionId: string, event: StreamJsonEvent) => void
+  prependEvents: (sessionId: string, events: StreamJsonEvent[]) => void
   clearSession: (sessionId: string) => void
 }
 
@@ -24,6 +25,18 @@ export const useMessagesStore = create<MessagesStore>((set) => ({
         messagesBySession: {
           ...state.messagesBySession,
           [sessionId]: [...existing, message]
+        }
+      }
+    }),
+
+  prependEvents: (sessionId, events) =>
+    set(state => {
+      const existing = state.messagesBySession[sessionId] ?? []
+      const messages: ChatMessage[] = events.map(event => ({ id: crypto.randomUUID(), event, timestamp: Date.now() }))
+      return {
+        messagesBySession: {
+          ...state.messagesBySession,
+          [sessionId]: [...messages, ...existing]
         }
       }
     }),

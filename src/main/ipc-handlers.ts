@@ -60,11 +60,18 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): () => void {
     mainWindow.webContents.send('projects:history', { projectId, entries })
   })
 
+  handle('session:history:load', async ({ projectId, sessionId }) => {
+    const projects = projectStore.load()
+    const project = projects.find(p => p.id === projectId)
+    if (!project) return []
+    return historyReader.loadSessionEvents(project.host, project.path, sessionId)
+  })
+
   return () => {
     sessionManager.stopAll()
     const channels = [
       'session:start', 'session:send', 'session:stop', 'session:permission',
-      'projects:save', 'projects:load', 'projects:history:load'
+      'projects:save', 'projects:load', 'projects:history:load', 'session:history:load'
     ]
     channels.forEach(ch => ipcMain.removeHandler(ch))
   }

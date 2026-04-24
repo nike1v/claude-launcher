@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react'
 import { useProjectsStore } from '../../store/projects'
 import { useSessionsStore } from '../../store/sessions'
-import { startSession, loadHistory } from '../../ipc/bridge'
+import { useMessagesStore } from '../../store/messages'
+import { startSession, loadHistory, loadSessionHistory } from '../../ipc/bridge'
 import type { HistoryEntry, IpcChannels } from '../../../../shared/types'
 
 export function HistoryList(): JSX.Element {
   const { activeProjectId } = useProjectsStore()
   const { addSession } = useSessionsStore()
+  const { prependEvents } = useMessagesStore()
   const [entries, setEntries] = useState<HistoryEntry[]>([])
 
   useEffect(() => {
@@ -26,7 +28,11 @@ export function HistoryList(): JSX.Element {
 
   const resumeSession = async (entry: HistoryEntry) => {
     if (!activeProjectId) return
-    const sessionId = await startSession(activeProjectId, entry.sessionId)
+    const [events, sessionId] = await Promise.all([
+      loadSessionHistory(activeProjectId, entry.sessionId),
+      startSession(activeProjectId, entry.sessionId)
+    ])
+    prependEvents(sessionId, events)
     addSession({ id: sessionId, projectId: activeProjectId, status: 'starting', hasUnread: false })
   }
 
