@@ -36,17 +36,21 @@ export class SessionManager {
     this.onEvent('session:status', { sessionId, status: 'starting' })
     const process = transport.spawn(spawnOptions)
 
+    let stderrBuffer = ''
     const session: ActiveSession = { sessionId, projectId: project.id, process, lineBuffer: '' }
     this.sessions.set(sessionId, session)
 
     process.stdout?.on('data', (chunk: Buffer) => this.handleStdout(session, chunk))
-    process.stderr?.on('data', () => {}) // ignore stderr for now
+    process.stderr?.on('data', (chunk: Buffer) => { stderrBuffer += chunk.toString('utf-8') })
     process.on('exit', (code) => {
       const isError = code !== 0 && code !== null
+      const errorMessage = isError
+        ? `Process exited with code ${code}${stderrBuffer.trim() ? `\n${stderrBuffer.trim()}` : ''}`
+        : undefined
       this.onEvent('session:status', {
         sessionId,
         status: isError ? 'error' : 'closed',
-        errorMessage: isError ? `Process exited with code ${code}` : undefined
+        errorMessage
       })
       this.sessions.delete(sessionId)
     })
