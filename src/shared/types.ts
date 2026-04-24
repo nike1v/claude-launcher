@@ -92,32 +92,45 @@ export interface ResultEvent {
 
 export type StreamJsonEvent = InitEvent | AssistantEvent | UserEvent | ResultEvent
 
+// ── Updater ──────────────────────────────────────────────────────────────────
+
+export interface UpdaterStatus {
+  state: 'checking' | 'available' | 'downloading' | 'ready' | 'up-to-date' | 'error'
+  version?: string
+  percent?: number
+  message?: string
+}
+
 // ── IPC channel contracts ────────────────────────────────────────────────────
 
 export interface IpcChannels {
-  // Renderer → Main
+  // Renderer → Main (invoke)
   'session:start': { projectId: string; resumeSessionId?: string }
   'session:send': { sessionId: string; text: string }
   'session:stop': { sessionId: string }
   'session:permission': { sessionId: string; decision: 'allow' | 'deny'; toolUseId: string }
   'projects:save': Project[]
   'projects:history:load': { projectId: string }
-  'projects:load': Record<string, never>  // renderer calls on startup to get persisted projects
+  'projects:load': Record<string, never>
+  'updater:check': Record<string, never>
+  'updater:install': Record<string, never>
 
-  // Main → Renderer (events, not invoke/handle)
+  // Main → Renderer (events)
   'session:event': { sessionId: string; event: StreamJsonEvent }
   'session:status': { sessionId: string; status: Session['status']; errorMessage?: string }
   'projects:history': { projectId: string; entries: HistoryEntry[] }
-  'projects:loaded': { projects: Project[] }  // response to projects:load
+  'projects:loaded': { projects: Project[] }
+  'updater:status': UpdaterStatus
 }
 
 export type IpcInvokeChannel = Extract<
   keyof IpcChannels,
-  'session:start' | 'session:send' | 'session:stop' | 'session:permission' |
-  'projects:save' | 'projects:history:load' | 'projects:load'
+  | 'session:start' | 'session:send' | 'session:stop' | 'session:permission'
+  | 'projects:save' | 'projects:history:load' | 'projects:load'
+  | 'updater:check' | 'updater:install'
 >
 
 export type IpcEventChannel = Extract<
   keyof IpcChannels,
-  'session:event' | 'session:status' | 'projects:history' | 'projects:loaded'
+  'session:event' | 'session:status' | 'projects:history' | 'projects:loaded' | 'updater:status'
 >
