@@ -46,6 +46,9 @@
     "vite": "^6.0.0",
     "vitest": "^2.0.0"
   },
+  "pnpm": {
+    "onlyBuiltDependencies": ["electron"]
+  },
   "build": {
     "appId": "com.claude-launcher.app",
     "productName": "Claude Launcher",
