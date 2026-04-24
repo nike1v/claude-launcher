@@ -2,6 +2,10 @@
   "name": "claude-launcher",
   "version": "0.0.0",
   "description": "Electron desktop app for running Claude CLI sessions",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nike1v/claude-launcher"
+  },
   "main": "out/main/index.js",
   "private": true,
   "type": "module",
@@ -45,7 +49,7 @@
   "build": {
     "appId": "com.claude-launcher.app",
     "productName": "Claude Launcher",
-    "publish": { "provider": "github" },
+    "publish": { "provider": "github", "releaseType": "release" },
     "directories": {
       "output": "dist"
     },
