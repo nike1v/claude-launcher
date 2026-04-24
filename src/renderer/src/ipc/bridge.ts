@@ -24,3 +24,7 @@ export function respondPermission(
 export function loadHistory(projectId: string): void {
   window.electronAPI.invoke('projects:history:load', { projectId })
 }
+
+export function installUpdate(): void {
+  window.electronAPI.invoke('updater:install', {})
+}
