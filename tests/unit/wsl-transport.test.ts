@@ -38,6 +38,7 @@ describe('WslTransport', () => {
         'claude',
         '--output-format', 'stream-json',
         '--input-format', 'stream-json',
+        '--verbose',
         '--permission-prompt-tool', 'stdio'
       ],
       expect.objectContaining({stdio: ['pipe', 'pipe', 'pipe']})

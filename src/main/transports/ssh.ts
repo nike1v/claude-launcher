@@ -10,6 +10,7 @@ export class SshTransport implements ITransport {
     const claudeArgs = [
       '--output-format', 'stream-json',
       '--input-format', 'stream-json',
+      '--verbose',
       '--permission-prompt-tool', 'stdio'
     ]
     if (model) claudeArgs.push('--model', model)
