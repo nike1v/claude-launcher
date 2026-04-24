@@ -8,6 +8,8 @@
   "scripts": {
     "dev": "ELECTRON_OZONE_PLATFORM_HINT=auto electron-vite dev --noSandbox",
     "build": "electron-vite build",
+    "dist": "electron-vite build && electron-builder",
+    "dist:win": "electron-vite build && electron-builder --win --x64",
     "preview": "electron-vite preview",
     "test": "vitest run",
     "test:watch": "vitest"
@@ -43,8 +45,15 @@
   "build": {
     "appId": "com.claude-launcher.app",
     "productName": "Claude Launcher",
+    "publish": { "provider": "github" },
     "directories": {
       "output": "dist"
+    },
+    "linux": {
+      "target": ["AppImage"]
+    },
+    "win": {
+      "target": ["nsis"]
     }
   }
 }
