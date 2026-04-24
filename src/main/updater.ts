@@ -1,4 +1,4 @@
-import { ipcMain, BrowserWindow, Menu, dialog, app } from 'electron'
+import { ipcMain, BrowserWindow, Menu, MenuItem, dialog, app } from 'electron'
 import { autoUpdater } from 'electron-updater'
 import type { UpdaterStatus } from '../shared/types'
 
@@ -11,11 +11,8 @@ function patchHelpMenu(checkFn: () => void): void {
   if (!menu) return
   const helpMenu = menu.items.find(item => item.label === 'Help')
   if (!helpMenu?.submenu) return
-  helpMenu.submenu.append(new (require('electron').MenuItem)({ type: 'separator' }))
-  helpMenu.submenu.append(new (require('electron').MenuItem)({
-    label: 'Check for Updates',
-    click: checkFn
-  }))
+  helpMenu.submenu.append(new MenuItem({ type: 'separator' }))
+  helpMenu.submenu.append(new MenuItem({ label: 'Check for Updates', click: checkFn }))
   Menu.setApplicationMenu(menu)
 }
 
@@ -69,14 +66,14 @@ export function initAutoUpdater(win: BrowserWindow): void {
 
   const checkForUpdates = (): void => {
     isManualCheck = true
-    autoUpdater.checkForUpdates()
+    autoUpdater.checkForUpdates().catch(() => {})
   }
 
   patchHelpMenu(checkForUpdates)
 
   ipcMain.handle('updater:check', () => {
     isManualCheck = true
-    autoUpdater.checkForUpdates()
+    autoUpdater.checkForUpdates().catch(() => {})
   })
 
   ipcMain.handle('updater:install', () => {
