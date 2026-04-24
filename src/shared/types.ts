@@ -1,6 +1,7 @@
 // ── Project / Host ──────────────────────────────────────────────────────────
 
 export type HostType =
+  | { kind: 'local' }
   | { kind: 'wsl'; distro: string }
   | { kind: 'ssh'; user: string; host: string; port?: number; keyFile?: string }
 

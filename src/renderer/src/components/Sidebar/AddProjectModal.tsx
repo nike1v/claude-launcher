@@ -14,8 +14,8 @@ export function AddProjectModal({ onClose, editProject }: Props): JSX.Element {
   const [name, setName] = useState(editProject?.name ?? '')
   const [path, setPath] = useState(editProject?.path ?? '')
   const [model, setModel] = useState(editProject?.model ?? '')
-  const [hostKind, setHostKind] = useState<'wsl' | 'ssh'>(
-    editProject?.host.kind ?? 'wsl'
+  const [hostKind, setHostKind] = useState<'local' | 'wsl' | 'ssh'>(
+    editProject?.host.kind ?? 'local'
   )
   const [distro, setDistro] = useState(
     editProject?.host.kind === 'wsl' ? editProject.host.distro : 'Ubuntu'
@@ -38,7 +38,9 @@ export function AddProjectModal({ onClose, editProject }: Props): JSX.Element {
     if (!name.trim() || !path.trim()) return
 
     const host: HostType =
-      hostKind === 'wsl'
+      hostKind === 'local'
+        ? { kind: 'local' }
+        : hostKind === 'wsl'
         ? { kind: 'wsl', distro: distro.trim() }
         : {
             kind: 'ssh',
@@ -81,7 +83,7 @@ export function AddProjectModal({ onClose, editProject }: Props): JSX.Element {
           <div>
             <label className={labelCls}>Host Type</label>
             <div className="flex gap-2">
-              {(['wsl', 'ssh'] as const).map(k => (
+              {(['local', 'wsl', 'ssh'] as const).map(k => (
                 <button
                   key={k}
                   type="button"

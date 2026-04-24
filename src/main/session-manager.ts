@@ -3,6 +3,7 @@ import type { ChildProcess } from 'node:child_process'
 import type { ITransport, SpawnOptions } from './transports/types'
 import type { Project, StreamJsonEvent } from '../shared/types'
 import { parseStreamJsonLine } from './stream-json-parser'
+import { LocalTransport } from './transports/local'
 import { WslTransport } from './transports/wsl'
 import { SshTransport } from './transports/ssh'
 
@@ -116,6 +117,7 @@ export class SessionManager {
 }
 
 function resolveDefaultTransport(project: Project): ITransport {
+  if (project.host.kind === 'local') return new LocalTransport()
   if (project.host.kind === 'wsl') return new WslTransport()
   if (project.host.kind === 'ssh') return new SshTransport()
   throw new Error(`Unknown host kind: ${(project.host as any).kind}`)
