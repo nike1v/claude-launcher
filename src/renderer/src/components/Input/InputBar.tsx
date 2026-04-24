@@ -41,6 +41,7 @@ function SendButton({ sessionId, disabled }: Props): JSX.Element {
 
   return (
     <button
+      id={`send-btn-${sessionId}`}
       onClick={handleSend}
       disabled={disabled}
       className="p-2 text-white/40 hover:text-white/80 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
@@ -84,9 +85,7 @@ export function InputBar({ sessionId, disabled = false }: Props): JSX.Element {
           />
           <OnChangePlugin onChange={() => {}} />
         </div>
-        <div id={`send-btn-${sessionId}`}>
-          <SendButton sessionId={sessionId} disabled={disabled} />
-        </div>
+        <SendButton sessionId={sessionId} disabled={disabled} />
       </LexicalComposer>
     </div>
   )
