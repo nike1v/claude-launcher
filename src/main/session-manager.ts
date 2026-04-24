@@ -14,7 +14,12 @@ interface ActiveSession {
   projectId: string
   process: ChildProcess
   lineBuffer: string
+  markedReady: boolean
 }
+
+// Some claude versions / hook configurations never emit system:init.
+// If we haven't transitioned to ready within this window, do it anyway.
+const READY_FALLBACK_MS = 5000
 
 export class SessionManager {
   private readonly sessions = new Map<string, ActiveSession>()
@@ -38,12 +43,22 @@ export class SessionManager {
     const process = transport.spawn(spawnOptions)
 
     let stderrBuffer = ''
-    const session: ActiveSession = { sessionId, projectId: project.id, process, lineBuffer: '' }
+    const session: ActiveSession = { sessionId, projectId: project.id, process, lineBuffer: '', markedReady: false }
     this.sessions.set(sessionId, session)
 
-    process.stdout?.on('data', (chunk: Buffer) => this.handleStdout(session, chunk))
+    const markReady = () => {
+      if (session.markedReady) return
+      session.markedReady = true
+      this.onEvent('session:status', { sessionId, status: 'ready' })
+    }
+
+    // Fallback: if init event never arrives, mark ready after timeout
+    const readyTimer = setTimeout(markReady, READY_FALLBACK_MS)
+
+    process.stdout?.on('data', (chunk: Buffer) => this.handleStdout(session, chunk, markReady))
     process.stderr?.on('data', (chunk: Buffer) => { stderrBuffer += chunk.toString('utf-8') })
     process.on('exit', (code) => {
+      clearTimeout(readyTimer)
       const isError = code !== 0 && code !== null
       const errorMessage = isError
         ? `Process exited with code ${code}${stderrBuffer.trim() ? `\n${stderrBuffer.trim()}` : ''}`
@@ -62,7 +77,10 @@ export class SessionManager {
   public sendMessage(sessionId: string, text: string): void {
     const session = this.sessions.get(sessionId)
     if (!session) return
-    const payload = JSON.stringify({ type: 'user', message: text }) + '\n'
+    const payload = JSON.stringify({
+      type: 'user',
+      message: { role: 'user', content: text }
+    }) + '\n'
     session.process.stdin?.write(payload)
   }
 
@@ -94,7 +112,7 @@ export class SessionManager {
     }
   }
 
-  private handleStdout(session: ActiveSession, chunk: Buffer): void {
+  private handleStdout(session: ActiveSession, chunk: Buffer, markReady: () => void): void {
     session.lineBuffer += chunk.toString('utf-8')
     const lines = session.lineBuffer.split('\n')
     session.lineBuffer = lines.pop() ?? ''
@@ -104,10 +122,11 @@ export class SessionManager {
       if (!event) continue
 
       if (event.type === 'system' && event.subtype === 'init') {
-        this.onEvent('session:status', { sessionId: session.sessionId, status: 'ready' })
+        markReady()
       } else if (event.type === 'result') {
-        this.onEvent('session:status', { sessionId: session.sessionId, status: 'ready' })
+        markReady()
       } else if (event.type === 'assistant') {
+        session.markedReady = true // prevent double-fire from timer
         this.onEvent('session:status', { sessionId: session.sessionId, status: 'busy' })
       }
 

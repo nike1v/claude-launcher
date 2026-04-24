@@ -61,7 +61,7 @@ describe('SessionManager', () => {
     manager.sendMessage(sessionId, 'hello')
     const proc = mockTransport.spawn.mock.results[0].value
     expect(proc.stdin.write).toHaveBeenCalledWith(
-      JSON.stringify({ type: 'user', message: 'hello' }) + '\n'
+      JSON.stringify({ type: 'user', message: { role: 'user', content: 'hello' } }) + '\n'
     )
   })
 
