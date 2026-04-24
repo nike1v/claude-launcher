@@ -23,8 +23,10 @@ export function Tab({ session, isActive, onActivate, onClose }: Props): JSX.Elem
 
   const hostLabel = project
     ? project.host.kind === 'wsl'
-      ? `WSL`
-      : `SSH`
+      ? 'WSL'
+      : project.host.kind === 'ssh'
+      ? 'SSH'
+      : 'Local'
     : '?'
 
   return (
