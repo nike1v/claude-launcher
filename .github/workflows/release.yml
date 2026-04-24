@@ -25,10 +25,15 @@ jobs:
 
       - run: pnpm install
 
-      - name: Build and publish Linux
-        run: pnpm exec electron-vite build && pnpm exec electron-builder --linux --publish always
+      - name: Build
+        run: pnpm exec electron-vite build && pnpm exec electron-builder --linux --publish never
+
+      - name: Upload AppImage to release
+        uses: softprops/action-gh-release@v3
+        with:
+          files: dist/*.AppImage
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   build-windows:
     runs-on: windows-latest
@@ -46,7 +51,12 @@ jobs:
 
       - run: pnpm install
 
-      - name: Build and publish Windows
-        run: pnpm exec electron-vite build && pnpm exec electron-builder --win --publish always
+      - name: Build
+        run: pnpm exec electron-vite build && pnpm exec electron-builder --win --publish never
+
+      - name: Upload Windows installer to release
+        uses: softprops/action-gh-release@v3
+        with:
+          files: dist/*.exe
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
