@@ -9,11 +9,17 @@ interface Props {
 }
 
 export function ProjectItem({ project, isActive }: Props): JSX.Element {
-  const { addSession } = useSessionsStore()
+  const { addSession, setActiveSession } = useSessionsStore()
   const { setActiveProjectId } = useProjectsStore()
 
   const handleClick = async () => {
     setActiveProjectId(project.id)
+    const { sessions, tabOrder } = useSessionsStore.getState()
+    const existingId = [...tabOrder].reverse().find(id => sessions[id]?.projectId === project.id)
+    if (existingId) {
+      setActiveSession(existingId)
+      return
+    }
     const sessionId = await startSession(project.id)
     addSession({
       id: sessionId,
