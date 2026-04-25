@@ -40,6 +40,7 @@ export interface TokenUsage {
 export type ContentBlock =
   | { type: 'text'; text: string }
   | { type: 'tool_use'; id: string; name: string; input: unknown }
+  | { type: 'thinking'; thinking: string; signature?: string }
 
 export type ToolResultBlock = {
   type: 'tool_result'
@@ -75,7 +76,7 @@ export interface UserEvent {
   type: 'user'
   message: {
     role: 'user'
-    content: ToolResultBlock[]
+    content: string | ToolResultBlock[]
   }
 }
 

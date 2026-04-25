@@ -19,6 +19,11 @@ export const useMessagesStore = create<MessagesStore>((set) => ({
 
   appendEvent: (sessionId, event) =>
     set(state => {
+      // Live echo of typed input — InputBar already rendered it locally with the
+      // __input__ marker, so dropping the SDK echo prevents a duplicate bubble.
+      if (event.type === 'user' && typeof event.message.content === 'string') {
+        return state
+      }
       const existing = state.messagesBySession[sessionId] ?? []
       const message: ChatMessage = { id: crypto.randomUUID(), event, timestamp: Date.now() }
       return {

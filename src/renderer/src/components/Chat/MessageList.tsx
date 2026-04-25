@@ -39,6 +39,7 @@ export function MessageList({ sessionId }: Props): JSX.Element {
         if (event.type === 'assistant') {
           const toolUses = event.message.content.filter(b => b.type === 'tool_use')
           const textBlocks = event.message.content.filter(b => b.type === 'text')
+          if (!toolUses.length && !textBlocks.length) return null
 
           return (
             <div key={id} className="space-y-2">
@@ -58,11 +59,16 @@ export function MessageList({ sessionId }: Props): JSX.Element {
           )
         }
         if (event.type === 'user') {
-          const textContent = event.message.content
-            .filter(b => b.type === 'tool_result' && b.tool_use_id === '__input__')
-            .map(b => (b as any).content as string)
-            .join('')
-          if (textContent) return <UserMessage key={id} text={textContent} />
+          const content = event.message.content
+          if (typeof content === 'string') {
+            return content.trim() ? <UserMessage key={id} text={content} /> : null
+          }
+          const inputBlock = content.find(
+            b => b.type === 'tool_result' && b.tool_use_id === '__input__'
+          )
+          if (inputBlock && typeof inputBlock.content === 'string') {
+            return <UserMessage key={id} text={inputBlock.content} />
+          }
           return null
         }
         return null
