@@ -53,6 +53,22 @@ export function initAutoUpdater(win: BrowserWindow): void {
   })
 
   autoUpdater.on('error', err => {
+    // A release tag can exist on GitHub before CI finishes uploading the
+    // platform yml/installer assets. electron-updater surfaces that as a 404
+    // on latest-*.yml — treat it as "no update yet" rather than an error.
+    if (isMissingReleaseAssetError(err)) {
+      send(win, { state: 'up-to-date' })
+      if (isManualCheck) {
+        dialog.showMessageBox(win, {
+          type: 'info',
+          title: 'No Updates',
+          message: 'You are already on the latest version.'
+        })
+        isManualCheck = false
+      }
+      return
+    }
+
     send(win, { state: 'error', message: err.message })
     if (isManualCheck) {
       dialog.showMessageBox(win, {
@@ -82,4 +98,9 @@ export function initAutoUpdater(win: BrowserWindow): void {
 
   // Silent startup check
   autoUpdater.checkForUpdates().catch(() => {})
+}
+
+function isMissingReleaseAssetError(err: Error): boolean {
+  const msg = err.message ?? ''
+  return /404|cannot find .*\.yml|cannot parse update info from .*\.yml/i.test(msg)
 }
