@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git push:*)",
+      "Bash(git tag:*)"
+    ]
+  },
+  "autoMode": {
+    "allow": [
+      "$defaults",
+      "Pushing commits and tags directly to the main/default branch is allowed for this single-maintainer project — releases are cut by tagging on main."
+    ]
+  }
+}
