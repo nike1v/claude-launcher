@@ -1,5 +1,6 @@
 import { Plus } from 'lucide-react'
 import { useState } from 'react'
+import type { Project } from '../../../../shared/types'
 import { useProjectsStore } from '../../store/projects'
 import { useSessionsStore } from '../../store/sessions'
 import { ProjectGroup } from './ProjectGroup'
@@ -23,6 +24,7 @@ export function Sidebar(): JSX.Element {
   const { projects, activeProjectId } = useProjectsStore()
   const { sessions, activeSessionId } = useSessionsStore()
   const [showAdd, setShowAdd] = useState(false)
+  const [editProject, setEditProject] = useState<Project | null>(null)
 
   const activeProject = activeSessionId
     ? projects.find(p => p.id === sessions[activeSessionId]?.projectId)
@@ -50,6 +52,7 @@ export function Sidebar(): JSX.Element {
             label={label}
             projects={groupProjects}
             activeProjectId={activeProject?.id ?? null}
+            onEdit={setEditProject}
           />
         ))}
 
@@ -63,6 +66,9 @@ export function Sidebar(): JSX.Element {
       <UpdatePill />
 
       {showAdd && <AddProjectModal onClose={() => setShowAdd(false)} />}
+      {editProject && (
+        <AddProjectModal editProject={editProject} onClose={() => setEditProject(null)} />
+      )}
     </div>
   )
 }

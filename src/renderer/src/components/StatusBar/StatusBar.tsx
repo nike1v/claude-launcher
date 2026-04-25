@@ -37,7 +37,9 @@ export function StatusBar(): JSX.Element {
         <>
           <span className={`w-1.5 h-1.5 rounded-full ${STATUS_COLOR[session.status] ?? 'bg-white/20'}`} />
           <span>{hostLabel}</span>
-          {initEvent?.cwd && <span className="text-white/20 truncate max-w-48">{initEvent.cwd}</span>}
+          {(initEvent?.cwd ?? project?.path) && (
+            <span className="text-white/20">{initEvent?.cwd ?? project?.path}</span>
+          )}
           {initEvent?.model && <span className="ml-auto text-white/20">{initEvent.model}</span>}
         </>
       )}

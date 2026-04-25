@@ -7,9 +7,10 @@ interface Props {
   label: string
   projects: Project[]
   activeProjectId: string | null
+  onEdit: (project: Project) => void
 }
 
-export function ProjectGroup({ label, projects, activeProjectId }: Props): JSX.Element {
+export function ProjectGroup({ label, projects, activeProjectId, onEdit }: Props): JSX.Element {
   const [collapsed, setCollapsed] = useState(false)
 
   return (
@@ -28,6 +29,7 @@ export function ProjectGroup({ label, projects, activeProjectId }: Props): JSX.E
               key={project.id}
               project={project}
               isActive={project.id === activeProjectId}
+              onEdit={onEdit}
             />
           ))}
         </div>

@@ -88,11 +88,14 @@ export function AddProjectModal({ onClose, editProject }: Props): JSX.Element {
                   key={k}
                   type="button"
                   onClick={() => setHostKind(k)}
+                  disabled={!!editProject}
                   className={`flex-1 py-1.5 text-xs rounded border transition-colors
                     ${hostKind === k
                       ? 'bg-white/10 border-white/30 text-white'
                       : 'border-white/10 text-white/40 hover:border-white/20'
-                    }`}
+                    }
+                    ${editProject ? 'opacity-60 cursor-not-allowed hover:border-white/10' : ''}
+                  `}
                 >
                   {k.toUpperCase()}
                 </button>
@@ -103,7 +106,13 @@ export function AddProjectModal({ onClose, editProject }: Props): JSX.Element {
           {hostKind === 'wsl' && (
             <div>
               <label className={labelCls}>WSL Distro</label>
-              <input className={inputCls} value={distro} onChange={e => setDistro(e.target.value)} placeholder="Ubuntu" />
+              <input
+                className={`${inputCls} ${editProject ? 'opacity-60 cursor-not-allowed' : ''}`}
+                value={distro}
+                onChange={e => setDistro(e.target.value)}
+                placeholder="Ubuntu"
+                disabled={!!editProject}
+              />
             </div>
           )}
 
@@ -112,21 +121,46 @@ export function AddProjectModal({ onClose, editProject }: Props): JSX.Element {
               <div className="flex gap-2">
                 <div className="flex-1">
                   <label className={labelCls}>User</label>
-                  <input className={inputCls} value={sshUser} onChange={e => setSshUser(e.target.value)} placeholder="root" />
+                  <input
+                    className={`${inputCls} ${editProject ? 'opacity-60 cursor-not-allowed' : ''}`}
+                    value={sshUser}
+                    onChange={e => setSshUser(e.target.value)}
+                    placeholder="root"
+                    disabled={!!editProject}
+                  />
                 </div>
                 <div className="flex-1">
                   <label className={labelCls}>Host</label>
-                  <input className={inputCls} value={sshHost} onChange={e => setSshHost(e.target.value)} placeholder="1.2.3.4" />
+                  <input
+                    className={`${inputCls} ${editProject ? 'opacity-60 cursor-not-allowed' : ''}`}
+                    value={sshHost}
+                    onChange={e => setSshHost(e.target.value)}
+                    placeholder="1.2.3.4"
+                    disabled={!!editProject}
+                  />
                 </div>
               </div>
               <div className="flex gap-2">
                 <div className="w-24">
                   <label className={labelCls}>Port</label>
-                  <input className={inputCls} value={sshPort} onChange={e => setSshPort(e.target.value)} placeholder="22" type="number" />
+                  <input
+                    className={`${inputCls} ${editProject ? 'opacity-60 cursor-not-allowed' : ''}`}
+                    value={sshPort}
+                    onChange={e => setSshPort(e.target.value)}
+                    placeholder="22"
+                    type="number"
+                    disabled={!!editProject}
+                  />
                 </div>
                 <div className="flex-1">
                   <label className={labelCls}>Key File (optional)</label>
-                  <input className={inputCls} value={sshKeyFile} onChange={e => setSshKeyFile(e.target.value)} placeholder="~/.ssh/id_rsa" />
+                  <input
+                    className={`${inputCls} ${editProject ? 'opacity-60 cursor-not-allowed' : ''}`}
+                    value={sshKeyFile}
+                    onChange={e => setSshKeyFile(e.target.value)}
+                    placeholder="~/.ssh/id_rsa"
+                    disabled={!!editProject}
+                  />
                 </div>
               </div>
             </>
