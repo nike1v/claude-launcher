@@ -15,7 +15,11 @@ interface ActiveSession {
   process: ChildProcess
   lineBuffer: string
   markedReady: boolean
+  stopping: boolean
+  exited: Promise<void>
 }
+
+const SHUTDOWN_GRACE_MS = 1500
 
 // Some claude versions / hook configurations never emit system:init.
 // If we haven't transitioned to ready within this window, do it anyway.
@@ -43,7 +47,12 @@ export class SessionManager {
     const process = transport.spawn(spawnOptions)
 
     let stderrBuffer = ''
-    const session: ActiveSession = { sessionId, projectId: project.id, process, lineBuffer: '', markedReady: false }
+    let resolveExited!: () => void
+    const exited = new Promise<void>((resolve) => { resolveExited = resolve })
+    const session: ActiveSession = {
+      sessionId, projectId: project.id, process, lineBuffer: '',
+      markedReady: false, stopping: false, exited
+    }
     this.sessions.set(sessionId, session)
 
     const markReady = () => {
@@ -57,8 +66,15 @@ export class SessionManager {
 
     process.stdout?.on('data', (chunk: Buffer) => this.handleStdout(session, chunk, markReady))
     process.stderr?.on('data', (chunk: Buffer) => { stderrBuffer += chunk.toString('utf-8') })
+    // Swallow EPIPE / write errors that occur when the child exits while we're
+    // still streaming — these surface as unhandled errors otherwise.
+    process.on('error', () => {})
+    process.stdin?.on('error', () => {})
     process.on('exit', (code) => {
       clearTimeout(readyTimer)
+      this.sessions.delete(sessionId)
+      resolveExited()
+      if (session.stopping) return
       const isError = code !== 0 && code !== null
       const errorMessage = isError
         ? `Process exited with code ${code}${stderrBuffer.trim() ? `\n${stderrBuffer.trim()}` : ''}`
@@ -68,7 +84,6 @@ export class SessionManager {
         status: isError ? 'error' : 'closed',
         errorMessage
       })
-      this.sessions.delete(sessionId)
     })
 
     return sessionId
@@ -101,15 +116,23 @@ export class SessionManager {
   public stopSession(sessionId: string): void {
     const session = this.sessions.get(sessionId)
     if (!session) return
+    session.stopping = true
     session.process.kill()
     this.sessions.delete(sessionId)
     this.onEvent('session:status', { sessionId, status: 'closed' })
   }
 
-  public stopAll(): void {
-    for (const sessionId of this.sessions.keys()) {
-      this.stopSession(sessionId)
+  public async stopAll(): Promise<void> {
+    const pending: Promise<void>[] = []
+    for (const session of this.sessions.values()) {
+      session.stopping = true
+      try { session.process.kill() } catch { /* already dead */ }
+      pending.push(session.exited)
     }
+    this.sessions.clear()
+    if (!pending.length) return
+    const grace = new Promise<void>((resolve) => setTimeout(resolve, SHUTDOWN_GRACE_MS))
+    await Promise.race([Promise.all(pending).then(() => undefined), grace])
   }
 
   private handleStdout(session: ActiveSession, chunk: Buffer, markReady: () => void): void {

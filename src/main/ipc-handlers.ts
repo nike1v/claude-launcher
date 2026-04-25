@@ -8,16 +8,17 @@ import type { IpcChannels } from '../shared/types'
 
 const CONFIG_PATH = join(homedir(), '.config', 'claude-launcher', 'projects.json')
 
-export function registerIpcHandlers(mainWindow: BrowserWindow): () => void {
+export function registerIpcHandlers(mainWindow: BrowserWindow): () => Promise<void> {
   const projectStore = new ProjectStore(CONFIG_PATH)
   const historyReader = new HistoryReader()
+  let stopped = false
 
-  const sessionManager = new SessionManager(
-    undefined,
-    (channel: string, payload: unknown) => {
-      mainWindow.webContents.send(channel, payload)
-    }
-  )
+  const safeSend = (channel: string, payload: unknown): void => {
+    if (stopped || mainWindow.isDestroyed() || mainWindow.webContents.isDestroyed()) return
+    mainWindow.webContents.send(channel, payload)
+  }
+
+  const sessionManager = new SessionManager(undefined, safeSend)
 
   const handle = <K extends keyof IpcChannels>(
     channel: K,
@@ -49,7 +50,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): () => void {
 
   handle('projects:load', async () => {
     const projects = projectStore.load()
-    mainWindow.webContents.send('projects:loaded', { projects })
+    safeSend('projects:loaded', { projects })
   })
 
   handle('projects:history:load', async ({ projectId }) => {
@@ -57,7 +58,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): () => void {
     const project = projects.find(p => p.id === projectId)
     if (!project) return
     const entries = await historyReader.loadHistory(project.host, project.path)
-    mainWindow.webContents.send('projects:history', { projectId, entries })
+    safeSend('projects:history', { projectId, entries })
   })
 
   handle('session:history:load', async ({ projectId, sessionId }) => {
@@ -67,12 +68,13 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): () => void {
     return historyReader.loadSessionEvents(project.host, project.path, sessionId)
   })
 
-  return () => {
-    sessionManager.stopAll()
+  return async () => {
+    stopped = true
     const channels = [
       'session:start', 'session:send', 'session:stop', 'session:permission',
       'projects:save', 'projects:load', 'projects:history:load', 'session:history:load'
     ]
     channels.forEach(ch => ipcMain.removeHandler(ch))
+    await sessionManager.stopAll()
   }
 }

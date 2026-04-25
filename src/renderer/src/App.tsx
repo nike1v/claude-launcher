@@ -5,7 +5,6 @@ import { Sidebar } from './components/Sidebar/Sidebar'
 import { TabBar } from './components/TabBar/TabBar'
 import { ChatPanel } from './components/Chat/ChatPanel'
 import { StatusBar } from './components/StatusBar/StatusBar'
-import { UpdateBanner } from './components/UpdateBanner'
 
 export function App(): JSX.Element {
   useIpcListeners()
@@ -25,7 +24,6 @@ export function App(): JSX.Element {
 
       {/* Main area */}
       <div className="flex flex-col flex-1 min-w-0">
-        <UpdateBanner />
         <TabBar />
         <div className="flex-1 overflow-hidden">
           {tabOrder.map(sessionId => (

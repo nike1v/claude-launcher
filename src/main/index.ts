@@ -41,7 +41,13 @@ app.whenReady().then(() => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
 
-  app.on('before-quit', cleanup)
+  let isQuitting = false
+  app.on('before-quit', (event) => {
+    if (isQuitting) return
+    isQuitting = true
+    event.preventDefault()
+    cleanup().finally(() => app.exit(0))
+  })
 })
 
 app.on('window-all-closed', () => {

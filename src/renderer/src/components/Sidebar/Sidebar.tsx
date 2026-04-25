@@ -5,6 +5,7 @@ import { useSessionsStore } from '../../store/sessions'
 import { ProjectGroup } from './ProjectGroup'
 import { HistoryList } from './HistoryList'
 import { AddProjectModal } from './AddProjectModal'
+import { UpdatePill } from './UpdatePill'
 
 function groupByHost(projects: ReturnType<typeof useProjectsStore.getState>['projects']) {
   const groups = new Map<string, typeof projects>()
@@ -30,7 +31,7 @@ export function Sidebar(): JSX.Element {
   const groups = groupByHost(projects)
 
   return (
-    <div className="flex flex-col h-full py-3 overflow-y-auto">
+    <div className="flex flex-col h-full pt-3">
       <div className="px-3 mb-3 flex items-center justify-between">
         <span className="text-xs font-semibold text-white/50 uppercase tracking-wider">Projects</span>
         <button
@@ -42,20 +43,24 @@ export function Sidebar(): JSX.Element {
         </button>
       </div>
 
-      {Array.from(groups.entries()).map(([label, groupProjects]) => (
-        <ProjectGroup
-          key={label}
-          label={label}
-          projects={groupProjects}
-          activeProjectId={activeProject?.id ?? null}
-        />
-      ))}
+      <div className="flex-1 min-h-0 overflow-y-auto pb-2">
+        {Array.from(groups.entries()).map(([label, groupProjects]) => (
+          <ProjectGroup
+            key={label}
+            label={label}
+            projects={groupProjects}
+            activeProjectId={activeProject?.id ?? null}
+          />
+        ))}
 
-      {projects.length === 0 && (
-        <p className="px-3 text-xs text-white/30">No projects yet. Click + to add one.</p>
-      )}
+        {projects.length === 0 && (
+          <p className="px-3 text-xs text-white/30">No projects yet. Click + to add one.</p>
+        )}
 
-      <HistoryList />
+        <HistoryList />
+      </div>
+
+      <UpdatePill />
 
       {showAdd && <AddProjectModal onClose={() => setShowAdd(false)} />}
     </div>

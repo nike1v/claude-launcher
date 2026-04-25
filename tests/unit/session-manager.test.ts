@@ -6,12 +6,13 @@ import type { Project } from '../../src/shared/types'
 const makeProcess = () => {
   const emitter = new EventEmitter()
   const stdinWritten: string[] = []
+  const stdin = Object.assign(new EventEmitter(), {
+    write: vi.fn((data: string) => stdinWritten.push(data)),
+    end: vi.fn()
+  })
   return Object.assign(emitter, {
     pid: 42,
-    stdin: {
-      write: vi.fn((data: string) => stdinWritten.push(data)),
-      end: vi.fn()
-    },
+    stdin,
     stdout: new EventEmitter(),
     stderr: new EventEmitter(),
     kill: vi.fn(),
