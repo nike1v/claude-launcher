@@ -1,6 +1,6 @@
 {
   "name": "claude-launcher",
-  "version": "0.1.16",
+  "version": "0.1.17",
   "description": "Electron desktop app for running Claude CLI sessions",
   "repository": {
     "type": "git",
@@ -63,11 +63,13 @@
       "output": "dist"
     },
     "linux": {
+      "artifactName": "${name}-${version}.${ext}",
       "target": [
         "AppImage"
       ]
     },
     "win": {
+      "artifactName": "${name}-Setup-${version}.${ext}",
       "target": [
         "nsis"
       ]
