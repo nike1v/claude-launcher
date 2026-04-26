@@ -265,8 +265,11 @@ function AttachmentChip({
 
 async function fileToAttachment(file: File): Promise<PendingAttachment | null> {
   const id = crypto.randomUUID()
-  const name = file.name || untitledForType(file.type)
-  const mediaType = file.type || 'application/octet-stream'
+  // Pasted images often arrive with empty file.name and a generic .type — sniff
+  // the magic bytes so we still classify them as image/png|jpeg|gif|webp.
+  const sniffed = await sniffMime(file)
+  const mediaType = sniffed ?? file.type ?? 'application/octet-stream'
+  const name = file.name || untitledForType(mediaType)
 
   if (mediaType.startsWith('image/')) {
     const data = await fileToBase64(file)
@@ -276,8 +279,6 @@ async function fileToAttachment(file: File): Promise<PendingAttachment | null> {
     const data = await fileToBase64(file)
     return { id, kind: 'document', name, mediaType, data }
   }
-  // Treat anything else as text. Anthropic doesn't accept arbitrary binary
-  // content blocks anyway, so we either inline as text or fall back gracefully.
   if (file.size > MAX_INLINE_TEXT_BYTES) {
     console.warn(`Skipping ${name}: ${file.size} bytes exceeds inline text limit`)
     return null
@@ -286,16 +287,31 @@ async function fileToAttachment(file: File): Promise<PendingAttachment | null> {
   return { id, kind: 'text', name, mediaType, text }
 }
 
-async function fileToBase64(file: File): Promise<string> {
-  const buf = await file.arrayBuffer()
-  // chunked to avoid stack overflow on large arrays
-  const bytes = new Uint8Array(buf)
-  let binary = ''
-  const chunkSize = 0x8000
-  for (let i = 0; i < bytes.length; i += chunkSize) {
-    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize) as unknown as number[])
-  }
-  return btoa(binary)
+// FileReader.readAsDataURL is reliable across all binary sizes — manual chunked
+// String.fromCharCode + btoa truncates silently for some inputs.
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onerror = () => reject(reader.error ?? new Error('FileReader failed'))
+    reader.onload = () => {
+      const url = String(reader.result ?? '')
+      const comma = url.indexOf(',')
+      resolve(comma >= 0 ? url.slice(comma + 1) : '')
+    }
+    reader.readAsDataURL(file)
+  })
+}
+
+async function sniffMime(file: File): Promise<string | null> {
+  if (file.type && file.type !== 'application/octet-stream') return file.type
+  const head = new Uint8Array(await file.slice(0, 12).arrayBuffer())
+  if (head.length >= 8 && head[0] === 0x89 && head[1] === 0x50 && head[2] === 0x4e && head[3] === 0x47) return 'image/png'
+  if (head.length >= 3 && head[0] === 0xff && head[1] === 0xd8 && head[2] === 0xff) return 'image/jpeg'
+  if (head.length >= 6 && head[0] === 0x47 && head[1] === 0x49 && head[2] === 0x46) return 'image/gif'
+  if (head.length >= 12 && head[0] === 0x52 && head[1] === 0x49 && head[2] === 0x46 && head[3] === 0x46
+    && head[8] === 0x57 && head[9] === 0x45 && head[10] === 0x42 && head[11] === 0x50) return 'image/webp'
+  if (head.length >= 4 && head[0] === 0x25 && head[1] === 0x50 && head[2] === 0x44 && head[3] === 0x46) return 'application/pdf'
+  return null
 }
 
 function untitledForType(mime: string): string {
