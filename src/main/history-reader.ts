@@ -50,7 +50,7 @@ export class HistoryReader {
         .filter((e): e is StreamJsonEvent => e !== null)
     }
 
-    const filePath = `${remoteClaudeProjectDir(projectPath)}/${sessionId}.jsonl`
+    const filePath = `${remoteClaudeProjectDir(projectPath)}/${shellEscape(sessionId)}.jsonl`
     const command = buildCatCommand(host, filePath)
     let output: string
     try {
@@ -122,12 +122,21 @@ function localClaudeProjectDir(projectPath: string): string {
 }
 
 function remoteClaudeProjectDir(projectPath: string): string {
+  // Use $HOME (not ~) so the path expands inside the double-quoted string
+  // we pass to bash -c. Tildes do NOT expand inside any kind of quotes.
   const slug = projectPath.split('/').join('-')
-  return `~/.claude/projects/${slug}`
+  return `$HOME/.claude/projects/${shellEscape(slug)}`
+}
+
+// Quote-only escape for embedding inside a bash double-quoted string. The
+// callers always wrap the result in `"..."`, so we just need to neutralise
+// the four characters that have meaning there.
+function shellEscape(s: string): string {
+  return s.replace(/[\\"`$]/g, '\\$&')
 }
 
 function buildCatCommand(host: HostType, filePath: string): { bin: string; args: string[] } {
-  const cmd = `cat '${filePath}' 2>/dev/null`
+  const cmd = `cat "${filePath}" 2>/dev/null`
   if (host.kind === 'wsl') {
     return { bin: 'wsl.exe', args: ['-d', host.distro, '--', 'bash', '-c', cmd] }
   }
@@ -143,8 +152,8 @@ function buildListCommand(
   historyDir: string
 ): { bin: string; args: string[] } {
   const shellScript = [
-    `if [ -d '${historyDir}' ]; then`,
-    `  ls -t '${historyDir}'/*.jsonl 2>/dev/null | head -20 | while read f; do`,
+    `if [ -d "${historyDir}" ]; then`,
+    `  ls -t "${historyDir}"/*.jsonl 2>/dev/null | head -20 | while read f; do`,
     `    echo "FILE:$f"`,
     `    head -1 "$f" 2>/dev/null`,
     `  done`,
