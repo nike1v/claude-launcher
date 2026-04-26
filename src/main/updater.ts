@@ -64,12 +64,14 @@ export function initAutoUpdater(win: BrowserWindow): void {
   })
 
   const checkForUpdates = (): void => {
+    forceFreshCheck()
     autoUpdater.checkForUpdates().catch(() => {})
   }
 
   patchHelpMenu(checkForUpdates)
 
   ipcMain.handle('updater:check', () => {
+    forceFreshCheck()
     autoUpdater.checkForUpdates().catch(() => {})
   })
 
@@ -85,4 +87,19 @@ export function initAutoUpdater(win: BrowserWindow): void {
 function isMissingReleaseAssetError(err: Error): boolean {
   const msg = err.message ?? ''
   return /404|cannot find .*\.yml|cannot parse update info from .*\.yml/i.test(msg)
+}
+
+// electron-updater memoises the provider client and the last update-info
+// result inside AppUpdater. After the silent startup check, a manual
+// re-check can short-circuit on that cached state instead of re-fetching
+// the GitHub feed — which is why a freshly released version doesn't
+// appear until the app is relaunched. Null both fields before each
+// manual call so the next check truly hits the network.
+function forceFreshCheck(): void {
+  const internal = autoUpdater as unknown as {
+    clientPromise?: Promise<unknown> | null
+    updateInfoAndProvider?: unknown | null
+  }
+  internal.clientPromise = null
+  internal.updateInfoAndProvider = null
 }
