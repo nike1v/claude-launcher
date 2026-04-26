@@ -19,10 +19,11 @@ function patchHelpMenu(checkFn: () => void): void {
 
 export function initAutoUpdater(win: BrowserWindow): void {
   if (!app.isPackaged) {
-    // In dev, still surface the current version so the pill can render.
-    send(win, { state: 'up-to-date' })
+    // In dev there's nothing to download, but make Help → Check feel responsive
+    // by emitting a quick checking → up-to-date sequence so the pill flashes.
     ipcMain.handle('updater:check', () => {
-      send(win, { state: 'up-to-date' })
+      send(win, { state: 'checking' })
+      setTimeout(() => send(win, { state: 'up-to-date' }), 400)
     })
     ipcMain.handle('updater:install', () => {})
     return
@@ -105,11 +106,8 @@ export function initAutoUpdater(win: BrowserWindow): void {
     autoUpdater.quitAndInstall()
   })
 
-  // Optimistically render "up to date" with the current version so the pill
-  // populates immediately; the real check below will overwrite the state.
-  send(win, { state: 'up-to-date' })
-
-  // Silent startup check
+  // Silent startup check — the renderer's pill is hidden until the first
+  // status event arrives, so we let `checking-for-update` be that trigger.
   autoUpdater.checkForUpdates().catch(() => {})
 }
 

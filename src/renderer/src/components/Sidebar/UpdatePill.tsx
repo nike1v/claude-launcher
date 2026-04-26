@@ -2,17 +2,34 @@ import { useState, useEffect } from 'react'
 import { checkForUpdates, installUpdate } from '../../ipc/bridge'
 import type { UpdaterStatus } from '../../../../shared/types'
 
-export function UpdatePill(): JSX.Element {
-  const [status, setStatus] = useState<UpdaterStatus>({ state: 'up-to-date' })
+// How long to keep the "Up to date" message on screen before auto-hiding,
+// after a check finishes with no update available.
+const UP_TO_DATE_LINGER_MS = 4000
+
+export function UpdatePill(): JSX.Element | null {
+  const [status, setStatus] = useState<UpdaterStatus | null>(null)
+  const [dismissed, setDismissed] = useState(false)
 
   useEffect(() => {
-    return window.electronAPI.on('updater:status', setStatus)
+    return window.electronAPI.on('updater:status', (s) => {
+      setStatus(s)
+      setDismissed(false)
+    })
   }, [])
+
+  // Auto-hide after a brief linger when a check resolves to up-to-date —
+  // the pill is meant to be transient outside of an active update flow.
+  useEffect(() => {
+    if (status?.state !== 'up-to-date') return
+    const t = setTimeout(() => setDismissed(true), UP_TO_DATE_LINGER_MS)
+    return () => clearTimeout(t)
+  }, [status])
+
+  if (!status || dismissed) return null
 
   const view = describe(status)
 
   return (
-    // Fixed height keeps the layout stable as we cycle through states.
     <div className="px-2 pb-2 pt-1">
       <div
         className={`h-[68px] rounded-2xl px-3 py-2 flex flex-col justify-between text-xs ${view.tone}`}
@@ -23,7 +40,7 @@ export function UpdatePill(): JSX.Element {
             <span className="opacity-80 tabular-nums truncate">v{view.version}</span>
           )}
         </div>
-        {view.action}
+        <div className="text-xs">{view.action}</div>
       </div>
     </div>
   )
@@ -73,7 +90,7 @@ function describe(status: UpdaterStatus): View {
         title: 'Update ready',
         version: status.version,
         tone: tonePrimary,
-        action: <ActionButton onClick={installUpdate} label="Restart & Update" filled />
+        action: <ActionButton onClick={installUpdate} label="Restart & Update →" emphasized />
       }
 
     case 'error':
@@ -98,19 +115,21 @@ function describe(status: UpdaterStatus): View {
 function ActionButton({
   onClick,
   label,
-  filled
+  emphasized
 }: {
   onClick: () => void
   label: string
-  filled?: boolean
+  emphasized?: boolean
 }): JSX.Element {
+  // No horizontal padding so the action text starts at the same x as the
+  // title text in the row above.
   return (
     <button
       onClick={onClick}
-      className={`w-full text-left text-xs font-medium rounded px-2 py-1 transition-colors ${
-        filled
-          ? 'bg-white/15 hover:bg-white/25'
-          : 'hover:bg-white/[0.06] text-white/70 hover:text-white'
+      className={`text-left text-xs transition-colors ${
+        emphasized
+          ? 'font-semibold text-white hover:text-white/80'
+          : 'font-medium text-white/70 hover:text-white'
       }`}
     >
       {label}
@@ -127,12 +146,15 @@ function ProgressBar({
   indeterminate?: boolean
   label?: string
 }): JSX.Element {
+  const showHeader = !!label || percent !== null
   return (
     <div className="flex flex-col gap-1">
-      <div className="flex items-center justify-between text-xs">
-        <span className="opacity-80 truncate">{label ?? (indeterminate ? '' : '')}</span>
-        {percent !== null && <span className="tabular-nums opacity-90">{percent}%</span>}
-      </div>
+      {showHeader && (
+        <div className="flex items-center justify-between text-xs">
+          <span className="opacity-80 truncate">{label ?? ''}</span>
+          {percent !== null && <span className="tabular-nums opacity-90">{percent}%</span>}
+        </div>
+      )}
       <div className="h-1 rounded-full bg-white/20 overflow-hidden">
         <div
           className={`h-full bg-white/90 transition-all ${indeterminate ? 'animate-pulse w-1/3' : ''}`}

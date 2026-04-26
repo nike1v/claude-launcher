@@ -24,8 +24,14 @@ function getStatusHandler(): (status: UpdaterStatus) => void {
 }
 
 describe('UpdatePill', () => {
-  it('defaults to up-to-date with a check-for-updates action', () => {
+  it('renders nothing until the first updater event arrives', () => {
+    const { container } = render(<UpdatePill />)
+    expect(container.firstChild).toBeNull()
+  })
+
+  it('shows up-to-date with a check action when that status arrives', () => {
     render(<UpdatePill />)
+    act(() => { getStatusHandler()({ state: 'up-to-date', currentVersion: '1.0.0' }) })
     expect(screen.getByText(/Up to date/i)).toBeTruthy()
     expect(screen.getByRole('button', { name: /check for updates/i })).toBeTruthy()
   })
@@ -68,6 +74,7 @@ describe('UpdatePill', () => {
 
   it('calls checkForUpdates when Check is clicked from up-to-date', () => {
     render(<UpdatePill />)
+    act(() => { getStatusHandler()({ state: 'up-to-date', currentVersion: '1.0.0' }) })
     fireEvent.click(screen.getByRole('button', { name: /check for updates/i }))
     expect(mockCheck).toHaveBeenCalledOnce()
   })
