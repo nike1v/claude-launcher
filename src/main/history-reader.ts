@@ -1,4 +1,4 @@
-import { execFile } from 'node:child_process'
+import { execFile, spawn } from 'node:child_process'
 import { promisify } from 'node:util'
 import { readdir, readFile, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
@@ -7,6 +7,31 @@ import type { HistoryEntry, HostType, StreamJsonEvent } from '../shared/types'
 import { parseStreamJsonLine } from './stream-json-parser'
 
 const execFileAsync = promisify(execFile)
+
+// JSONL transcripts can be hundreds of KB and grow unbounded; reading them via
+// execFile would silently truncate (default 1 MiB stdout buffer) and reject with
+// ERR_CHILD_PROCESS_STDOUT_MAXBUFFER, which our caller then turns into "no
+// history". Streaming the child's stdout sidesteps both the size cap and the
+// hard 5 s timeout we used previously (cold-start `wsl.exe` can blow past it).
+const REMOTE_READ_TIMEOUT_MS = 30_000
+
+function streamCommand(bin: string, args: string[]): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(bin, args, { stdio: ['ignore', 'pipe', 'pipe'] })
+    const chunks: Buffer[] = []
+    const timer = setTimeout(() => {
+      child.kill()
+      reject(new Error('timeout'))
+    }, REMOTE_READ_TIMEOUT_MS)
+    child.stdout.on('data', (c: Buffer) => chunks.push(c))
+    child.stderr.on('data', () => {})
+    child.on('error', (err) => { clearTimeout(timer); reject(err) })
+    child.on('close', () => {
+      clearTimeout(timer)
+      resolve(Buffer.concat(chunks).toString('utf-8'))
+    })
+  })
+}
 
 export class HistoryReader {
   public async loadSessionEvents(host: HostType, projectPath: string, sessionId: string): Promise<StreamJsonEvent[]> {
@@ -29,8 +54,7 @@ export class HistoryReader {
     const command = buildCatCommand(host, filePath)
     let output: string
     try {
-      const { stdout } = await execFileAsync(command.bin, command.args, { timeout: 5000 })
-      output = stdout
+      output = await streamCommand(command.bin, command.args)
     } catch {
       return []
     }
