@@ -1,4 +1,4 @@
-import { ipcMain, BrowserWindow, Menu, MenuItem, dialog, app } from 'electron'
+import { ipcMain, BrowserWindow, Menu, MenuItem, app } from 'electron'
 import { autoUpdater } from 'electron-updater'
 import type { UpdaterStatus } from '../shared/types'
 
@@ -32,8 +32,6 @@ export function initAutoUpdater(win: BrowserWindow): void {
   autoUpdater.autoDownload = true
   autoUpdater.autoInstallOnAppQuit = false
 
-  let isManualCheck = false
-
   autoUpdater.on('checking-for-update', () => {
     send(win, { state: 'checking' })
   })
@@ -52,14 +50,6 @@ export function initAutoUpdater(win: BrowserWindow): void {
 
   autoUpdater.on('update-not-available', () => {
     send(win, { state: 'up-to-date' })
-    if (isManualCheck) {
-      dialog.showMessageBox(win, {
-        type: 'info',
-        title: 'No Updates',
-        message: 'You are already on the latest version.'
-      })
-      isManualCheck = false
-    }
   })
 
   autoUpdater.on('error', err => {
@@ -68,37 +58,18 @@ export function initAutoUpdater(win: BrowserWindow): void {
     // on latest-*.yml — treat it as "no update yet" rather than an error.
     if (isMissingReleaseAssetError(err)) {
       send(win, { state: 'up-to-date' })
-      if (isManualCheck) {
-        dialog.showMessageBox(win, {
-          type: 'info',
-          title: 'No Updates',
-          message: 'You are already on the latest version.'
-        })
-        isManualCheck = false
-      }
       return
     }
-
     send(win, { state: 'error', message: err.message })
-    if (isManualCheck) {
-      dialog.showMessageBox(win, {
-        type: 'error',
-        title: 'Update Error',
-        message: `Could not check for updates: ${err.message}`
-      })
-      isManualCheck = false
-    }
   })
 
   const checkForUpdates = (): void => {
-    isManualCheck = true
     autoUpdater.checkForUpdates().catch(() => {})
   }
 
   patchHelpMenu(checkForUpdates)
 
   ipcMain.handle('updater:check', () => {
-    isManualCheck = true
     autoUpdater.checkForUpdates().catch(() => {})
   })
 
