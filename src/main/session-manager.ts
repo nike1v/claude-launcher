@@ -100,6 +100,9 @@ export class SessionManager {
       message: { role: 'user', content }
     }) + '\n'
     session.process.stdin?.write(payload)
+    // Flip to busy immediately so the renderer can show a "thinking" indicator
+    // while we wait for the first stream-json event back from claude.
+    this.onEvent('session:status', { sessionId, status: 'busy' })
   }
 
   public respondPermission(sessionId: string, decision: 'allow' | 'deny', toolUseId: string): void {
@@ -150,9 +153,12 @@ export class SessionManager {
       if (event.type === 'system' && event.subtype === 'init') {
         markReady()
       } else if (event.type === 'result') {
-        markReady()
+        // A turn finished — back to ready so the spinner clears. We bypass
+        // markReady here because that's gated to fire only once.
+        session.markedReady = true
+        this.onEvent('session:status', { sessionId: session.sessionId, status: 'ready' })
       } else if (event.type === 'assistant') {
-        session.markedReady = true // prevent double-fire from timer
+        session.markedReady = true
         this.onEvent('session:status', { sessionId: session.sessionId, status: 'busy' })
       }
 

@@ -1,5 +1,7 @@
 import { useMemo, useRef, useEffect, type ReactNode } from 'react'
+import { Loader2 } from 'lucide-react'
 import { useMessagesStore } from '../../store/messages'
+import { useSessionsStore } from '../../store/sessions'
 import { AssistantMessage } from './AssistantMessage'
 import { UserMessage } from './UserMessage'
 import { ToolUse } from './ToolUse'
@@ -16,6 +18,8 @@ interface Props {
 export function MessageList({ sessionId }: Props): JSX.Element {
   const { messagesBySession } = useMessagesStore()
   const messages = messagesBySession[sessionId] ?? []
+  const status = useSessionsStore(s => s.sessions[sessionId]?.status)
+  const isBusy = status === 'busy'
   const bottomRef = useRef<HTMLDivElement>(null)
   const shouldFollowRef = useRef(true)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -150,6 +154,12 @@ export function MessageList({ sessionId }: Props): JSX.Element {
             </ToolGroup>
           )
         })}
+        {isBusy && (
+          <div className="flex items-center gap-2 text-xs text-white/40">
+            <Loader2 size={12} className="animate-spin" />
+            <span className="italic">claude is thinking…</span>
+          </div>
+        )}
         <div ref={bottomRef} />
       </div>
     </div>
