@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { useSessionsStore } from './store/sessions'
 import { useIpcListeners } from './ipc/listeners'
+import { useTabPersistence } from './hooks/useTabPersistence'
 import { Sidebar } from './components/Sidebar/Sidebar'
 import { TabBar } from './components/TabBar/TabBar'
 import { ChatPanel } from './components/Chat/ChatPanel'
@@ -8,8 +9,9 @@ import { StatusBar } from './components/StatusBar/StatusBar'
 
 export function App(): JSX.Element {
   useIpcListeners()
+  useTabPersistence()
 
-  const { sessions, tabOrder, activeSessionId } = useSessionsStore()
+  const { tabOrder, activeSessionId } = useSessionsStore()
 
   useEffect(() => {
     window.electronAPI.invoke('projects:load', {})

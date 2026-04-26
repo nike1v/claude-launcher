@@ -32,3 +32,11 @@ export async function loadSessionHistory(projectId: string, sessionId: string): 
 export function installUpdate(): void {
   window.electronAPI.invoke('updater:install', {})
 }
+
+export async function loadTabs(): Promise<import('../../../shared/types').PersistedTabs> {
+  return window.electronAPI.invoke('tabs:load', {}) as Promise<import('../../../shared/types').PersistedTabs>
+}
+
+export function saveTabs(state: import('../../../shared/types').PersistedTabs): void {
+  window.electronAPI.invoke('tabs:save', state)
+}

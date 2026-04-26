@@ -13,6 +13,15 @@ export function useIpcListeners(): void {
       'session:event',
       ({ sessionId, event }: IpcChannels['session:event']) => {
         appendEvent(sessionId, event)
+        // The init event carries the Claude CLI session id — record it so
+        // we can resume this tab (--resume) and load its JSONL transcript
+        // after an app restart.
+        if (event.type === 'system' && event.subtype === 'init') {
+          const current = useSessionsStore.getState().sessions[sessionId]
+          if (current && current.claudeSessionId !== event.session_id) {
+            updateSession(sessionId, { claudeSessionId: event.session_id })
+          }
+        }
         // Mark unread if not the active tab
         if (sessionId !== useSessionsStore.getState().activeSessionId) {
           updateSession(sessionId, { hasUnread: true })

@@ -33,7 +33,13 @@ export function HistoryList(): JSX.Element {
       startSession(activeProjectId, entry.sessionId)
     ])
     prependEvents(sessionId, events)
-    addSession({ id: sessionId, projectId: activeProjectId, status: 'starting', hasUnread: false })
+    addSession({
+      id: sessionId,
+      projectId: activeProjectId,
+      claudeSessionId: entry.sessionId,
+      status: 'starting',
+      hasUnread: false
+    })
   }
 
   return (

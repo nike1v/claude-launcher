@@ -16,10 +16,24 @@ export interface Project {
 export interface Session {
   id: string
   projectId: string
+  // Claude CLI session id (stable across --resume); used for restoring
+  // tabs across app restarts and loading history from the JSONL transcript.
+  // Undefined until the first init event arrives for a fresh session.
+  claudeSessionId?: string
   status: 'starting' | 'ready' | 'busy' | 'error' | 'closed'
   pid?: number
   hasUnread: boolean
   errorMessage?: string
+}
+
+export interface PersistedTab {
+  projectId: string
+  claudeSessionId: string
+}
+
+export interface PersistedTabs {
+  tabs: PersistedTab[]
+  activeIndex: number | null
 }
 
 export interface HistoryEntry {
@@ -114,6 +128,8 @@ export interface IpcChannels {
   'projects:history:load': { projectId: string }
   'session:history:load': { projectId: string; sessionId: string }
   'projects:load': Record<string, never>
+  'tabs:load': Record<string, never>
+  'tabs:save': PersistedTabs
   'updater:check': Record<string, never>
   'updater:install': Record<string, never>
 
@@ -129,6 +145,7 @@ export type IpcInvokeChannel = Extract<
   keyof IpcChannels,
   | 'session:start' | 'session:send' | 'session:stop' | 'session:permission'
   | 'projects:save' | 'projects:history:load' | 'session:history:load' | 'projects:load'
+  | 'tabs:load' | 'tabs:save'
   | 'updater:check' | 'updater:install'
 >
 

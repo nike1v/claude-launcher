@@ -3,13 +3,17 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { SessionManager } from './session-manager'
 import { ProjectStore } from './project-store'
+import { TabStore } from './tab-store'
 import { HistoryReader } from './history-reader'
 import type { IpcChannels } from '../shared/types'
 
-const CONFIG_PATH = join(homedir(), '.config', 'claude-launcher', 'projects.json')
+const CONFIG_DIR = join(homedir(), '.config', 'claude-launcher')
+const CONFIG_PATH = join(CONFIG_DIR, 'projects.json')
+const TABS_PATH = join(CONFIG_DIR, 'tabs.json')
 
 export function registerIpcHandlers(mainWindow: BrowserWindow): () => Promise<void> {
   const projectStore = new ProjectStore(CONFIG_PATH)
+  const tabStore = new TabStore(TABS_PATH)
   const historyReader = new HistoryReader()
   let stopped = false
 
@@ -68,11 +72,15 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): () => Promise<vo
     return historyReader.loadSessionEvents(project.host, project.path, sessionId)
   })
 
+  handle('tabs:load', () => tabStore.load())
+  handle('tabs:save', (state) => { tabStore.save(state) })
+
   return async () => {
     stopped = true
     const channels = [
       'session:start', 'session:send', 'session:stop', 'session:permission',
-      'projects:save', 'projects:load', 'projects:history:load', 'session:history:load'
+      'projects:save', 'projects:load', 'projects:history:load', 'session:history:load',
+      'tabs:load', 'tabs:save'
     ]
     channels.forEach(ch => ipcMain.removeHandler(ch))
     await sessionManager.stopAll()
