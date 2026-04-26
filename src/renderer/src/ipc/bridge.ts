@@ -48,6 +48,10 @@ export function installUpdate(): void {
   window.electronAPI.invoke('updater:install', {})
 }
 
+export function checkForUpdates(): void {
+  window.electronAPI.invoke('updater:check', {})
+}
+
 export async function loadTabs(): Promise<import('../../../shared/types').PersistedTabs> {
   return window.electronAPI.invoke('tabs:load', {}) as Promise<import('../../../shared/types').PersistedTabs>
 }

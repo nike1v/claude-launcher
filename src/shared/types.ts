@@ -124,7 +124,8 @@ export type StreamJsonEvent = InitEvent | AssistantEvent | UserEvent | ResultEve
 
 export interface UpdaterStatus {
   state: 'checking' | 'available' | 'downloading' | 'ready' | 'up-to-date' | 'error'
-  version?: string
+  version?: string // version under consideration (new release for available/downloading/ready)
+  currentVersion?: string // what's actually installed right now
   percent?: number
   message?: string
 }

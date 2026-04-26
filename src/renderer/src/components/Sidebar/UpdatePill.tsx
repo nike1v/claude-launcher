@@ -1,59 +1,143 @@
 import { useState, useEffect } from 'react'
-import { installUpdate } from '../../ipc/bridge'
+import { checkForUpdates, installUpdate } from '../../ipc/bridge'
 import type { UpdaterStatus } from '../../../../shared/types'
 
-export function UpdatePill(): JSX.Element | null {
-  const [status, setStatus] = useState<UpdaterStatus | null>(null)
+export function UpdatePill(): JSX.Element {
+  const [status, setStatus] = useState<UpdaterStatus>({ state: 'up-to-date' })
 
   useEffect(() => {
     return window.electronAPI.on('updater:status', setStatus)
   }, [])
 
-  if (!status) return null
-  if (status.state !== 'downloading' && status.state !== 'available' && status.state !== 'ready') {
-    return null
-  }
-
-  const percent = typeof status.percent === 'number' ? Math.round(status.percent) : null
+  const view = describe(status)
 
   return (
+    // Fixed height keeps the layout stable as we cycle through states.
     <div className="px-2 pb-2 pt-1">
-      <div className="rounded-2xl bg-blue-600/90 text-white text-xs px-3 py-2 flex flex-col gap-1.5">
-        {status.state === 'downloading' && (
-          <>
-            <div className="flex items-center justify-between">
-              <span className="font-medium">Downloading update</span>
-              {percent !== null && <span className="tabular-nums opacity-90">{percent}%</span>}
-            </div>
-            {status.version && <span className="opacity-80">v{status.version}</span>}
-            <div className="h-1 rounded-full bg-white/20 overflow-hidden">
-              <div
-                className="h-full bg-white/90 transition-all"
-                style={{ width: percent !== null ? `${percent}%` : '0%' }}
-              />
-            </div>
-          </>
-        )}
+      <div
+        className={`h-[68px] rounded-2xl px-3 py-2 flex flex-col justify-between text-xs ${view.tone}`}
+      >
+        <div className="flex items-baseline gap-1.5 min-w-0">
+          <span className="font-medium truncate">{view.title}</span>
+          {view.version && (
+            <span className="opacity-80 tabular-nums truncate">v{view.version}</span>
+          )}
+        </div>
+        {view.action}
+      </div>
+    </div>
+  )
+}
 
-        {status.state === 'available' && (
-          <>
-            <span className="font-medium">Update available</span>
-            {status.version && <span className="opacity-80">v{status.version} — preparing download…</span>}
-          </>
-        )}
+interface View {
+  title: string
+  version?: string
+  tone: string
+  action: JSX.Element
+}
 
-        {status.state === 'ready' && (
-          <>
-            <span className="font-medium">Update ready</span>
-            {status.version && <span className="opacity-80">v{status.version}</span>}
-            <button
-              onClick={installUpdate}
-              className="mt-0.5 self-start font-medium underline hover:no-underline"
-            >
-              Restart & Update
-            </button>
-          </>
-        )}
+function describe(status: UpdaterStatus): View {
+  const tonePrimary = 'bg-blue-600/90 text-white'
+  const toneNeutral = 'bg-white/[0.04] text-white/70 border border-white/10'
+  const toneError = 'bg-red-600/80 text-white'
+
+  switch (status.state) {
+    case 'checking':
+      return {
+        title: 'Checking for updates',
+        version: status.currentVersion,
+        tone: toneNeutral,
+        action: <ProgressBar percent={null} indeterminate />
+      }
+
+    case 'available':
+      return {
+        title: 'Update available',
+        version: status.version,
+        tone: tonePrimary,
+        action: <ProgressBar percent={null} indeterminate label="Preparing download" />
+      }
+
+    case 'downloading': {
+      const pct = typeof status.percent === 'number' ? Math.round(status.percent) : null
+      return {
+        title: 'Downloading update',
+        version: status.version,
+        tone: tonePrimary,
+        action: <ProgressBar percent={pct} />
+      }
+    }
+
+    case 'ready':
+      return {
+        title: 'Update ready',
+        version: status.version,
+        tone: tonePrimary,
+        action: <ActionButton onClick={installUpdate} label="Restart & Update" filled />
+      }
+
+    case 'error':
+      return {
+        title: 'Update failed',
+        version: status.currentVersion,
+        tone: toneError,
+        action: <ActionButton onClick={checkForUpdates} label="Retry" />
+      }
+
+    case 'up-to-date':
+    default:
+      return {
+        title: 'Up to date',
+        version: status.currentVersion,
+        tone: toneNeutral,
+        action: <ActionButton onClick={checkForUpdates} label="Check for updates" />
+      }
+  }
+}
+
+function ActionButton({
+  onClick,
+  label,
+  filled
+}: {
+  onClick: () => void
+  label: string
+  filled?: boolean
+}): JSX.Element {
+  return (
+    <button
+      onClick={onClick}
+      className={`w-full text-left text-xs font-medium rounded px-2 py-1 transition-colors ${
+        filled
+          ? 'bg-white/15 hover:bg-white/25'
+          : 'hover:bg-white/[0.06] text-white/70 hover:text-white'
+      }`}
+    >
+      {label}
+    </button>
+  )
+}
+
+function ProgressBar({
+  percent,
+  indeterminate,
+  label
+}: {
+  percent: number | null
+  indeterminate?: boolean
+  label?: string
+}): JSX.Element {
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="flex items-center justify-between text-xs">
+        <span className="opacity-80 truncate">{label ?? (indeterminate ? '' : '')}</span>
+        {percent !== null && <span className="tabular-nums opacity-90">{percent}%</span>}
+      </div>
+      <div className="h-1 rounded-full bg-white/20 overflow-hidden">
+        <div
+          className={`h-full bg-white/90 transition-all ${indeterminate ? 'animate-pulse w-1/3' : ''}`}
+          style={percent !== null ? { width: `${percent}%` } : undefined}
+        />
       </div>
     </div>
   )

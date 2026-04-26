@@ -3,7 +3,8 @@ import { autoUpdater } from 'electron-updater'
 import type { UpdaterStatus } from '../shared/types'
 
 function send(win: BrowserWindow, status: UpdaterStatus): void {
-  if (!win.isDestroyed()) win.webContents.send('updater:status', status)
+  if (win.isDestroyed()) return
+  win.webContents.send('updater:status', { currentVersion: app.getVersion(), ...status })
 }
 
 function patchHelpMenu(checkFn: () => void): void {
@@ -17,7 +18,15 @@ function patchHelpMenu(checkFn: () => void): void {
 }
 
 export function initAutoUpdater(win: BrowserWindow): void {
-  if (!app.isPackaged) return
+  if (!app.isPackaged) {
+    // In dev, still surface the current version so the pill can render.
+    send(win, { state: 'up-to-date' })
+    ipcMain.handle('updater:check', () => {
+      send(win, { state: 'up-to-date' })
+    })
+    ipcMain.handle('updater:install', () => {})
+    return
+  }
 
   autoUpdater.autoDownload = true
   autoUpdater.autoInstallOnAppQuit = false
@@ -95,6 +104,10 @@ export function initAutoUpdater(win: BrowserWindow): void {
   ipcMain.handle('updater:install', () => {
     autoUpdater.quitAndInstall()
   })
+
+  // Optimistically render "up to date" with the current version so the pill
+  // populates immediately; the real check below will overwrite the state.
+  send(win, { state: 'up-to-date' })
 
   // Silent startup check
   autoUpdater.checkForUpdates().catch(() => {})
