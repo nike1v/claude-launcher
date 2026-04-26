@@ -155,9 +155,9 @@ function ProgressBar({
           {percent !== null && <span className="tabular-nums opacity-90">{percent}%</span>}
         </div>
       )}
-      <div className="h-1 rounded-full bg-white/20 overflow-hidden">
+      <div className="h-1 rounded-full bg-white/20 overflow-hidden relative">
         <div
-          className={`h-full bg-white/90 transition-all ${indeterminate ? 'animate-pulse w-1/3' : ''}`}
+          className={`h-full bg-white/90 ${indeterminate ? 'indeterminate-bar' : 'transition-all'}`}
           style={percent !== null ? { width: `${percent}%` } : undefined}
         />
       </div>

@@ -10,3 +10,16 @@ body {
   color: #e5e5e5;
   font-family: ui-sans-serif, system-ui, sans-serif;
 }
+
+/* Indeterminate sliding bar for the update pill — used while checking for
+   updates and while the download is being prepared. Kept in CSS rather than
+   Tailwind utilities because it needs custom keyframes. */
+@keyframes indeterminateSlide {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(300%); }
+}
+
+.indeterminate-bar {
+  width: 33%;
+  animation: indeterminateSlide 1.2s ease-in-out infinite;
+}
