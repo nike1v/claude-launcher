@@ -19,12 +19,24 @@ export function MessageList({ sessionId }: Props): JSX.Element {
   const bottomRef = useRef<HTMLDivElement>(null)
   const shouldFollowRef = useRef(true)
   const containerRef = useRef<HTMLDivElement>(null)
+  const contentRef = useRef<HTMLDivElement>(null)
 
+  // Watch the actual content size — not just messages.length — so the view
+  // stays pinned to the bottom while async work (markdown, images, restored
+  // history, tab activation) keeps growing the scroll height after the last
+  // state change. The ResizeObserver fires on the initial mount too, which
+  // covers "open the chat and land on the latest message".
   useEffect(() => {
-    if (shouldFollowRef.current) {
-      bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-    }
-  }, [messages.length])
+    const content = contentRef.current
+    if (!content) return
+    const observer = new ResizeObserver(() => {
+      if (shouldFollowRef.current) {
+        bottomRef.current?.scrollIntoView({ behavior: 'auto' })
+      }
+    })
+    observer.observe(content)
+    return () => observer.disconnect()
+  }, [])
 
   const handleScroll = () => {
     const el = containerRef.current
@@ -127,17 +139,19 @@ export function MessageList({ sessionId }: Props): JSX.Element {
     <div
       ref={containerRef}
       onScroll={handleScroll}
-      className="flex-1 overflow-y-auto px-4 py-4 space-y-3"
+      className="flex-1 overflow-y-auto px-4 py-4"
     >
-      {groups.map((group, i) => {
-        if (group.kind === 'message') return renderMessage(group.message)
-        return (
-          <ToolGroup key={`g-${i}`} toolNames={group.toolNames}>
-            {group.messages.map(renderMessage)}
-          </ToolGroup>
-        )
-      })}
-      <div ref={bottomRef} />
+      <div ref={contentRef} className="space-y-3">
+        {groups.map((group, i) => {
+          if (group.kind === 'message') return renderMessage(group.message)
+          return (
+            <ToolGroup key={`g-${i}`} toolNames={group.toolNames}>
+              {group.messages.map(renderMessage)}
+            </ToolGroup>
+          )
+        })}
+        <div ref={bottomRef} />
+      </div>
     </div>
   )
 }
