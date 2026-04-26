@@ -15,10 +15,12 @@ export function useIpcListeners(): void {
         appendEvent(sessionId, event)
         // The init event carries the Claude CLI session id — record it so
         // we can resume this tab (--resume) and load its JSONL transcript
-        // after an app restart.
+        // after an app restart. claude --resume forks to a fresh session id,
+        // so once we have an id (set by HistoryList/restoreTabs from the
+        // resumed dialogue), keep it pinned to the source transcript.
         if (event.type === 'system' && event.subtype === 'init') {
           const current = useSessionsStore.getState().sessions[sessionId]
-          if (current && current.claudeSessionId !== event.session_id) {
+          if (current && !current.claudeSessionId) {
             updateSession(sessionId, { claudeSessionId: event.session_id })
           }
         }
