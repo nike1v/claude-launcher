@@ -1,6 +1,7 @@
-import { ipcMain, BrowserWindow } from 'electron'
+import { ipcMain, BrowserWindow, dialog } from 'electron'
+import { writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { extname, join } from 'node:path'
 import { SessionManager } from './session-manager'
 import { ProjectStore } from './project-store'
 import { TabStore } from './tab-store'
@@ -36,8 +37,18 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): () => Promise<vo
     return sessionManager.startSession(project, resumeSessionId)
   })
 
-  handle('session:send', ({ sessionId, text }) => {
-    sessionManager.sendMessage(sessionId, text)
+  handle('session:send', ({ sessionId, text, attachments }) => {
+    sessionManager.sendMessage(sessionId, text, attachments)
+  })
+
+  handle('dialog:saveFile', async ({ defaultName, mediaType, data }) => {
+    const result = await dialog.showSaveDialog(mainWindow, {
+      defaultPath: defaultName,
+      filters: filtersFor(defaultName, mediaType)
+    })
+    if (result.canceled || !result.filePath) return { saved: false }
+    await writeFile(result.filePath, Buffer.from(data, 'base64'))
+    return { saved: true, path: result.filePath }
   })
 
   handle('session:stop', ({ sessionId }) => {
@@ -80,9 +91,18 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): () => Promise<vo
     const channels = [
       'session:start', 'session:send', 'session:stop', 'session:permission',
       'projects:save', 'projects:load', 'projects:history:load', 'session:history:load',
-      'tabs:load', 'tabs:save'
+      'tabs:load', 'tabs:save', 'dialog:saveFile'
     ]
     channels.forEach(ch => ipcMain.removeHandler(ch))
     await sessionManager.stopAll()
   }
+}
+
+function filtersFor(name: string, mediaType: string): Electron.FileFilter[] {
+  const ext = extname(name).replace(/^\./, '').toLowerCase()
+  if (ext) return [{ name: ext.toUpperCase(), extensions: [ext] }, { name: 'All Files', extensions: ['*'] }]
+  // Fall back to a guess from the media type.
+  const fromMime = mediaType.split('/')[1]?.toLowerCase()
+  if (fromMime) return [{ name: fromMime.toUpperCase(), extensions: [fromMime] }, { name: 'All Files', extensions: ['*'] }]
+  return [{ name: 'All Files', extensions: ['*'] }]
 }

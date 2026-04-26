@@ -5,8 +5,23 @@ export async function startSession(
   return window.electronAPI.invoke('session:start', { projectId, resumeSessionId }) as Promise<string>
 }
 
-export function sendMessage(sessionId: string, text: string): void {
-  window.electronAPI.invoke('session:send', { sessionId, text })
+export function sendMessage(
+  sessionId: string,
+  text: string,
+  attachments?: import('../../../shared/types').SendAttachment[]
+): void {
+  window.electronAPI.invoke('session:send', { sessionId, text, attachments })
+}
+
+export async function saveFileAs(
+  defaultName: string,
+  mediaType: string,
+  data: string
+): Promise<{ saved: boolean; path?: string }> {
+  return window.electronAPI.invoke('dialog:saveFile', { defaultName, mediaType, data }) as Promise<{
+    saved: boolean
+    path?: string
+  }>
 }
 
 export function stopSession(sessionId: string): void {

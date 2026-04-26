@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import type { ChildProcess } from 'node:child_process'
 import type { ITransport, SpawnOptions } from './transports/types'
-import type { Project, StreamJsonEvent } from '../shared/types'
+import type { Project, SendAttachment, StreamJsonEvent, UserContentBlock } from '../shared/types'
 import { parseStreamJsonLine } from './stream-json-parser'
 import { LocalTransport } from './transports/local'
 import { WslTransport } from './transports/wsl'
@@ -89,12 +89,15 @@ export class SessionManager {
     return sessionId
   }
 
-  public sendMessage(sessionId: string, text: string): void {
+  public sendMessage(sessionId: string, text: string, attachments: SendAttachment[] = []): void {
     const session = this.sessions.get(sessionId)
     if (!session) return
+    const content = attachments.length === 0
+      ? text
+      : buildContentBlocks(text, attachments)
     const payload = JSON.stringify({
       type: 'user',
-      message: { role: 'user', content: text }
+      message: { role: 'user', content }
     }) + '\n'
     session.process.stdin?.write(payload)
   }
@@ -156,6 +159,36 @@ export class SessionManager {
       this.onEvent('session:event', { sessionId: session.sessionId, event })
     }
   }
+}
+
+function buildContentBlocks(text: string, attachments: SendAttachment[]): UserContentBlock[] {
+  const blocks: UserContentBlock[] = []
+  // Text-file attachments are inlined as fenced code so the model sees them
+  // as part of the prompt; binary attachments become real image/document blocks.
+  let prelude = ''
+  for (const att of attachments) {
+    if (att.kind === 'text') {
+      const fence = '```'
+      const lang = extensionFromName(att.name)
+      prelude += `${fence}${lang ? lang : ''}${att.name ? ` ${att.name}` : ''}\n${att.text}\n${fence}\n\n`
+    }
+  }
+  const fullText = prelude + text
+  if (fullText) blocks.push({ type: 'text', text: fullText })
+  for (const att of attachments) {
+    if (att.kind === 'image') {
+      blocks.push({ type: 'image', source: { type: 'base64', media_type: att.mediaType, data: att.data } })
+    } else if (att.kind === 'document') {
+      blocks.push({ type: 'document', source: { type: 'base64', media_type: att.mediaType, data: att.data } })
+    }
+  }
+  return blocks
+}
+
+function extensionFromName(name: string): string {
+  const dot = name.lastIndexOf('.')
+  if (dot < 0) return ''
+  return name.slice(dot + 1).toLowerCase()
 }
 
 function resolveDefaultTransport(project: Project): ITransport {

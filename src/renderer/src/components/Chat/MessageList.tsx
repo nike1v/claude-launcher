@@ -5,7 +5,7 @@ import { UserMessage } from './UserMessage'
 import { ToolUse } from './ToolUse'
 import { Thinking } from './Thinking'
 import { PermissionPrompt } from './PermissionPrompt'
-import type { ToolResultBlock } from '../../../../shared/types'
+import type { DocumentBlock, ImageBlock, ToolResultBlock } from '../../../../shared/types'
 
 interface Props {
   sessionId: string
@@ -101,14 +101,24 @@ export function MessageList({ sessionId }: Props): JSX.Element {
           if (typeof content === 'string') {
             return content.trim() ? <UserMessage key={id} text={content} /> : null
           }
-          const inputBlock = content.find(
-            b => b.type === 'tool_result' && b.tool_use_id === '__input__'
-          )
-          if (inputBlock && typeof inputBlock.content === 'string') {
-            return <UserMessage key={id} text={inputBlock.content} />
+
+          // Pick out the parts that should render as a user bubble. tool_result
+          // blocks with non-__input__ ids are responses to tool calls and are
+          // rendered inline above (see toolResultsById), so we ignore them here.
+          const attachments: Array<ImageBlock | DocumentBlock> = []
+          const textParts: string[] = []
+          for (const block of content) {
+            if (block.type === 'image' || block.type === 'document') {
+              attachments.push(block)
+            } else if (block.type === 'text') {
+              textParts.push(block.text)
+            } else if (block.type === 'tool_result' && block.tool_use_id === '__input__') {
+              if (typeof block.content === 'string') textParts.push(block.content)
+            }
           }
-          // Other tool_result blocks are rendered inline with their tool_use above.
-          return null
+          const text = textParts.join('\n').trim()
+          if (!text && attachments.length === 0) return null
+          return <UserMessage key={id} text={text} attachments={attachments} />
         }
         return null
       })}

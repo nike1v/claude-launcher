@@ -63,6 +63,19 @@ export type ToolResultBlock = {
   is_error?: boolean
 }
 
+// Anthropic content blocks the user can attach to a prompt.
+export type ImageSource = { type: 'base64'; media_type: string; data: string }
+export type ImageBlock = { type: 'image'; source: ImageSource }
+export type DocumentBlock = { type: 'document'; source: ImageSource }
+
+export type UserContentBlock = ContentBlock | ToolResultBlock | ImageBlock | DocumentBlock
+
+// Attachment payload from renderer → main when sending a message.
+export type SendAttachment =
+  | { kind: 'image'; mediaType: string; data: string; name?: string }
+  | { kind: 'document'; mediaType: string; data: string; name: string }
+  | { kind: 'text'; name: string; text: string }
+
 export interface InitEvent {
   type: 'system'
   subtype: 'init'
@@ -90,7 +103,7 @@ export interface UserEvent {
   type: 'user'
   message: {
     role: 'user'
-    content: string | ToolResultBlock[]
+    content: string | UserContentBlock[]
   }
 }
 
@@ -121,9 +134,10 @@ export interface UpdaterStatus {
 export interface IpcChannels {
   // Renderer → Main (invoke)
   'session:start': { projectId: string; resumeSessionId?: string }
-  'session:send': { sessionId: string; text: string }
+  'session:send': { sessionId: string; text: string; attachments?: SendAttachment[] }
   'session:stop': { sessionId: string }
   'session:permission': { sessionId: string; decision: 'allow' | 'deny'; toolUseId: string }
+  'dialog:saveFile': { defaultName: string; mediaType: string; data: string }
   'projects:save': Project[]
   'projects:history:load': { projectId: string }
   'session:history:load': { projectId: string; sessionId: string }
@@ -147,6 +161,7 @@ export type IpcInvokeChannel = Extract<
   | 'projects:save' | 'projects:history:load' | 'session:history:load' | 'projects:load'
   | 'tabs:load' | 'tabs:save'
   | 'updater:check' | 'updater:install'
+  | 'dialog:saveFile'
 >
 
 export type IpcEventChannel = Extract<
