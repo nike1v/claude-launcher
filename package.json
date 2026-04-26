@@ -1,6 +1,6 @@
 {
   "name": "claude-launcher",
-  "version": "0.1.26",
+  "version": "0.1.27",
   "description": "Electron desktop app for running Claude CLI sessions",
   "repository": {
     "type": "git",
@@ -72,6 +72,15 @@
       "artifactName": "${name}-Setup-${version}.${ext}",
       "target": [
         "nsis"
+      ]
+    },
+    "mac": {
+      "artifactName": "${name}-${version}-${arch}.${ext}",
+      "category": "public.app-category.developer-tools",
+      "identity": null,
+      "target": [
+        { "target": "dmg", "arch": ["x64", "arm64"] },
+        { "target": "zip", "arch": ["x64", "arm64"] }
       ]
     }
   }

@@ -8,6 +8,13 @@ interface Props {
   editProject?: Project
 }
 
+// WSL is Windows-only, so omit it on macOS / Linux. Existing WSL projects
+// remain visible (they just won't spawn) — we only filter the picker here.
+const HOST_KINDS: ReadonlyArray<'local' | 'wsl' | 'ssh'> =
+  window.electronAPI.platform === 'win32'
+    ? ['local', 'wsl', 'ssh']
+    : ['local', 'ssh']
+
 export function AddProjectModal({ onClose, editProject }: Props): JSX.Element {
   const { addProject, updateProject } = useProjectsStore()
 
@@ -83,7 +90,7 @@ export function AddProjectModal({ onClose, editProject }: Props): JSX.Element {
           <div>
             <label className={labelCls}>Host Type</label>
             <div className="flex gap-2">
-              {(['local', 'wsl', 'ssh'] as const).map(k => (
+              {HOST_KINDS.map(k => (
                 <button
                   key={k}
                   type="button"

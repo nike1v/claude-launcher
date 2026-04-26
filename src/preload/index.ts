@@ -2,6 +2,8 @@ import { contextBridge, ipcRenderer } from 'electron'
 import type { IpcChannels, IpcEventChannel } from '../shared/types'
 
 const api = {
+  platform: process.platform as NodeJS.Platform,
+
   invoke: <K extends keyof IpcChannels>(
     channel: K,
     payload: IpcChannels[K]
