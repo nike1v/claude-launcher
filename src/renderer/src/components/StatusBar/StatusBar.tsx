@@ -25,7 +25,11 @@ export function StatusBar(): JSX.Element {
     .map(m => m.event)
     .find((e): e is InitEvent => e.type === 'system' && (e as { subtype?: string }).subtype === 'init')
 
-  const ctx = computeContextFill(messages.map(m => m.event), initEvent?.model)
+  // The init event is a runtime stream-json event and isn't recorded to the
+  // JSONL transcript, so a freshly restored tab has no init yet. Fall back to
+  // the model the project was configured with so the user still sees something.
+  const modelLabel = initEvent?.model ?? project?.model ?? null
+  const ctx = computeContextFill(messages.map(m => m.event), modelLabel ?? undefined)
 
   const hostLabel = project
     ? project.host.kind === 'wsl'
@@ -44,7 +48,7 @@ export function StatusBar(): JSX.Element {
           )}
           <div className="ml-auto flex items-center gap-3 shrink-0">
             {ctx && <ContextMeter used={ctx.used} total={ctx.total} />}
-            {initEvent?.model && <span className="text-white/20">{initEvent.model}</span>}
+            {modelLabel && <span className="text-white/20">{modelLabel}</span>}
           </div>
         </>
       )}
@@ -81,9 +85,12 @@ function computeContextFill(
     }
     if (used !== null && totalFromResult !== null) break
   }
-  if (used === null) return null
+  // If we don't even have a model id we can't pick a sensible default total,
+  // so suppress the meter entirely. Otherwise show the bar — even at 0% used
+  // — so the user always sees the budget.
+  if (used === null && !model) return null
   const total = totalFromResult ?? defaultContextWindow(model)
-  return { used, total }
+  return { used: used ?? 0, total }
 }
 
 // Fall back when no result event has supplied modelUsage yet (e.g. mid-turn
