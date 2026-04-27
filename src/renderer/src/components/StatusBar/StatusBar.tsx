@@ -89,14 +89,17 @@ function computeContextFill(
   // so suppress the meter entirely. Otherwise show the bar — even at 0% used
   // — so the user always sees the budget.
   if (used === null && !model) return null
-  const total = totalFromResult ?? defaultContextWindow(model)
+  const total = totalFromResult ?? defaultContextWindow(model, used ?? 0)
   return { used: used ?? 0, total }
 }
 
 // Fall back when no result event has supplied modelUsage yet (e.g. mid-turn
 // or right after restoring a session). The "[1m]" model id signals the 1M
-// context tier; everything else gets the standard 200K.
-function defaultContextWindow(model: string | undefined): number {
+// context tier explicitly; otherwise infer the tier from observed usage —
+// if a past turn already consumed more than 200K, the session must be on a
+// 1M-context model.
+function defaultContextWindow(model: string | undefined, observedUsed: number): number {
   if (model && /\[1m\]/i.test(model)) return 1_000_000
+  if (observedUsed > 200_000) return 1_000_000
   return 200_000
 }
