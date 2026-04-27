@@ -93,7 +93,12 @@ function useSubmit({
       })
 
       root.clear()
-      root.append($createParagraphNode())
+      const fresh = $createParagraphNode()
+      root.append(fresh)
+      // Place the selection inside the empty paragraph; without this the
+      // next keystroke can land outside any node and Lexical inserts a new
+      // paragraph, leaving a stray empty line below the typed character.
+      fresh.select()
       editor.dispatchCommand(CLEAR_HISTORY_COMMAND, undefined)
       clearAttachments()
       didSend = true
