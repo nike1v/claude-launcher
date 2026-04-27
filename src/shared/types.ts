@@ -24,11 +24,19 @@ export interface Session {
   pid?: number
   hasUnread: boolean
   errorMessage?: string
+  // Cached metadata used by the status bar before the current run's init /
+  // result events have arrived. Updated whenever new info comes in and
+  // persisted via tabs.json so a cold-restored tab is informative right
+  // away instead of going through a "blank model + 200K total" flash.
+  lastModel?: string
+  lastContextWindow?: number
 }
 
 export interface PersistedTab {
   projectId: string
   claudeSessionId: string
+  lastModel?: string
+  lastContextWindow?: number
 }
 
 export interface PersistedTabs {

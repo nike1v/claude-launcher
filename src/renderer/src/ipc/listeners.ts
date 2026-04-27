@@ -20,8 +20,28 @@ export function useIpcListeners(): void {
         // resumed dialogue), keep it pinned to the source transcript.
         if (event.type === 'system' && event.subtype === 'init') {
           const current = useSessionsStore.getState().sessions[sessionId]
-          if (current && !current.claudeSessionId) {
-            updateSession(sessionId, { claudeSessionId: event.session_id })
+          if (current) {
+            const update: Partial<typeof current> = {}
+            if (!current.claudeSessionId) update.claudeSessionId = event.session_id
+            if (event.model && current.lastModel !== event.model) update.lastModel = event.model
+            if (Object.keys(update).length) updateSession(sessionId, update)
+          }
+        }
+        // Snapshot the context window the moment claude reports one — so a
+        // cold restore can pull it from tabs.json and show a real total
+        // before the new turn finishes.
+        if (event.type === 'result') {
+          const mu = (event as { modelUsage?: Record<string, { contextWindow?: number }> }).modelUsage
+          if (mu) {
+            for (const v of Object.values(mu)) {
+              if (v?.contextWindow) {
+                const current = useSessionsStore.getState().sessions[sessionId]
+                if (current && current.lastContextWindow !== v.contextWindow) {
+                  updateSession(sessionId, { lastContextWindow: v.contextWindow })
+                }
+                break
+              }
+            }
           }
         }
         // Mark unread if not the active tab

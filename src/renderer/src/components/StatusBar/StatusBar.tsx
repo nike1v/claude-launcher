@@ -27,9 +27,14 @@ export function StatusBar(): JSX.Element {
 
   // The init event is a runtime stream-json event and isn't recorded to the
   // JSONL transcript, so a freshly restored tab has no init yet. Fall back to
-  // the model the project was configured with so the user still sees something.
-  const modelLabel = initEvent?.model ?? project?.model ?? null
-  const ctx = computeContextFill(messages.map(m => m.event), modelLabel ?? undefined)
+  // the model we cached on the previous run (persisted via tabs.json), then
+  // to the project's configured override.
+  const modelLabel = initEvent?.model ?? session?.lastModel ?? project?.model ?? null
+  const ctx = computeContextFill(
+    messages.map(m => m.event),
+    modelLabel ?? undefined,
+    session?.lastContextWindow
+  )
 
   const hostLabel = project
     ? project.host.kind === 'wsl'
@@ -58,7 +63,8 @@ export function StatusBar(): JSX.Element {
 
 function computeContextFill(
   events: ReadonlyArray<{ type: string }>,
-  model: string | undefined
+  model: string | undefined,
+  cachedTotal: number | undefined
 ): { used: number; total: number } | null {
   // Walk backwards: latest assistant.usage tells us the input context size
   // for the most recent turn (input + cache_read + cache_creation).
@@ -85,11 +91,11 @@ function computeContextFill(
     }
     if (used !== null && totalFromResult !== null) break
   }
-  // If we don't even have a model id we can't pick a sensible default total,
-  // so suppress the meter entirely. Otherwise show the bar — even at 0% used
-  // — so the user always sees the budget.
-  if (used === null && !model) return null
-  const total = totalFromResult ?? defaultContextWindow(model, used ?? 0)
+  // If we don't even have a model id (or a cached total from a previous run)
+  // we can't pick a sensible total, so suppress the meter entirely. Otherwise
+  // show the bar — even at 0% used — so the user always sees the budget.
+  if (used === null && !model && !cachedTotal) return null
+  const total = totalFromResult ?? cachedTotal ?? defaultContextWindow(model, used ?? 0)
   return { used: used ?? 0, total }
 }
 

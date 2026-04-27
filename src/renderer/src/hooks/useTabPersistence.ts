@@ -75,7 +75,9 @@ async function restoreTabs(knownProjectIds: string[]): Promise<void> {
         projectId: tab.projectId,
         claudeSessionId: tab.claudeSessionId,
         status: 'starting',
-        hasUnread: false
+        hasUnread: false,
+        lastModel: tab.lastModel,
+        lastContextWindow: tab.lastContextWindow
       })
       if (firstRestoredId === null) firstRestoredId = sessionId
       // Map the saved active index (in the saved list) to the restored tab.
@@ -103,7 +105,12 @@ function serializeTabs(
   const tabs = tabOrder
     .map(id => sessions[id])
     .filter((s): s is Session => !!s && !!s.claudeSessionId)
-    .map(s => ({ projectId: s.projectId, claudeSessionId: s.claudeSessionId! }))
+    .map(s => ({
+      projectId: s.projectId,
+      claudeSessionId: s.claudeSessionId!,
+      lastModel: s.lastModel,
+      lastContextWindow: s.lastContextWindow
+    }))
 
   let activeIndex: number | null = null
   const activeClaudeId = activeSessionId ? sessions[activeSessionId]?.claudeSessionId : undefined
