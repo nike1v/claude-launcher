@@ -39,7 +39,8 @@ export class SessionManager {
     const spawnOptions: SpawnOptions = {
       host: env.config,
       path: project.path,
-      model: project.model,
+      // Project override wins; otherwise inherit the env's default model.
+      model: project.model ?? env.defaultModel,
       resumeSessionId
     }
 

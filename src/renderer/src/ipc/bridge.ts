@@ -64,6 +64,17 @@ export async function probeEnvironment(
   >
 }
 
+export async function listDir(
+  config: import('../../../shared/types').HostType,
+  path: string
+): Promise<{ cwd: string; entries: string[]; error?: string }> {
+  return window.electronAPI.invoke('fs:listDir', { config, path }) as Promise<{
+    cwd: string
+    entries: string[]
+    error?: string
+  }>
+}
+
 export async function loadTabs(): Promise<import('../../../shared/types').PersistedTabs> {
   return window.electronAPI.invoke('tabs:load', {}) as Promise<import('../../../shared/types').PersistedTabs>
 }

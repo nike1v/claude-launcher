@@ -13,6 +13,10 @@ export interface Environment {
   id: string
   name: string
   config: HostType
+  // Optional default model id for this environment. Projects under it inherit
+  // unless they override via Project.model. Stored alongside the connection
+  // because users typically pick a tier per machine, not per project.
+  defaultModel?: string
 }
 
 export interface Project {
@@ -171,6 +175,10 @@ export interface IpcChannels {
   // version } or { ok: false, reason }. Used to populate health badges in
   // the Settings modal and to validate before "Add Environment" saves.
   'environments:probe': { config: HostType }
+  // Directory listing over an environment's transport. Returns child dir
+  // names (no files) so the path combobox can suggest paths as the user
+  // types. `path` is the directory to list — empty = the host's home.
+  'fs:listDir': { config: HostType; path: string }
   'tabs:load': Record<string, never>
   'tabs:save': PersistedTabs
   'updater:check': Record<string, never>
@@ -190,6 +198,7 @@ export type IpcInvokeChannel = Extract<
   | 'session:start' | 'session:send' | 'session:stop' | 'session:interrupt' | 'session:permission'
   | 'projects:save' | 'projects:history:load' | 'session:history:load' | 'projects:load'
   | 'environments:save' | 'environments:load' | 'environments:probe'
+  | 'fs:listDir'
   | 'tabs:load' | 'tabs:save'
   | 'updater:check' | 'updater:install'
   | 'dialog:saveFile'

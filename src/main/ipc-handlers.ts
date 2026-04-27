@@ -7,6 +7,7 @@ import { ProjectStore } from './project-store'
 import { EnvironmentStore, migrateProjectsToEnvironments } from './environment-store'
 import { TabStore } from './tab-store'
 import { HistoryReader } from './history-reader'
+import { listDir } from './dir-lister'
 import { LocalTransport } from './transports/local'
 import { WslTransport } from './transports/wsl'
 import { SshTransport } from './transports/ssh'
@@ -99,6 +100,16 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): () => Promise<vo
     return transport.probe(config)
   })
 
+  handle('fs:listDir', async ({ config, path }) => {
+    try {
+      return await listDir(config, path)
+    } catch (err) {
+      // Surface a structured error so the renderer can show "no suggestions"
+      // rather than crashing or pretending the dir was empty.
+      return { cwd: path, entries: [], error: err instanceof Error ? err.message : String(err) }
+    }
+  })
+
   handle('projects:history:load', async ({ projectId }) => {
     const ctx = resolveProjectAndEnv(projectStore, environmentStore, projectId)
     if (!ctx) return
@@ -121,6 +132,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): () => Promise<vo
       'session:start', 'session:send', 'session:stop', 'session:interrupt', 'session:permission',
       'projects:save', 'projects:load', 'projects:history:load', 'session:history:load',
       'environments:save', 'environments:load', 'environments:probe',
+      'fs:listDir',
       'tabs:load', 'tabs:save', 'dialog:saveFile'
     ]
     channels.forEach(ch => ipcMain.removeHandler(ch))

@@ -4,6 +4,8 @@ import type { Environment, HostType, Project } from '../../../../shared/types'
 import { useProjectsStore } from '../../store/projects'
 import { useEnvironmentsStore } from '../../store/environments'
 import { Modal } from '../Modal'
+import { ModelCombobox } from '../Settings/ModelCombobox'
+import { PathCombobox } from '../Settings/PathCombobox'
 
 interface Props {
   onClose: () => void
@@ -179,12 +181,39 @@ export function AddProjectModal({ onClose, editProject, presetEnvironmentId }: P
 
           <div>
             <label className={labelCls}>Project Path (on host)</label>
-            <input className={inputCls} value={path} onChange={e => setPath(e.target.value)} placeholder="/home/user/myproject" />
+            {/* The combobox wants a stable HostType so it can list dirs over
+                the right transport. We have one whenever the project is
+                bound to an existing env (edit / preset); for the legacy
+                host-fields flow there's no probe target yet. */}
+            {editEnv ? (
+              <PathCombobox
+                value={path}
+                onChange={setPath}
+                config={editEnv.config}
+                placeholder="/home/user/myproject"
+              />
+            ) : (
+              <input
+                className={inputCls}
+                value={path}
+                onChange={e => setPath(e.target.value)}
+                placeholder="/home/user/myproject"
+              />
+            )}
           </div>
 
           <div>
             <label className={labelCls}>Model Override (optional)</label>
-            <input className={inputCls} value={model} onChange={e => setModel(e.target.value)} placeholder="claude-opus-4-7" />
+            <ModelCombobox
+              value={model}
+              onChange={setModel}
+              placeholder={editEnv?.defaultModel || 'claude-opus-4-7'}
+            />
+            {editEnv?.defaultModel && !model && (
+              <p className="mt-1 text-[10px] text-white/30">
+                Inherits "{editEnv.defaultModel}" from {editEnv.name}.
+              </p>
+            )}
           </div>
 
           <button

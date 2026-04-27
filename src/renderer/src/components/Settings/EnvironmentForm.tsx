@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import type { Environment, HostType } from '../../../../shared/types'
 import { EnvironmentStatus } from './EnvironmentStatus'
+import { ModelCombobox } from './ModelCombobox'
 
 interface Props {
   initial: Environment | null
@@ -31,6 +32,7 @@ export function EnvironmentForm({ initial, onCancel, onSave }: Props): JSX.Eleme
   const [sshKeyFile, setSshKeyFile] = useState(
     initial?.config.kind === 'ssh' ? (initial.config.keyFile ?? '') : ''
   )
+  const [defaultModel, setDefaultModel] = useState(initial?.defaultModel ?? '')
 
   // Snapshot of the host config the form currently describes — used to drive
   // the live probe. Memoised so identical edits don't re-fire the probe each
@@ -70,7 +72,8 @@ export function EnvironmentForm({ initial, onCancel, onSave }: Props): JSX.Eleme
     onSave({
       id: initial?.id ?? crypto.randomUUID(),
       name: name.trim(),
-      config
+      config,
+      defaultModel: defaultModel.trim() || undefined
     })
   }
 
@@ -143,6 +146,14 @@ export function EnvironmentForm({ initial, onCancel, onSave }: Props): JSX.Eleme
           </div>
         </>
       )}
+
+      <div>
+        <label className={labelCls}>Default Model (optional)</label>
+        <ModelCombobox value={defaultModel} onChange={setDefaultModel} placeholder="claude-opus-4-7" />
+        <p className="mt-1 text-[10px] text-white/30">
+          Projects under this environment use this unless they set their own model.
+        </p>
+      </div>
 
       {probeConfig && (
         <div className="flex items-center justify-between rounded border border-white/10 bg-white/[0.02] px-3 py-2">
