@@ -44,6 +44,17 @@ export class SessionManager {
     }
 
     this.onEvent('session:status', { sessionId, status: 'starting' })
+
+    // Quick pre-flight: refuse to start a session if `claude --version` doesn't
+    // print the Claude Code CLI banner. Without this we'd just spawn whatever
+    // happens to be on PATH and let the user wait through the 5s ready
+    // fallback into a forever-thinking state with no response.
+    const probe = transport.probe?.()
+    if (probe && !probe.ok) {
+      this.onEvent('session:status', { sessionId, status: 'error', errorMessage: probe.reason })
+      return sessionId
+    }
+
     const process = transport.spawn(spawnOptions)
 
     let stderrBuffer = ''
