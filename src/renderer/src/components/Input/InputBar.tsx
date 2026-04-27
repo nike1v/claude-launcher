@@ -141,45 +141,48 @@ function ComposerInner({
         <OnChangePlugin onChange={() => {}} />
         <SubmitOnEnterPlugin submit={submit} />
       </div>
-      <SendOrStopButton sessionId={sessionId} disabled={!!disabled} submit={submit} />
+      <StopButton sessionId={sessionId} />
+      <SendButton disabled={!!disabled} submit={submit} />
     </>
   )
 }
 
-// Single button that flips between Send (idle) and Stop (busy) so the user
-// can abort an in-flight turn — SIGINT to the claude subprocess via the
-// session-manager interruptSession path.
-function SendOrStopButton({
-  sessionId,
+// Send is always enabled — claude CLI accepts and queues new messages while
+// a turn is in flight, matching the Claude Code interactive behaviour.
+function SendButton({
   disabled,
   submit
 }: {
-  sessionId: string
   disabled: boolean
   submit: () => boolean
 }): JSX.Element {
-  const isBusy = useSessionsStore(s => s.sessions[sessionId]?.status === 'busy')
-
-  if (isBusy) {
-    return (
-      <button
-        type="button"
-        onClick={() => interruptSession(sessionId)}
-        title="Stop"
-        className="p-2 text-red-400/80 hover:text-red-300 transition-colors"
-      >
-        <Square size={14} fill="currentColor" />
-      </button>
-    )
-  }
   return (
     <button
       type="button"
       onClick={() => submit()}
       disabled={disabled}
+      title="Send"
       className="p-2 text-white/40 hover:text-white/80 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
     >
       <Send size={16} />
+    </button>
+  )
+}
+
+// Visible only while the active session is busy — clicking sends SIGINT to
+// the claude subprocess so the in-flight turn aborts without ending the
+// session.
+function StopButton({ sessionId }: { sessionId: string }): JSX.Element | null {
+  const isBusy = useSessionsStore(s => s.sessions[sessionId]?.status === 'busy')
+  if (!isBusy) return null
+  return (
+    <button
+      type="button"
+      onClick={() => interruptSession(sessionId)}
+      title="Stop"
+      className="p-2 text-red-400/80 hover:text-red-300 transition-colors"
+    >
+      <Square size={14} fill="currentColor" />
     </button>
   )
 }
