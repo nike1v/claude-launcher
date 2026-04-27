@@ -1,7 +1,8 @@
 import { useSessionsStore } from '../../store/sessions'
 import { useProjectsStore } from '../../store/projects'
 import { useMessagesStore } from '../../store/messages'
-import type { InitEvent } from '../../../../shared/types'
+import { ContextMeter } from './ContextMeter'
+import type { AssistantEvent, InitEvent, ResultEvent } from '../../../../shared/types'
 
 const STATUS_COLOR: Record<string, string> = {
   starting: 'bg-yellow-400',
@@ -19,11 +20,12 @@ export function StatusBar(): JSX.Element {
   const session = activeSessionId ? sessions[activeSessionId] : null
   const project = session ? projects.find(p => p.id === session.projectId) : null
 
-  // Extract model + cwd from init event
   const messages = activeSessionId ? (messagesBySession[activeSessionId] ?? []) : []
   const initEvent = messages
     .map(m => m.event)
-    .find((e): e is InitEvent => e.type === 'system' && (e as any).subtype === 'init')
+    .find((e): e is InitEvent => e.type === 'system' && (e as { subtype?: string }).subtype === 'init')
+
+  const ctx = computeContextFill(messages.map(m => m.event), initEvent?.model)
 
   const hostLabel = project
     ? project.host.kind === 'wsl'
@@ -38,11 +40,56 @@ export function StatusBar(): JSX.Element {
           <span className={`w-1.5 h-1.5 rounded-full ${STATUS_COLOR[session.status] ?? 'bg-white/20'}`} />
           <span>{hostLabel}</span>
           {(initEvent?.cwd ?? project?.path) && (
-            <span className="text-white/20">{initEvent?.cwd ?? project?.path}</span>
+            <span className="text-white/20 truncate">{initEvent?.cwd ?? project?.path}</span>
           )}
-          {initEvent?.model && <span className="ml-auto text-white/20">{initEvent.model}</span>}
+          <div className="ml-auto flex items-center gap-3 shrink-0">
+            {ctx && <ContextMeter used={ctx.used} total={ctx.total} />}
+            {initEvent?.model && <span className="text-white/20">{initEvent.model}</span>}
+          </div>
         </>
       )}
     </div>
   )
+}
+
+function computeContextFill(
+  events: ReadonlyArray<{ type: string }>,
+  model: string | undefined
+): { used: number; total: number } | null {
+  // Walk backwards: latest assistant.usage tells us the input context size
+  // for the most recent turn (input + cache_read + cache_creation).
+  let used: number | null = null
+  let totalFromResult: number | null = null
+  for (let i = events.length - 1; i >= 0; i--) {
+    const ev = events[i] as AssistantEvent | ResultEvent | { type: string }
+    if (used === null && ev.type === 'assistant') {
+      const usage = (ev as AssistantEvent).message.usage
+      if (usage) {
+        used =
+          (usage.input_tokens ?? 0) +
+          (usage.cache_read_input_tokens ?? 0) +
+          (usage.cache_creation_input_tokens ?? 0)
+      }
+    }
+    if (totalFromResult === null && ev.type === 'result') {
+      const mu = (ev as ResultEvent).modelUsage
+      if (mu) {
+        for (const v of Object.values(mu)) {
+          if (v?.contextWindow) { totalFromResult = v.contextWindow; break }
+        }
+      }
+    }
+    if (used !== null && totalFromResult !== null) break
+  }
+  if (used === null) return null
+  const total = totalFromResult ?? defaultContextWindow(model)
+  return { used, total }
+}
+
+// Fall back when no result event has supplied modelUsage yet (e.g. mid-turn
+// or right after restoring a session). The "[1m]" model id signals the 1M
+// context tier; everything else gets the standard 200K.
+function defaultContextWindow(model: string | undefined): number {
+  if (model && /\[1m\]/i.test(model)) return 1_000_000
+  return 200_000
 }

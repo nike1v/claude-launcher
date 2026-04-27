@@ -116,6 +116,9 @@ export interface ResultEvent {
   is_error: boolean
   num_turns: number
   total_cost_usd?: number
+  // claude reports context-window size per model in modelUsage; we read the
+  // first entry to drive the context-fill indicator in the status bar.
+  modelUsage?: Record<string, { contextWindow?: number; maxOutputTokens?: number }>
 }
 
 export type StreamJsonEvent = InitEvent | AssistantEvent | UserEvent | ResultEvent
