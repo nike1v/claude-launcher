@@ -55,6 +55,10 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): () => Promise<vo
     sessionManager.stopSession(sessionId)
   })
 
+  handle('session:interrupt', ({ sessionId }) => {
+    sessionManager.interruptSession(sessionId)
+  })
+
   handle('session:permission', ({ sessionId, decision, toolUseId }) => {
     sessionManager.respondPermission(sessionId, decision, toolUseId)
   })
@@ -89,7 +93,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): () => Promise<vo
   return async () => {
     stopped = true
     const channels = [
-      'session:start', 'session:send', 'session:stop', 'session:permission',
+      'session:start', 'session:send', 'session:stop', 'session:interrupt', 'session:permission',
       'projects:save', 'projects:load', 'projects:history:load', 'session:history:load',
       'tabs:load', 'tabs:save', 'dialog:saveFile'
     ]

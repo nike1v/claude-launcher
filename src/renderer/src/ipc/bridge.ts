@@ -28,6 +28,10 @@ export function stopSession(sessionId: string): void {
   window.electronAPI.invoke('session:stop', { sessionId })
 }
 
+export function interruptSession(sessionId: string): void {
+  window.electronAPI.invoke('session:interrupt', { sessionId })
+}
+
 export function respondPermission(
   sessionId: string,
   decision: 'allow' | 'deny',

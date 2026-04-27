@@ -128,6 +128,17 @@ export class SessionManager {
     this.onEvent('session:status', { sessionId, status: 'closed' })
   }
 
+  // Abort the current in-flight turn without killing the process. Claude
+  // CLI handles SIGINT by stopping the active LLM call / tool run and
+  // returning to the prompt. We also flip the renderer back to 'ready' so
+  // the spinner clears even if the CLI doesn't emit an immediate result.
+  public interruptSession(sessionId: string): void {
+    const session = this.sessions.get(sessionId)
+    if (!session) return
+    try { session.process.kill('SIGINT') } catch { /* already exited */ }
+    this.onEvent('session:status', { sessionId, status: 'ready' })
+  }
+
   public async stopAll(): Promise<void> {
     const pending: Promise<void>[] = []
     for (const session of this.sessions.values()) {

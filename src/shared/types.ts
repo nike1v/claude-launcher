@@ -148,6 +148,7 @@ export interface IpcChannels {
   'session:start': { projectId: string; resumeSessionId?: string }
   'session:send': { sessionId: string; text: string; attachments?: SendAttachment[] }
   'session:stop': { sessionId: string }
+  'session:interrupt': { sessionId: string }
   'session:permission': { sessionId: string; decision: 'allow' | 'deny'; toolUseId: string }
   'dialog:saveFile': { defaultName: string; mediaType: string; data: string }
   'projects:save': Project[]
@@ -169,7 +170,7 @@ export interface IpcChannels {
 
 export type IpcInvokeChannel = Extract<
   keyof IpcChannels,
-  | 'session:start' | 'session:send' | 'session:stop' | 'session:permission'
+  | 'session:start' | 'session:send' | 'session:stop' | 'session:interrupt' | 'session:permission'
   | 'projects:save' | 'projects:history:load' | 'session:history:load' | 'projects:load'
   | 'tabs:load' | 'tabs:save'
   | 'updater:check' | 'updater:install'

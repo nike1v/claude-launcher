@@ -11,9 +11,10 @@ import {
   COMMAND_PRIORITY_HIGH,
   KEY_ENTER_COMMAND
 } from 'lexical'
-import { Send, Paperclip, X, FileText, Image as ImageIcon } from 'lucide-react'
-import { sendMessage } from '../../ipc/bridge'
+import { Send, Paperclip, X, FileText, Image as ImageIcon, Square } from 'lucide-react'
+import { interruptSession, sendMessage } from '../../ipc/bridge'
 import { useMessagesStore } from '../../store/messages'
+import { useSessionsStore } from '../../store/sessions'
 import type {
   DocumentBlock,
   ImageBlock,
@@ -140,15 +141,46 @@ function ComposerInner({
         <OnChangePlugin onChange={() => {}} />
         <SubmitOnEnterPlugin submit={submit} />
       </div>
+      <SendOrStopButton sessionId={sessionId} disabled={!!disabled} submit={submit} />
+    </>
+  )
+}
+
+// Single button that flips between Send (idle) and Stop (busy) so the user
+// can abort an in-flight turn — SIGINT to the claude subprocess via the
+// session-manager interruptSession path.
+function SendOrStopButton({
+  sessionId,
+  disabled,
+  submit
+}: {
+  sessionId: string
+  disabled: boolean
+  submit: () => boolean
+}): JSX.Element {
+  const isBusy = useSessionsStore(s => s.sessions[sessionId]?.status === 'busy')
+
+  if (isBusy) {
+    return (
       <button
         type="button"
-        onClick={() => submit()}
-        disabled={disabled}
-        className="p-2 text-white/40 hover:text-white/80 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+        onClick={() => interruptSession(sessionId)}
+        title="Stop"
+        className="p-2 text-red-400/80 hover:text-red-300 transition-colors"
       >
-        <Send size={16} />
+        <Square size={14} fill="currentColor" />
       </button>
-    </>
+    )
+  }
+  return (
+    <button
+      type="button"
+      onClick={() => submit()}
+      disabled={disabled}
+      className="p-2 text-white/40 hover:text-white/80 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+    >
+      <Send size={16} />
+    </button>
   )
 }
 
