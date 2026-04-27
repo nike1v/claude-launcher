@@ -3,6 +3,7 @@ import { X, RefreshCw } from 'lucide-react'
 import type { Environment, UsageProbeResult, UsageBar } from '../../../../shared/types'
 import { probeEnvironmentUsage } from '../../ipc/bridge'
 import { Modal } from '../Modal'
+import { ErrorBoundary } from '../ErrorBoundary'
 
 interface Props {
   env: Environment
@@ -52,7 +53,15 @@ export function UsageModal({ env, onClose }: Props): JSX.Element {
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 py-4">
-          <UsageBody state={state} />
+          <ErrorBoundary
+            fallback={err => (
+              <div className="text-xs text-red-300/80 whitespace-pre-wrap break-words">
+                Render error in usage modal:{'\n'}{err.message}
+              </div>
+            )}
+          >
+            <UsageBody state={state} />
+          </ErrorBoundary>
         </div>
       </>
     </Modal>

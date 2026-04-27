@@ -62,8 +62,11 @@ export async function probeUsage(host: HostType): Promise<UsageProbeResult> {
         env: cmd.env
       })
     } catch (e) {
-      const reason = e instanceof Error ? e.message : 'failed to spawn claude'
-      return resolve({ ok: false, reason })
+      const reason = e instanceof Error ? `${e.message}\n${e.stack ?? ''}` : String(e)
+      // Console log on the main side so DevTools (Ctrl+Shift+I) shows it
+      // even when the modal can't render the long stack trace nicely.
+      console.error('[usage-probe] PTY spawn failed:', reason)
+      return resolve({ ok: false, reason: `Failed to start PTY: ${reason}` })
     }
 
     term.onData((d: string) => {
@@ -116,12 +119,18 @@ export async function probeUsage(host: HostType): Promise<UsageProbeResult> {
     const hardTimer = setTimeout(() => {
       const parsed = parseUsage(buf)
       if (parsed.bars.length) finish({ ok: true, reading: { bars: parsed.bars, totalCostUsd: parsed.totalCostUsd, totalDurationApi: parsed.totalDurationApi } })
-      else finish({
-        ok: false,
-        reason: parsed.rawText.trim()
-          ? `Timed out before /usage finished rendering`
-          : 'No output from claude — is the CLI installed and authenticated?'
-      })
+      else {
+        // Surface a tail of the raw output so the modal shows something
+        // actionable instead of just "timed out". Trim aggressively — full
+        // PTY captures include lots of cursor-positioning noise.
+        const tail = parsed.rawText.replace(/\s+/g, ' ').trim().slice(-400)
+        finish({
+          ok: false,
+          reason: tail
+            ? `Timed out before /usage finished rendering. Last output:\n${tail}`
+            : 'No output from claude — is the CLI installed and authenticated on this env?'
+        })
+      }
     }, TOTAL_TIMEOUT_MS)
   })
 }

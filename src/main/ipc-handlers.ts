@@ -102,7 +102,16 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): () => Promise<vo
   })
 
   handle('environments:usage', async ({ config }) => {
-    return probeUsage(config)
+    // Wrap so the IPC channel always resolves with our { ok, reason }
+    // shape — a thrown error here would reject the promise and surface
+    // as an opaque "Error invoking remote method" in the renderer (and
+    // can take down the modal if it's not in the right error path).
+    try {
+      return await probeUsage(config)
+    } catch (err) {
+      const reason = err instanceof Error ? `${err.message}\n${err.stack ?? ''}` : String(err)
+      return { ok: false, reason: `usage probe crashed: ${reason}` }
+    }
   })
 
   handle('fs:listDir', async ({ config, path }) => {
