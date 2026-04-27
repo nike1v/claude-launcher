@@ -8,7 +8,6 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type { HostType, UsageProbeResult } from '../shared/types'
 import { parseUsage } from './usage-parser'
-import { getCachedPath } from './transports/path-cache'
 
 // Why a PTY: claude's /usage panel is rendered into the TUI by the CLI
 // itself — there's no machine-readable flag, no `--json` / `--print` mode
@@ -147,17 +146,16 @@ function buildCommand(host: HostType): PtyCommand | null {
   }
 
   if (host.kind === 'wsl') {
-    // We can't `mkdirSync` on the WSL side from Node, so use a wrapper bash
-    // that creates + cd's into the probe dir before exec'ing claude. Login
-    // shell `bash -lc` is unnecessary here because we're injecting PATH via
-    // env (cached from probe-then-direct), so a plain `bash -c` keeps things
-    // fast. exec hands the PTY straight to claude.
-    const cachedPath = getCachedPath(host)
-    const pathPrefix = cachedPath ? `PATH=${shQ(cachedPath)} ` : ''
-    const inner = `mkdir -p $HOME/${PROBE_DIR_NAME} && cd $HOME/${PROBE_DIR_NAME} && exec ${pathPrefix}claude --permission-mode default`
+    // PTY mode lets us use a real login bash without the stdin issues that
+    // forced us to drop bash from the regular spawn path. -lc sources
+    // ~/.profile (where most users put PATH); we explicitly source ~/.bashrc
+    // too since some setups keep PATH there (interactive-only). This way
+    // the usage probe is self-sufficient — it doesn't depend on the regular
+    // path-cache being populated by an earlier session start.
+    const inner = `[ -f ~/.bashrc ] && . ~/.bashrc 2>/dev/null; mkdir -p $HOME/${PROBE_DIR_NAME} && cd $HOME/${PROBE_DIR_NAME} && exec claude --permission-mode default`
     return {
       bin: 'wsl.exe',
-      args: ['-d', host.distro, '--', 'bash', '-c', inner],
+      args: ['-d', host.distro, '--', 'bash', '-lc', inner],
       cwd: process.cwd(), // wsl.exe ignores Windows-side cwd for the WSL run
       env: filteredEnv()
     }
@@ -169,12 +167,11 @@ function buildCommand(host: HostType): PtyCommand | null {
     if (host.port) sshArgs.push('-p', String(host.port))
     if (host.keyFile) sshArgs.push('-i', host.keyFile)
     sshArgs.push(target)
-    const cachedPath = getCachedPath(host)
-    const pathPrefix = cachedPath ? `export PATH=${shQ(cachedPath)}; ` : ''
-    // -tt forces a remote TTY even when the local stdin isn't a terminal,
-    // which is what we need for /usage's TUI rendering.
-    const remote = `${pathPrefix}mkdir -p ~/${PROBE_DIR_NAME} && cd ~/${PROBE_DIR_NAME} && exec claude --permission-mode default`
-    sshArgs.push(remote)
+    // -tt forces a remote TTY (so /usage's TUI renders); bash -lc + an
+    // explicit bashrc source covers both PATH-in-profile and PATH-in-bashrc
+    // setups.
+    const inner = `[ -f ~/.bashrc ] && . ~/.bashrc 2>/dev/null; mkdir -p ~/${PROBE_DIR_NAME} && cd ~/${PROBE_DIR_NAME} && exec claude --permission-mode default`
+    sshArgs.push(`bash -lc ${shQ(inner)}`)
     return {
       bin: 'ssh',
       args: sshArgs,
