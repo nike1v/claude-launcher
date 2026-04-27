@@ -1,4 +1,8 @@
-import { spawn as ptySpawn } from 'node-pty'
+// node-pty is CJS; Node's ESM loader can't pull `spawn` as a named export
+// once the bundle is externalized. Default-import the module and pick the
+// fn off it manually.
+import nodePty from 'node-pty'
+const ptySpawn = nodePty.spawn
 import { mkdirSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
