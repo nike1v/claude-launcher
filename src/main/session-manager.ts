@@ -69,21 +69,35 @@ export class SessionManager {
     // Fallback: if init event never arrives, mark ready after timeout
     const readyTimer = setTimeout(markReady, READY_FALLBACK_MS)
 
+    let spawnError: string | null = null
+
     process.stdout?.on('data', (chunk: Buffer) => this.handleStdout(session, chunk, markReady))
     process.stderr?.on('data', (chunk: Buffer) => { stderrBuffer += chunk.toString('utf-8') })
-    // Swallow EPIPE / write errors that occur when the child exits while we're
-    // still streaming — these surface as unhandled errors otherwise.
-    process.on('error', () => {})
+    // EPIPE / write errors after the child exits surface here — keep ignoring
+    // those, but capture the spawn failure (ENOENT when `claude` is missing
+    // from PATH) so we can surface it as an error status.
+    process.on('error', (err: NodeJS.ErrnoException) => {
+      if (err.code === 'ENOENT') {
+        spawnError = `Could not start "claude" — is the Claude Code CLI installed and on PATH?`
+      } else if (err.code) {
+        spawnError = `Failed to start claude (${err.code}): ${err.message}`
+      } else {
+        spawnError = err.message || 'Failed to start claude'
+      }
+    })
     process.stdin?.on('error', () => {})
     process.on('exit', (code) => {
       clearTimeout(readyTimer)
       this.sessions.delete(sessionId)
       resolveExited()
       if (session.stopping) return
-      const isError = code !== 0 && code !== null
-      const errorMessage = isError
-        ? `Process exited with code ${code}${stderrBuffer.trim() ? `\n${stderrBuffer.trim()}` : ''}`
-        : undefined
+      // Treat spawn failures (ENOENT etc.) and non-zero exits as errors so the
+      // tab tells the user something went wrong instead of silently going gray.
+      const isError = spawnError !== null || (code !== 0 && code !== null)
+      const errorMessage = spawnError
+        ?? (isError
+          ? `Process exited with code ${code}${stderrBuffer.trim() ? `\n${stderrBuffer.trim()}` : ''}`
+          : undefined)
       this.onEvent('session:status', {
         sessionId,
         status: isError ? 'error' : 'closed',
