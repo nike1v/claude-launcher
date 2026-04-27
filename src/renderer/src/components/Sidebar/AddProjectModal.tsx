@@ -7,6 +7,9 @@ import { useEnvironmentsStore } from '../../store/environments'
 interface Props {
   onClose: () => void
   editProject?: Project
+  // Pre-bind the project to a specific environment. When set, the host
+  // fields are hidden and the project is created against this env.
+  presetEnvironmentId?: string
 }
 
 // WSL is Windows-only.
@@ -19,13 +22,16 @@ const HOST_KINDS: ReadonlyArray<'local' | 'wsl' | 'ssh'> =
 // now resolves (or creates) an Environment under the hood and stores
 // project.environmentId. Phase 2 will replace this with a proper Settings
 // modal that manages environments separately.
-export function AddProjectModal({ onClose, editProject }: Props): JSX.Element {
+export function AddProjectModal({ onClose, editProject, presetEnvironmentId }: Props): JSX.Element {
   const { addProject, updateProject } = useProjectsStore()
   const { environments, addEnvironment } = useEnvironmentsStore()
 
   const editEnv = editProject
     ? environments.find(e => e.id === editProject.environmentId)
+    : presetEnvironmentId
+    ? environments.find(e => e.id === presetEnvironmentId)
     : undefined
+  const lockedToEnv = !!presetEnvironmentId || !!editProject
 
   const [name, setName] = useState(editProject?.name ?? '')
   const [path, setPath] = useState(editProject?.path ?? '')
@@ -53,25 +59,31 @@ export function AddProjectModal({ onClose, editProject }: Props): JSX.Element {
     e.preventDefault()
     if (!name.trim() || !path.trim()) return
 
-    const host: HostType =
-      hostKind === 'local'
-        ? { kind: 'local' }
-        : hostKind === 'wsl'
-        ? { kind: 'wsl', distro: distro.trim() }
-        : {
-            kind: 'ssh',
-            user: sshUser.trim(),
-            host: sshHost.trim(),
-            port: sshPort ? Number(sshPort) : undefined,
-            keyFile: sshKeyFile.trim() || undefined
-          }
-
-    const env = findOrCreateEnvironment(environments, host, addEnvironment)
+    let envId: string
+    if (presetEnvironmentId && !editProject) {
+      envId = presetEnvironmentId
+    } else if (editProject) {
+      envId = editProject.environmentId
+    } else {
+      const host: HostType =
+        hostKind === 'local'
+          ? { kind: 'local' }
+          : hostKind === 'wsl'
+          ? { kind: 'wsl', distro: distro.trim() }
+          : {
+              kind: 'ssh',
+              user: sshUser.trim(),
+              host: sshHost.trim(),
+              port: sshPort ? Number(sshPort) : undefined,
+              keyFile: sshKeyFile.trim() || undefined
+            }
+      envId = findOrCreateEnvironment(environments, host, addEnvironment).id
+    }
 
     const project: Project = {
       id: editProject?.id ?? crypto.randomUUID(),
       name: name.trim(),
-      environmentId: env.id,
+      environmentId: envId,
       path: path.trim(),
       model: model.trim() || undefined
     }
@@ -98,87 +110,67 @@ export function AddProjectModal({ onClose, editProject }: Props): JSX.Element {
             <input className={inputCls} value={name} onChange={e => setName(e.target.value)} placeholder="My Project" />
           </div>
 
-          <div>
-            <label className={labelCls}>Host Type</label>
-            <div className="flex gap-2">
-              {HOST_KINDS.map(k => (
-                <button
-                  key={k}
-                  type="button"
-                  onClick={() => setHostKind(k)}
-                  disabled={!!editProject}
-                  className={`flex-1 py-1.5 text-xs rounded border transition-colors
-                    ${hostKind === k
-                      ? 'bg-white/10 border-white/30 text-white'
-                      : 'border-white/10 text-white/40 hover:border-white/20'
-                    }
-                    ${editProject ? 'opacity-60 cursor-not-allowed hover:border-white/10' : ''}
-                  `}
-                >
-                  {k.toUpperCase()}
-                </button>
-              ))}
+          {lockedToEnv && editEnv ? (
+            <div>
+              <label className={labelCls}>Environment</label>
+              <div className="text-xs text-white/60 px-2 py-1.5 rounded bg-white/[0.04] border border-white/10">
+                {editEnv.name}
+              </div>
             </div>
-          </div>
+          ) : (
+            <div>
+              <label className={labelCls}>Host Type</label>
+              <div className="flex gap-2">
+                {HOST_KINDS.map(k => (
+                  <button
+                    key={k}
+                    type="button"
+                    onClick={() => setHostKind(k)}
+                    className={`flex-1 py-1.5 text-xs rounded border transition-colors
+                      ${hostKind === k
+                        ? 'bg-white/10 border-white/30 text-white'
+                        : 'border-white/10 text-white/40 hover:border-white/20'}
+                    `}
+                  >
+                    {k.toUpperCase()}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
-          {hostKind === 'wsl' && (
+          {!lockedToEnv && hostKind === 'wsl' && (
             <div>
               <label className={labelCls}>WSL Distro</label>
               <input
-                className={`${inputCls} ${editProject ? 'opacity-60 cursor-not-allowed' : ''}`}
+                className={inputCls}
                 value={distro}
                 onChange={e => setDistro(e.target.value)}
                 placeholder="Ubuntu"
-                disabled={!!editProject}
               />
             </div>
           )}
 
-          {hostKind === 'ssh' && (
+          {!lockedToEnv && hostKind === 'ssh' && (
             <>
               <div className="flex gap-2">
                 <div className="flex-1">
                   <label className={labelCls}>User</label>
-                  <input
-                    className={`${inputCls} ${editProject ? 'opacity-60 cursor-not-allowed' : ''}`}
-                    value={sshUser}
-                    onChange={e => setSshUser(e.target.value)}
-                    placeholder="root"
-                    disabled={!!editProject}
-                  />
+                  <input className={inputCls} value={sshUser} onChange={e => setSshUser(e.target.value)} placeholder="root" />
                 </div>
                 <div className="flex-1">
                   <label className={labelCls}>Host</label>
-                  <input
-                    className={`${inputCls} ${editProject ? 'opacity-60 cursor-not-allowed' : ''}`}
-                    value={sshHost}
-                    onChange={e => setSshHost(e.target.value)}
-                    placeholder="1.2.3.4"
-                    disabled={!!editProject}
-                  />
+                  <input className={inputCls} value={sshHost} onChange={e => setSshHost(e.target.value)} placeholder="1.2.3.4" />
                 </div>
               </div>
               <div className="flex gap-2">
                 <div className="w-24">
                   <label className={labelCls}>Port</label>
-                  <input
-                    className={`${inputCls} ${editProject ? 'opacity-60 cursor-not-allowed' : ''}`}
-                    value={sshPort}
-                    onChange={e => setSshPort(e.target.value)}
-                    placeholder="22"
-                    type="number"
-                    disabled={!!editProject}
-                  />
+                  <input className={inputCls} value={sshPort} onChange={e => setSshPort(e.target.value)} placeholder="22" type="number" />
                 </div>
                 <div className="flex-1">
                   <label className={labelCls}>Key File (optional)</label>
-                  <input
-                    className={`${inputCls} ${editProject ? 'opacity-60 cursor-not-allowed' : ''}`}
-                    value={sshKeyFile}
-                    onChange={e => setSshKeyFile(e.target.value)}
-                    placeholder="~/.ssh/id_rsa"
-                    disabled={!!editProject}
-                  />
+                  <input className={inputCls} value={sshKeyFile} onChange={e => setSshKeyFile(e.target.value)} placeholder="~/.ssh/id_rsa" />
                 </div>
               </div>
             </>

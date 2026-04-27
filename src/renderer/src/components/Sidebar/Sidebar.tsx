@@ -1,4 +1,4 @@
-import { Plus } from 'lucide-react'
+import { Settings as SettingsIcon } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import type { Environment, Project } from '../../../../shared/types'
 import { useProjectsStore } from '../../store/projects'
@@ -8,12 +8,14 @@ import { ProjectGroup } from './ProjectGroup'
 import { HistoryList } from './HistoryList'
 import { AddProjectModal } from './AddProjectModal'
 import { UpdatePill } from './UpdatePill'
+import { SettingsModal } from '../Settings/SettingsModal'
 
 export function Sidebar(): JSX.Element {
   const { projects } = useProjectsStore()
   const { environments } = useEnvironmentsStore()
   const { sessions, activeSessionId } = useSessionsStore()
-  const [showAdd, setShowAdd] = useState(false)
+  const [showSettings, setShowSettings] = useState(false)
+  const [addToEnv, setAddToEnv] = useState<string | null>(null)
   const [editProject, setEditProject] = useState<Project | null>(null)
 
   const activeProject = activeSessionId
@@ -27,11 +29,11 @@ export function Sidebar(): JSX.Element {
       <div className="px-3 mb-3 flex items-center justify-between">
         <span className="text-xs font-semibold text-white/50 uppercase tracking-wider">Projects</span>
         <button
-          onClick={() => setShowAdd(true)}
+          onClick={() => setShowSettings(true)}
           className="text-white/40 hover:text-white/80 p-0.5"
-          title="Add project"
+          title="Settings"
         >
-          <Plus size={14} />
+          <SettingsIcon size={14} />
         </button>
       </div>
 
@@ -43,11 +45,19 @@ export function Sidebar(): JSX.Element {
             projects={groupProjects}
             activeProjectId={activeProject?.id ?? null}
             onEdit={setEditProject}
+            onAddProject={() => setAddToEnv(env.id)}
           />
         ))}
 
-        {projects.length === 0 && (
-          <p className="px-3 text-xs text-white/30">No projects yet. Click + to add one.</p>
+        {environments.length === 0 && (
+          <p className="px-3 text-xs text-white/30">
+            No environments yet. Click the gear icon to add one.
+          </p>
+        )}
+        {environments.length > 0 && projects.length === 0 && (
+          <p className="px-3 text-xs text-white/30">
+            No projects yet. Hover an environment and click + to add one.
+          </p>
         )}
 
         <HistoryList />
@@ -55,7 +65,13 @@ export function Sidebar(): JSX.Element {
 
       <UpdatePill />
 
-      {showAdd && <AddProjectModal onClose={() => setShowAdd(false)} />}
+      {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
+      {addToEnv && (
+        <AddProjectModal
+          presetEnvironmentId={addToEnv}
+          onClose={() => setAddToEnv(null)}
+        />
+      )}
       {editProject && (
         <AddProjectModal editProject={editProject} onClose={() => setEditProject(null)} />
       )}
