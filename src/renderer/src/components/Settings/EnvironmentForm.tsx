@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import type { Environment, HostType } from '../../../../shared/types'
-import { EnvironmentStatus } from './EnvironmentStatus'
+import { EnvironmentStatus, type ProbeState } from './EnvironmentStatus'
 import { ModelCombobox } from './ModelCombobox'
 
 interface Props {
@@ -33,6 +33,7 @@ export function EnvironmentForm({ initial, onCancel, onSave }: Props): JSX.Eleme
     initial?.config.kind === 'ssh' ? (initial.config.keyFile ?? '') : ''
   )
   const [defaultModel, setDefaultModel] = useState(initial?.defaultModel ?? '')
+  const [probeState, setProbeState] = useState<ProbeState>({ kind: 'idle' })
 
   // Snapshot of the host config the form currently describes — used to drive
   // the live probe. Memoised so identical edits don't re-fire the probe each
@@ -173,25 +174,42 @@ export function EnvironmentForm({ initial, onCancel, onSave }: Props): JSX.Eleme
       {probeConfig && (
         <div className="flex items-center justify-between rounded border border-white/10 bg-white/[0.02] px-3 py-2">
           <span className="text-xs text-white/50">Connection</span>
-          <EnvironmentStatus config={probeConfig} />
+          <EnvironmentStatus config={probeConfig} onResult={setProbeState} />
         </div>
       )}
 
-      <div className="flex gap-2 pt-1">
-        <button
-          type="button"
-          onClick={onCancel}
-          className="flex-1 py-2 text-xs font-medium rounded border border-white/10 text-white/60 hover:text-white hover:border-white/20 transition-colors"
-        >
-          Cancel
-        </button>
-        <button
-          type="submit"
-          className="flex-1 py-2 text-xs font-medium rounded bg-white/10 hover:bg-white/15 transition-colors"
-        >
-          {initial ? 'Save' : 'Add Environment'}
-        </button>
-      </div>
+      {(() => {
+        const blocked = !probeConfig || probeState.kind !== 'ok'
+        const reason =
+          !probeConfig ? 'Fill the connection details to test.'
+          : probeState.kind === 'checking' ? 'Checking the connection…'
+          : probeState.kind === 'error' ? 'Claude CLI must be reachable on this connection before it can be saved.'
+          : ''
+        return (
+          <div className="flex flex-col gap-2 pt-1">
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={onCancel}
+                className="flex-1 py-2 text-xs font-medium rounded border border-white/10 text-white/60 hover:text-white hover:border-white/20 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={blocked}
+                title={blocked ? reason : undefined}
+                className="flex-1 py-2 text-xs font-medium rounded bg-white/10 hover:bg-white/15 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                {initial ? 'Save' : 'Add Environment'}
+              </button>
+            </div>
+            {blocked && reason && (
+              <p className="text-[10px] text-white/40 text-right">{reason}</p>
+            )}
+          </div>
+        )
+      })()}
     </form>
   )
 }

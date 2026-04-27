@@ -3,7 +3,7 @@ import { CheckCircle2, XCircle, Loader2, RefreshCw } from 'lucide-react'
 import type { HostType } from '../../../../shared/types'
 import { probeEnvironment } from '../../ipc/bridge'
 
-type ProbeState =
+export type ProbeState =
   | { kind: 'idle' }
   | { kind: 'checking' }
   | { kind: 'ok'; version: string }
@@ -16,19 +16,27 @@ interface Props {
   rev?: number
   // Compact: chip + tooltip only, no Recheck button. Used in lists.
   compact?: boolean
+  // Lets parents react to probe state — used by EnvironmentForm to gate
+  // its submit on a successful probe.
+  onResult?: (state: ProbeState) => void
 }
 
-export function EnvironmentStatus({ config, rev = 0, compact = false }: Props): JSX.Element {
+export function EnvironmentStatus({ config, rev = 0, compact = false, onResult }: Props): JSX.Element {
   const [state, setState] = useState<ProbeState>({ kind: 'idle' })
   const [trigger, setTrigger] = useState(0)
 
   useEffect(() => {
     let cancelled = false
-    setState({ kind: 'checking' })
+    const next: ProbeState = { kind: 'checking' }
+    setState(next)
+    onResult?.(next)
     probeEnvironment(config).then(result => {
       if (cancelled) return
-      if (result.ok) setState({ kind: 'ok', version: result.version })
-      else setState({ kind: 'error', reason: result.reason })
+      const settled: ProbeState = result.ok
+        ? { kind: 'ok', version: result.version }
+        : { kind: 'error', reason: result.reason }
+      setState(settled)
+      onResult?.(settled)
     })
     return () => { cancelled = true }
   }, [JSON.stringify(config), rev, trigger])
