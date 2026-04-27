@@ -1,12 +1,18 @@
 import { describe, it, expect } from 'vitest'
 import { spawn } from 'node:child_process'
 import { SessionManager } from '../../src/main/session-manager'
-import type { Project, StreamJsonEvent } from '../../src/shared/types'
+import type { Environment, Project, StreamJsonEvent } from '../../src/shared/types'
+
+const mockEnv: Environment = {
+  id: 'env-1',
+  name: 'Test WSL',
+  config: { kind: 'wsl', distro: 'Ubuntu' }
+}
 
 const mockProject: Project = {
   id: 'proj-1',
   name: 'Test',
-  host: { kind: 'wsl', distro: 'Ubuntu' },
+  environmentId: 'env-1',
   path: '/tmp'
 }
 
@@ -26,7 +32,7 @@ describe('SessionManager integration (mock transport)', () => {
       (channel, payload) => received.push({ channel, payload })
     )
 
-    const sessionId = manager.startSession(mockProject)
+    const sessionId = manager.startSession(mockEnv, mockProject)
 
     // Send a user message to unblock the script's `read`
     await new Promise(resolve => setTimeout(resolve, 200))

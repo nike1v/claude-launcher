@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { useSessionsStore } from '../store/sessions'
 import { useMessagesStore } from '../store/messages'
 import { useProjectsStore } from '../store/projects'
+import { useEnvironmentsStore } from '../store/environments'
 import type { IpcChannels } from '../../../shared/types'
 
 export function useIpcListeners(): void {
@@ -65,10 +66,18 @@ export function useIpcListeners(): void {
       }
     )
 
+    const unsubEnvironments = window.electronAPI.on(
+      'environments:loaded',
+      ({ environments }: IpcChannels['environments:loaded']) => {
+        useEnvironmentsStore.getState().setEnvironments(environments)
+      }
+    )
+
     return () => {
       unsubEvent()
       unsubStatus()
       unsubProjects()
+      unsubEnvironments()
     }
   }, [])
 }

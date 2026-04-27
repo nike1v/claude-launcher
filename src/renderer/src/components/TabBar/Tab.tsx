@@ -1,6 +1,7 @@
 import { X } from 'lucide-react'
 import type { Session } from '../../../../shared/types'
 import { useProjectsStore } from '../../store/projects'
+import { useEnvironmentsStore } from '../../store/environments'
 
 interface Props {
   session: Session
@@ -19,12 +20,14 @@ const STATUS_DOT: Record<Session['status'], string> = {
 
 export function Tab({ session, isActive, onActivate, onClose }: Props): JSX.Element {
   const { projects } = useProjectsStore()
+  const { environments } = useEnvironmentsStore()
   const project = projects.find(p => p.id === session.projectId)
+  const env = project ? environments.find(e => e.id === project.environmentId) : undefined
 
-  const hostLabel = project
-    ? project.host.kind === 'wsl'
+  const hostLabel = env
+    ? env.config.kind === 'wsl'
       ? 'WSL'
-      : project.host.kind === 'ssh'
+      : env.config.kind === 'ssh'
       ? 'SSH'
       : 'Local'
     : '?'

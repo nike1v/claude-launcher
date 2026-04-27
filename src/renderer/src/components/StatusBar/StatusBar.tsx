@@ -1,5 +1,6 @@
 import { useSessionsStore } from '../../store/sessions'
 import { useProjectsStore } from '../../store/projects'
+import { useEnvironmentsStore } from '../../store/environments'
 import { useMessagesStore } from '../../store/messages'
 import { ContextMeter } from './ContextMeter'
 import type { AssistantEvent, InitEvent, ResultEvent } from '../../../../shared/types'
@@ -15,10 +16,12 @@ const STATUS_COLOR: Record<string, string> = {
 export function StatusBar(): JSX.Element {
   const { sessions, activeSessionId } = useSessionsStore()
   const { projects } = useProjectsStore()
+  const { environments } = useEnvironmentsStore()
   const { messagesBySession } = useMessagesStore()
 
   const session = activeSessionId ? sessions[activeSessionId] : null
   const project = session ? projects.find(p => p.id === session.projectId) : null
+  const env = project ? environments.find(e => e.id === project.environmentId) : null
 
   const messages = activeSessionId ? (messagesBySession[activeSessionId] ?? []) : []
   const initEvent = messages
@@ -36,10 +39,12 @@ export function StatusBar(): JSX.Element {
     session?.lastContextWindow
   )
 
-  const hostLabel = project
-    ? project.host.kind === 'wsl'
-      ? `WSL · ${project.host.distro}`
-      : `SSH · ${project.host.host}`
+  const hostLabel = env
+    ? env.config.kind === 'local'
+      ? 'Local'
+      : env.config.kind === 'wsl'
+      ? `WSL · ${env.config.distro}`
+      : `SSH · ${env.config.host}`
     : ''
 
   return (

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { EventEmitter } from 'node:events'
 import { SessionManager } from '../../src/main/session-manager'
-import type { Project } from '../../src/shared/types'
+import type { Environment, Project } from '../../src/shared/types'
 
 const makeProcess = () => {
   const emitter = new EventEmitter()
@@ -20,10 +20,16 @@ const makeProcess = () => {
   })
 }
 
+const makeEnv = (): Environment => ({
+  id: 'env-1',
+  name: 'Test WSL',
+  config: { kind: 'wsl', distro: 'Ubuntu' }
+})
+
 const makeProject = (): Project => ({
   id: 'proj-1',
   name: 'Test',
-  host: { kind: 'wsl', distro: 'Ubuntu' },
+  environmentId: 'env-1',
   path: '/tmp'
 })
 
@@ -43,14 +49,14 @@ describe('SessionManager', () => {
   })
 
   it('starts a session and returns session id', () => {
-    const sessionId = manager.startSession(makeProject())
+    const sessionId = manager.startSession(makeEnv(), makeProject())
     expect(typeof sessionId).toBe('string')
     expect(sessionId.length).toBeGreaterThan(0)
     expect(mockTransport.spawn).toHaveBeenCalledOnce()
   })
 
   it('emits session:status starting on start', () => {
-    manager.startSession(makeProject())
+    manager.startSession(makeEnv(), makeProject())
     expect(onEvent).toHaveBeenCalledWith(
       'session:status',
       expect.objectContaining({ status: 'starting' })
@@ -58,7 +64,7 @@ describe('SessionManager', () => {
   })
 
   it('sends message as JSON line to stdin', () => {
-    const sessionId = manager.startSession(makeProject())
+    const sessionId = manager.startSession(makeEnv(), makeProject())
     manager.sendMessage(sessionId, 'hello')
     const proc = mockTransport.spawn.mock.results[0].value
     expect(proc.stdin.write).toHaveBeenCalledWith(
@@ -67,7 +73,7 @@ describe('SessionManager', () => {
   })
 
   it('stops session and kills process', () => {
-    const sessionId = manager.startSession(makeProject())
+    const sessionId = manager.startSession(makeEnv(), makeProject())
     manager.stopSession(sessionId)
     const proc = mockTransport.spawn.mock.results[0].value
     expect(proc.kill).toHaveBeenCalled()
@@ -78,7 +84,7 @@ describe('SessionManager', () => {
   })
 
   it('emits parsed stream-json events from stdout', () => {
-    const sessionId = manager.startSession(makeProject())
+    const sessionId = manager.startSession(makeEnv(), makeProject())
     const proc = mockTransport.spawn.mock.results[0].value
 
     const line = JSON.stringify({

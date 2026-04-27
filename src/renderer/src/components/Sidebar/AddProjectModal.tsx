@@ -1,43 +1,52 @@
 import { useState } from 'react'
 import { X } from 'lucide-react'
-import type { Project, HostType } from '../../../../shared/types'
+import type { Environment, HostType, Project } from '../../../../shared/types'
 import { useProjectsStore } from '../../store/projects'
+import { useEnvironmentsStore } from '../../store/environments'
 
 interface Props {
   onClose: () => void
   editProject?: Project
 }
 
-// WSL is Windows-only, so omit it on macOS / Linux. Existing WSL projects
-// remain visible (they just won't spawn) — we only filter the picker here.
+// WSL is Windows-only.
 const HOST_KINDS: ReadonlyArray<'local' | 'wsl' | 'ssh'> =
   window.electronAPI.platform === 'win32'
     ? ['local', 'wsl', 'ssh']
     : ['local', 'ssh']
 
+// Phase 1 modal: still handles the legacy inline "host + project" form, but
+// now resolves (or creates) an Environment under the hood and stores
+// project.environmentId. Phase 2 will replace this with a proper Settings
+// modal that manages environments separately.
 export function AddProjectModal({ onClose, editProject }: Props): JSX.Element {
   const { addProject, updateProject } = useProjectsStore()
+  const { environments, addEnvironment } = useEnvironmentsStore()
+
+  const editEnv = editProject
+    ? environments.find(e => e.id === editProject.environmentId)
+    : undefined
 
   const [name, setName] = useState(editProject?.name ?? '')
   const [path, setPath] = useState(editProject?.path ?? '')
   const [model, setModel] = useState(editProject?.model ?? '')
   const [hostKind, setHostKind] = useState<'local' | 'wsl' | 'ssh'>(
-    editProject?.host.kind ?? 'local'
+    editEnv?.config.kind ?? 'local'
   )
   const [distro, setDistro] = useState(
-    editProject?.host.kind === 'wsl' ? editProject.host.distro : 'Ubuntu'
+    editEnv?.config.kind === 'wsl' ? editEnv.config.distro : 'Ubuntu'
   )
   const [sshUser, setSshUser] = useState(
-    editProject?.host.kind === 'ssh' ? editProject.host.user : ''
+    editEnv?.config.kind === 'ssh' ? editEnv.config.user : ''
   )
   const [sshHost, setSshHost] = useState(
-    editProject?.host.kind === 'ssh' ? editProject.host.host : ''
+    editEnv?.config.kind === 'ssh' ? editEnv.config.host : ''
   )
   const [sshPort, setSshPort] = useState(
-    editProject?.host.kind === 'ssh' ? String(editProject.host.port ?? '') : ''
+    editEnv?.config.kind === 'ssh' ? String(editEnv.config.port ?? '') : ''
   )
   const [sshKeyFile, setSshKeyFile] = useState(
-    editProject?.host.kind === 'ssh' ? (editProject.host.keyFile ?? '') : ''
+    editEnv?.config.kind === 'ssh' ? (editEnv.config.keyFile ?? '') : ''
   )
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -57,10 +66,12 @@ export function AddProjectModal({ onClose, editProject }: Props): JSX.Element {
             keyFile: sshKeyFile.trim() || undefined
           }
 
+    const env = findOrCreateEnvironment(environments, host, addEnvironment)
+
     const project: Project = {
       id: editProject?.id ?? crypto.randomUUID(),
       name: name.trim(),
-      host,
+      environmentId: env.id,
       path: path.trim(),
       model: model.trim() || undefined
     }
@@ -194,4 +205,39 @@ export function AddProjectModal({ onClose, editProject }: Props): JSX.Element {
       </div>
     </div>
   )
+}
+
+// Reuse an existing environment if one already matches the entered host
+// config (so the same WSL distro / SSH endpoint doesn't sprout duplicates),
+// otherwise create a fresh one and persist it.
+function findOrCreateEnvironment(
+  envs: Environment[],
+  host: HostType,
+  addEnvironment: (env: Environment) => void
+): Environment {
+  const match = envs.find(e => sameHost(e.config, host))
+  if (match) return match
+  const created: Environment = {
+    id: crypto.randomUUID(),
+    name: defaultName(host),
+    config: host
+  }
+  addEnvironment(created)
+  return created
+}
+
+function sameHost(a: HostType, b: HostType): boolean {
+  if (a.kind !== b.kind) return false
+  if (a.kind === 'local' && b.kind === 'local') return true
+  if (a.kind === 'wsl' && b.kind === 'wsl') return a.distro === b.distro
+  if (a.kind === 'ssh' && b.kind === 'ssh') {
+    return a.user === b.user && a.host === b.host && (a.port ?? 22) === (b.port ?? 22)
+  }
+  return false
+}
+
+function defaultName(host: HostType): string {
+  if (host.kind === 'local') return 'Local'
+  if (host.kind === 'wsl') return `WSL · ${host.distro}`
+  return `SSH · ${host.user}@${host.host}`
 }

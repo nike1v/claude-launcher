@@ -14,6 +14,7 @@ export function App(): JSX.Element {
   const { tabOrder, activeSessionId } = useSessionsStore()
 
   useEffect(() => {
+    window.electronAPI.invoke('environments:load', {})
     window.electronAPI.invoke('projects:load', {})
   }, [])
 

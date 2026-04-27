@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import type { ChildProcess } from 'node:child_process'
 import type { ITransport, SpawnOptions } from './transports/types'
-import type { Project, SendAttachment, StreamJsonEvent, UserContentBlock } from '../shared/types'
+import type { Environment, HostType, Project, SendAttachment, StreamJsonEvent, UserContentBlock } from '../shared/types'
 import { parseStreamJsonLine } from './stream-json-parser'
 import { LocalTransport } from './transports/local'
 import { WslTransport } from './transports/wsl'
@@ -29,15 +29,15 @@ export class SessionManager {
   private readonly sessions = new Map<string, ActiveSession>()
 
   public constructor(
-    private readonly resolveTransport: (project: Project) => ITransport = resolveDefaultTransport,
+    private readonly resolveTransport: (host: HostType) => ITransport = resolveDefaultTransport,
     private readonly onEvent: EventCallback = () => {}
   ) {}
 
-  public startSession(project: Project, resumeSessionId?: string): string {
+  public startSession(env: Environment, project: Project, resumeSessionId?: string): string {
     const sessionId = randomUUID()
-    const transport = this.resolveTransport(project)
+    const transport = this.resolveTransport(env.config)
     const spawnOptions: SpawnOptions = {
-      host: project.host,
+      host: env.config,
       path: project.path,
       model: project.model,
       resumeSessionId
@@ -50,8 +50,13 @@ export class SessionManager {
     let resolveExited!: () => void
     const exited = new Promise<void>((resolve) => { resolveExited = resolve })
     const session: ActiveSession = {
-      sessionId, projectId: project.id, process, lineBuffer: '',
-      markedReady: false, stopping: false, exited
+      sessionId,
+      projectId: project.id,
+      process,
+      lineBuffer: '',
+      markedReady: false,
+      stopping: false,
+      exited
     }
     this.sessions.set(sessionId, session)
 
@@ -208,9 +213,9 @@ function extensionFromName(name: string): string {
   return name.slice(dot + 1).toLowerCase()
 }
 
-function resolveDefaultTransport(project: Project): ITransport {
-  if (project.host.kind === 'local') return new LocalTransport()
-  if (project.host.kind === 'wsl') return new WslTransport()
-  if (project.host.kind === 'ssh') return new SshTransport()
-  throw new Error(`Unknown host kind: ${(project.host as any).kind}`)
+function resolveDefaultTransport(host: HostType): ITransport {
+  if (host.kind === 'local') return new LocalTransport()
+  if (host.kind === 'wsl') return new WslTransport()
+  if (host.kind === 'ssh') return new SshTransport()
+  throw new Error(`Unknown host kind: ${(host as { kind: string }).kind}`)
 }

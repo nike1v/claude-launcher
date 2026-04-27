@@ -1,14 +1,24 @@
-// ── Project / Host ──────────────────────────────────────────────────────────
+// ── Environment / Project ───────────────────────────────────────────────────
 
+// HostType is the transport-level shape used by spawn commands. It used to
+// live on every Project; we now factor it out into Environments so multiple
+// projects can share one connection (one local CLI, one WSL distro, one SSH
+// host). HostType remains the runtime contract for transports.
 export type HostType =
   | { kind: 'local' }
   | { kind: 'wsl'; distro: string }
   | { kind: 'ssh'; user: string; host: string; port?: number; keyFile?: string }
 
+export interface Environment {
+  id: string
+  name: string
+  config: HostType
+}
+
 export interface Project {
   id: string
   name: string
-  host: HostType
+  environmentId: string
   path: string
   model?: string
 }
@@ -155,6 +165,8 @@ export interface IpcChannels {
   'projects:history:load': { projectId: string }
   'session:history:load': { projectId: string; sessionId: string }
   'projects:load': Record<string, never>
+  'environments:save': Environment[]
+  'environments:load': Record<string, never>
   'tabs:load': Record<string, never>
   'tabs:save': PersistedTabs
   'updater:check': Record<string, never>
@@ -165,6 +177,7 @@ export interface IpcChannels {
   'session:status': { sessionId: string; status: Session['status']; errorMessage?: string }
   'projects:history': { projectId: string; entries: HistoryEntry[] }
   'projects:loaded': { projects: Project[] }
+  'environments:loaded': { environments: Environment[] }
   'updater:status': UpdaterStatus
 }
 
@@ -172,6 +185,7 @@ export type IpcInvokeChannel = Extract<
   keyof IpcChannels,
   | 'session:start' | 'session:send' | 'session:stop' | 'session:interrupt' | 'session:permission'
   | 'projects:save' | 'projects:history:load' | 'session:history:load' | 'projects:load'
+  | 'environments:save' | 'environments:load'
   | 'tabs:load' | 'tabs:save'
   | 'updater:check' | 'updater:install'
   | 'dialog:saveFile'
@@ -179,5 +193,5 @@ export type IpcInvokeChannel = Extract<
 
 export type IpcEventChannel = Extract<
   keyof IpcChannels,
-  'session:event' | 'session:status' | 'projects:history' | 'projects:loaded' | 'updater:status'
+  'session:event' | 'session:status' | 'projects:history' | 'projects:loaded' | 'environments:loaded' | 'updater:status'
 >
