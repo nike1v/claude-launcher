@@ -34,13 +34,13 @@ export function StatusBar(): JSX.Element {
     : ''
 
   return (
-    <div className="h-7 border-t border-white/10 flex items-center px-3 gap-3 text-xs text-white/30 shrink-0">
+    <div className="h-7 border-t border-white/10 flex items-center px-3 gap-3 text-xs text-white/30 shrink-0 overflow-hidden">
       {session && (
         <>
-          <span className={`w-1.5 h-1.5 rounded-full ${STATUS_COLOR[session.status] ?? 'bg-white/20'}`} />
-          <span>{hostLabel}</span>
+          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${STATUS_COLOR[session.status] ?? 'bg-white/20'}`} />
+          <span className="shrink-0">{hostLabel}</span>
           {(initEvent?.cwd ?? project?.path) && (
-            <span className="text-white/20 truncate">{initEvent?.cwd ?? project?.path}</span>
+            <span className="text-white/20 truncate min-w-0">{initEvent?.cwd ?? project?.path}</span>
           )}
           <div className="ml-auto flex items-center gap-3 shrink-0">
             {ctx && <ContextMeter used={ctx.used} total={ctx.total} />}
