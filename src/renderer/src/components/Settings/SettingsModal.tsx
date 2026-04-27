@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { X, Plus, Pencil, Trash2, GripVertical } from 'lucide-react'
+import { X, Plus, Pencil, Trash2, GripVertical, BarChart3 } from 'lucide-react'
 import type { Environment, HostType } from '../../../../shared/types'
 import { useEnvironmentsStore } from '../../store/environments'
 import { useProjectsStore } from '../../store/projects'
@@ -7,6 +7,7 @@ import { useDragReorder } from '../../hooks/useDragReorder'
 import { Modal } from '../Modal'
 import { EnvironmentForm } from './EnvironmentForm'
 import { EnvironmentStatus } from './EnvironmentStatus'
+import { UsageModal } from './UsageModal'
 
 interface Props {
   onClose: () => void
@@ -16,6 +17,7 @@ export function SettingsModal({ onClose }: Props): JSX.Element {
   const { environments, addEnvironment, updateEnvironment, removeEnvironment, reorderEnvironments } = useEnvironmentsStore()
   const { projects } = useProjectsStore()
   const [editing, setEditing] = useState<Environment | 'new' | null>(null)
+  const [showUsageFor, setShowUsageFor] = useState<Environment | null>(null)
   const dnd = useDragReorder({ onReorder: reorderEnvironments })
 
   const projectsForEnv = (envId: string): number =>
@@ -80,6 +82,7 @@ export function SettingsModal({ onClose }: Props): JSX.Element {
                         projectCount={projectsForEnv(env.id)}
                         onEdit={() => setEditing(env)}
                         onDelete={() => handleDelete(env)}
+                        onShowUsage={() => setShowUsageFor(env)}
                       />
                       {below && <DropLine edge="bottom" />}
                     </div>
@@ -97,6 +100,9 @@ export function SettingsModal({ onClose }: Props): JSX.Element {
           )}
         </div>
       </>
+      {showUsageFor && (
+        <UsageModal env={showUsageFor} onClose={() => setShowUsageFor(null)} />
+      )}
     </Modal>
   )
 }
@@ -105,12 +111,14 @@ function EnvironmentRow({
   env,
   projectCount,
   onEdit,
-  onDelete
+  onDelete,
+  onShowUsage
 }: {
   env: Environment
   projectCount: number
   onEdit: () => void
   onDelete: () => void
+  onShowUsage: () => void
 }): JSX.Element {
   return (
     <div className="group flex items-center gap-3 px-3 py-2 rounded border border-white/10 hover:border-white/20 transition-colors">
@@ -123,6 +131,14 @@ function EnvironmentRow({
       <span className="text-xs text-white/30 shrink-0">
         {projectCount} project{projectCount === 1 ? '' : 's'}
       </span>
+      <button
+        type="button"
+        onClick={onShowUsage}
+        title="Show usage"
+        className="p-1 rounded text-white/40 hover:text-white hover:bg-white/5 opacity-0 group-hover:opacity-100 transition-opacity"
+      >
+        <BarChart3 size={12} />
+      </button>
       <button
         type="button"
         onClick={onEdit}

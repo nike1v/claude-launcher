@@ -64,6 +64,14 @@ export async function probeEnvironment(
   >
 }
 
+export async function probeEnvironmentUsage(
+  config: import('../../../shared/types').HostType
+): Promise<import('../../../shared/types').UsageProbeResult> {
+  return window.electronAPI.invoke('environments:usage', { config }) as Promise<
+    import('../../../shared/types').UsageProbeResult
+  >
+}
+
 export async function listDir(
   config: import('../../../shared/types').HostType,
   path: string
