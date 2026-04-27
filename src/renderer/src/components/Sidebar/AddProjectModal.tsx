@@ -75,7 +75,7 @@ export function AddProjectModal({ onClose, editProject, presetEnvironmentId }: P
           ? { kind: 'wsl', distro: distro.trim() }
           : {
               kind: 'ssh',
-              user: sshUser.trim(),
+              user: sshUser.trim() || undefined,
               host: sshHost.trim(),
               port: sshPort ? Number(sshPort) : undefined,
               keyFile: sshKeyFile.trim() || undefined
@@ -158,12 +158,22 @@ export function AddProjectModal({ onClose, editProject, presetEnvironmentId }: P
             <>
               <div className="flex gap-2">
                 <div className="flex-1">
-                  <label className={labelCls}>User</label>
-                  <input className={inputCls} value={sshUser} onChange={e => setSshUser(e.target.value)} placeholder="root" />
+                  <label className={labelCls}>Host or alias</label>
+                  <input
+                    className={inputCls}
+                    value={sshHost}
+                    onChange={e => setSshHost(e.target.value)}
+                    placeholder="hetzner  ·  or  1.2.3.4"
+                  />
                 </div>
                 <div className="flex-1">
-                  <label className={labelCls}>Host</label>
-                  <input className={inputCls} value={sshHost} onChange={e => setSshHost(e.target.value)} placeholder="1.2.3.4" />
+                  <label className={labelCls}>User (optional)</label>
+                  <input
+                    className={inputCls}
+                    value={sshUser}
+                    onChange={e => setSshUser(e.target.value)}
+                    placeholder="leave empty for ~/.ssh/config"
+                  />
                 </div>
               </div>
               <div className="flex gap-2">

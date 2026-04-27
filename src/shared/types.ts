@@ -7,7 +7,10 @@
 export type HostType =
   | { kind: 'local' }
   | { kind: 'wsl'; distro: string }
-  | { kind: 'ssh'; user: string; host: string; port?: number; keyFile?: string }
+  // `host` may be a real hostname or a Host alias from ~/.ssh/config. When
+  // it's an alias, leave user/port/keyFile empty and OpenSSH will pick them
+  // up from the config file; we just invoke `ssh <alias>`.
+  | { kind: 'ssh'; user?: string; host: string; port?: number; keyFile?: string }
 
 export interface Environment {
   id: string

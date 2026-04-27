@@ -131,5 +131,7 @@ function EnvironmentRow({
 function describeHost(host: HostType): string {
   if (host.kind === 'local') return 'Local'
   if (host.kind === 'wsl') return `WSL · ${host.distro}`
-  return `SSH · ${host.user}@${host.host}${host.port ? `:${host.port}` : ''}`
+  // Omit user@ when blank — the label collapses to just the host alias.
+  const target = host.user ? `${host.user}@${host.host}` : host.host
+  return `SSH · ${target}${host.port ? `:${host.port}` : ''}`
 }

@@ -40,10 +40,10 @@ export function EnvironmentForm({ initial, onCancel, onSave }: Props): JSX.Eleme
   const probeConfig = useMemo<HostType | null>(() => {
     if (kind === 'local') return { kind: 'local' }
     if (kind === 'wsl') return distro.trim() ? { kind: 'wsl', distro: distro.trim() } : null
-    if (!sshUser.trim() || !sshHost.trim()) return null
+    if (!sshHost.trim()) return null
     return {
       kind: 'ssh',
-      user: sshUser.trim(),
+      user: sshUser.trim() || undefined,
       host: sshHost.trim(),
       port: sshPort ? Number(sshPort) : undefined,
       keyFile: sshKeyFile.trim() || undefined
@@ -59,14 +59,16 @@ export function EnvironmentForm({ initial, onCancel, onSave }: Props): JSX.Eleme
         ? { kind: 'wsl', distro: distro.trim() }
         : {
             kind: 'ssh',
-            user: sshUser.trim(),
+            user: sshUser.trim() || undefined,
             host: sshHost.trim(),
             port: sshPort ? Number(sshPort) : undefined,
             keyFile: sshKeyFile.trim() || undefined
           }
 
     if (kind === 'wsl' && !distro.trim()) return
-    if (kind === 'ssh' && (!sshUser.trim() || !sshHost.trim())) return
+    // Host is required; user is optional — empty user means "use whatever
+    // ~/.ssh/config says for this host alias".
+    if (kind === 'ssh' && !sshHost.trim()) return
     if (!name.trim()) return
 
     onSave({
@@ -126,12 +128,22 @@ export function EnvironmentForm({ initial, onCancel, onSave }: Props): JSX.Eleme
         <>
           <div className="flex gap-2">
             <div className="flex-1">
-              <label className={labelCls}>User</label>
-              <input className={inputCls} value={sshUser} onChange={e => setSshUser(e.target.value)} placeholder="root" />
+              <label className={labelCls}>Host or alias</label>
+              <input
+                className={inputCls}
+                value={sshHost}
+                onChange={e => setSshHost(e.target.value)}
+                placeholder="hetzner  ·  or  1.2.3.4"
+              />
             </div>
             <div className="flex-1">
-              <label className={labelCls}>Host</label>
-              <input className={inputCls} value={sshHost} onChange={e => setSshHost(e.target.value)} placeholder="1.2.3.4" />
+              <label className={labelCls}>User (optional)</label>
+              <input
+                className={inputCls}
+                value={sshUser}
+                onChange={e => setSshUser(e.target.value)}
+                placeholder="leave empty to use ~/.ssh/config"
+              />
             </div>
           </div>
           <div className="flex gap-2">
@@ -144,6 +156,9 @@ export function EnvironmentForm({ initial, onCancel, onSave }: Props): JSX.Eleme
               <input className={inputCls} value={sshKeyFile} onChange={e => setSshKeyFile(e.target.value)} placeholder="~/.ssh/id_rsa" />
             </div>
           </div>
+          <p className="text-[10px] text-white/40 -mt-1">
+            Tip: leave User / Port / Key File empty if the host is defined in <span className="font-mono">~/.ssh/config</span>.
+          </p>
         </>
       )}
 

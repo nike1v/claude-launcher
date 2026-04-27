@@ -81,7 +81,8 @@ function remoteShellCommand(host: HostType, script: string): { bin: string; args
     const args = ['-T', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=4']
     if (host.port) args.push('-p', String(host.port))
     if (host.keyFile) args.push('-i', host.keyFile)
-    args.push(`${host.user}@${host.host}`, script)
+    // Bare host = ~/.ssh/config alias; user@host overrides config user.
+    args.push(host.user ? `${host.user}@${host.host}` : host.host, script)
     return { bin: 'ssh', args }
   }
   throw new Error(`Unsupported host kind: ${host.kind}`)
