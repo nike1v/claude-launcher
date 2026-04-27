@@ -6,6 +6,7 @@ import { useEnvironmentsStore } from '../../store/environments'
 import { Modal } from '../Modal'
 import { ModelCombobox } from '../Settings/ModelCombobox'
 import { PathCombobox } from '../Settings/PathCombobox'
+import { findDuplicateEnvironment } from '../../lib/environment-dedup'
 
 interface Props {
   onClose: () => void
@@ -239,15 +240,16 @@ export function AddProjectModal({ onClose, editProject, presetEnvironmentId }: P
   )
 }
 
-// Reuse an existing environment if one already matches the entered host
-// config (so the same WSL distro / SSH endpoint doesn't sprout duplicates),
-// otherwise create a fresh one and persist it.
+// Reuse an existing environment if one already targets the same connection
+// (so the legacy "Add Project" flow doesn't sprout duplicates when the user
+// re-types config that already has a matching env). Falls back to creating
+// a fresh one. Dedupe rules are shared with EnvironmentForm.
 function findOrCreateEnvironment(
   envs: Environment[],
   host: HostType,
   addEnvironment: (env: Environment) => void
 ): Environment {
-  const match = envs.find(e => sameHost(e.config, host))
+  const match = findDuplicateEnvironment(envs, host)
   if (match) return match
   const created: Environment = {
     id: crypto.randomUUID(),
@@ -258,18 +260,8 @@ function findOrCreateEnvironment(
   return created
 }
 
-function sameHost(a: HostType, b: HostType): boolean {
-  if (a.kind !== b.kind) return false
-  if (a.kind === 'local' && b.kind === 'local') return true
-  if (a.kind === 'wsl' && b.kind === 'wsl') return a.distro === b.distro
-  if (a.kind === 'ssh' && b.kind === 'ssh') {
-    return a.user === b.user && a.host === b.host && (a.port ?? 22) === (b.port ?? 22)
-  }
-  return false
-}
-
 function defaultName(host: HostType): string {
   if (host.kind === 'local') return 'Local'
   if (host.kind === 'wsl') return `WSL · ${host.distro}`
-  return `SSH · ${host.user}@${host.host}`
+  return host.user ? `SSH · ${host.user}@${host.host}` : `SSH · ${host.host}`
 }

@@ -1,5 +1,7 @@
 import { useMemo, useState } from 'react'
 import type { Environment, HostType } from '../../../../shared/types'
+import { useEnvironmentsStore } from '../../store/environments'
+import { findDuplicateEnvironment } from '../../lib/environment-dedup'
 import { EnvironmentStatus, type ProbeState } from './EnvironmentStatus'
 import { ModelCombobox } from './ModelCombobox'
 
@@ -34,6 +36,7 @@ export function EnvironmentForm({ initial, onCancel, onSave }: Props): JSX.Eleme
   )
   const [defaultModel, setDefaultModel] = useState(initial?.defaultModel ?? '')
   const [probeState, setProbeState] = useState<ProbeState>({ kind: 'idle' })
+  const { environments } = useEnvironmentsStore()
 
   // Snapshot of the host config the form currently describes — used to drive
   // the live probe. Memoised so identical edits don't re-fire the probe each
@@ -51,8 +54,16 @@ export function EnvironmentForm({ initial, onCancel, onSave }: Props): JSX.Eleme
     }
   }, [kind, distro, sshUser, sshHost, sshPort, sshKeyFile])
 
+  // Block saves that would duplicate an existing environment. Local can only
+  // exist once; WSL is per-distro; SSH dedupes on user@host (port ignored).
+  const duplicate = useMemo(() => {
+    if (!probeConfig) return null
+    return findDuplicateEnvironment(environments, probeConfig, initial?.id)
+  }, [environments, probeConfig, initial?.id])
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+    if (duplicate) return
     const config: HostType =
       kind === 'local'
         ? { kind: 'local' }
@@ -179,9 +190,10 @@ export function EnvironmentForm({ initial, onCancel, onSave }: Props): JSX.Eleme
       )}
 
       {(() => {
-        const blocked = !probeConfig || probeState.kind !== 'ok'
-        const reason =
-          !probeConfig ? 'Fill the connection details to test.'
+        const blocked = !probeConfig || probeState.kind !== 'ok' || !!duplicate
+        const reason = duplicate
+          ? `Already exists as "${duplicate.name}".`
+          : !probeConfig ? 'Fill the connection details to test.'
           : probeState.kind === 'checking' ? 'Checking the connection…'
           : probeState.kind === 'error' ? 'Claude CLI must be reachable on this connection before it can be saved.'
           : ''
