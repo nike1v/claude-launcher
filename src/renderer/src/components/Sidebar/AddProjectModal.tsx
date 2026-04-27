@@ -3,6 +3,7 @@ import { X } from 'lucide-react'
 import type { Environment, HostType, Project } from '../../../../shared/types'
 import { useProjectsStore } from '../../store/projects'
 import { useEnvironmentsStore } from '../../store/environments'
+import { Modal } from '../Modal'
 
 interface Props {
   onClose: () => void
@@ -97,8 +98,8 @@ export function AddProjectModal({ onClose, editProject, presetEnvironmentId }: P
   const labelCls = 'block text-xs text-white/50 mb-1'
 
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-      <div className="bg-[#1a1a1a] border border-white/10 rounded-lg p-5 w-96 max-h-[90vh] overflow-y-auto">
+    <Modal onClose={onClose} panelClassName="bg-[#1a1a1a] border border-white/10 rounded-lg p-5 w-96 max-h-[90vh] overflow-y-auto">
+      <>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-sm font-semibold">{editProject ? 'Edit Project' : 'Add Project'}</h2>
           <button onClick={onClose} className="text-white/40 hover:text-white"><X size={16} /></button>
@@ -194,8 +195,8 @@ export function AddProjectModal({ onClose, editProject, presetEnvironmentId }: P
             {editProject ? 'Save Changes' : 'Add Project'}
           </button>
         </form>
-      </div>
-    </div>
+      </>
+    </Modal>
   )
 }
 

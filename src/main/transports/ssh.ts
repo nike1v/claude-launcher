@@ -1,10 +1,12 @@
-import {spawn} from 'node:child_process'
-import type {ChildProcess} from 'node:child_process'
-import type {ITransport, SpawnOptions} from './types'
+import { spawn } from 'node:child_process'
+import type { ChildProcess } from 'node:child_process'
+import type { HostType } from '../../shared/types'
+import type { ITransport, ProbeResult, SpawnOptions } from './types'
+import { runProbe } from './probe'
 
 export class SshTransport implements ITransport {
   public spawn(options: SpawnOptions): ChildProcess {
-    const {host, path, model, resumeSessionId} = options
+    const { host, path, model, resumeSessionId } = options
     if (host.kind !== 'ssh') throw new Error('SshTransport requires ssh host')
 
     const claudeArgs = [
@@ -19,9 +21,7 @@ export class SshTransport implements ITransport {
     const quotedArgs = claudeArgs.map(arg => JSON.stringify(arg)).join(' ')
     const remoteCommand = `cd ${JSON.stringify(path)} && claude ${quotedArgs}`
 
-    const sshArgs = ['-T']
-    if (host.port) sshArgs.push('-p', String(host.port))
-    if (host.keyFile) sshArgs.push('-i', host.keyFile)
+    const sshArgs = ['-T', ...sshConnectArgs(host)]
     sshArgs.push(`${host.user}@${host.host}`, remoteCommand)
 
     return spawn('ssh', sshArgs, {
@@ -33,4 +33,21 @@ export class SshTransport implements ITransport {
       )
     })
   }
+
+  public probe(host: HostType): Promise<ProbeResult> {
+    if (host.kind !== 'ssh') {
+      return Promise.resolve({ ok: false, reason: 'SshTransport requires ssh host' })
+    }
+    const args = ['-T', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=8']
+    args.push(...sshConnectArgs(host))
+    args.push(`${host.user}@${host.host}`, 'claude --version')
+    return runProbe({ bin: 'ssh', args, timeoutMs: 20_000 })
+  }
+}
+
+function sshConnectArgs(host: Extract<HostType, { kind: 'ssh' }>): string[] {
+  const args: string[] = []
+  if (host.port) args.push('-p', String(host.port))
+  if (host.keyFile) args.push('-i', host.keyFile)
+  return args
 }

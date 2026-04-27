@@ -167,6 +167,10 @@ export interface IpcChannels {
   'projects:load': Record<string, never>
   'environments:save': Environment[]
   'environments:load': Record<string, never>
+  // Run `claude --version` over the env's transport. Either { ok: true,
+  // version } or { ok: false, reason }. Used to populate health badges in
+  // the Settings modal and to validate before "Add Environment" saves.
+  'environments:probe': { config: HostType }
   'tabs:load': Record<string, never>
   'tabs:save': PersistedTabs
   'updater:check': Record<string, never>
@@ -185,7 +189,7 @@ export type IpcInvokeChannel = Extract<
   keyof IpcChannels,
   | 'session:start' | 'session:send' | 'session:stop' | 'session:interrupt' | 'session:permission'
   | 'projects:save' | 'projects:history:load' | 'session:history:load' | 'projects:load'
-  | 'environments:save' | 'environments:load'
+  | 'environments:save' | 'environments:load' | 'environments:probe'
   | 'tabs:load' | 'tabs:save'
   | 'updater:check' | 'updater:install'
   | 'dialog:saveFile'

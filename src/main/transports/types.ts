@@ -1,5 +1,5 @@
-import type {ChildProcess} from 'node:child_process'
-import type {HostType} from '../../shared/types'
+import type { ChildProcess } from 'node:child_process'
+import type { HostType } from '../../shared/types'
 
 export interface SpawnOptions {
   host: HostType
@@ -12,7 +12,8 @@ export type ProbeResult = { ok: true; version: string } | { ok: false; reason: s
 
 export interface ITransport {
   spawn(options: SpawnOptions): ChildProcess
-  // Optional: cheap pre-flight that runs `claude --version` so we fail fast
-  // when the binary is missing or isn't the Claude Code CLI.
-  probe?(): ProbeResult
+  // Async pre-flight: run `claude --version` over this transport. The
+  // session-manager runs it before starting a session, and the renderer
+  // calls it from the Settings modal to show env health.
+  probe(host: HostType): Promise<ProbeResult>
 }

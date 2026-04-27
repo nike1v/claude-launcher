@@ -34,13 +34,19 @@ const makeProject = (): Project => ({
 })
 
 describe('SessionManager', () => {
-  let mockTransport: { spawn: ReturnType<typeof vi.fn> }
+  let mockTransport: {
+    spawn: ReturnType<typeof vi.fn>
+    probe: ReturnType<typeof vi.fn>
+  }
   let manager: SessionManager
   let onEvent: ReturnType<typeof vi.fn>
 
   beforeEach(() => {
     const proc = makeProcess()
-    mockTransport = { spawn: vi.fn(() => proc) }
+    mockTransport = {
+      spawn: vi.fn(() => proc),
+      probe: vi.fn(async () => ({ ok: true as const, version: '1.0.0 (Claude Code)' }))
+    }
     onEvent = vi.fn()
     manager = new SessionManager(
       () => mockTransport as any,
@@ -48,23 +54,23 @@ describe('SessionManager', () => {
     )
   })
 
-  it('starts a session and returns session id', () => {
-    const sessionId = manager.startSession(makeEnv(), makeProject())
+  it('starts a session and returns session id', async () => {
+    const sessionId = await manager.startSession(makeEnv(), makeProject())
     expect(typeof sessionId).toBe('string')
     expect(sessionId.length).toBeGreaterThan(0)
     expect(mockTransport.spawn).toHaveBeenCalledOnce()
   })
 
-  it('emits session:status starting on start', () => {
-    manager.startSession(makeEnv(), makeProject())
+  it('emits session:status starting on start', async () => {
+    await manager.startSession(makeEnv(), makeProject())
     expect(onEvent).toHaveBeenCalledWith(
       'session:status',
       expect.objectContaining({ status: 'starting' })
     )
   })
 
-  it('sends message as JSON line to stdin', () => {
-    const sessionId = manager.startSession(makeEnv(), makeProject())
+  it('sends message as JSON line to stdin', async () => {
+    const sessionId = await manager.startSession(makeEnv(), makeProject())
     manager.sendMessage(sessionId, 'hello')
     const proc = mockTransport.spawn.mock.results[0].value
     expect(proc.stdin.write).toHaveBeenCalledWith(
@@ -72,8 +78,8 @@ describe('SessionManager', () => {
     )
   })
 
-  it('stops session and kills process', () => {
-    const sessionId = manager.startSession(makeEnv(), makeProject())
+  it('stops session and kills process', async () => {
+    const sessionId = await manager.startSession(makeEnv(), makeProject())
     manager.stopSession(sessionId)
     const proc = mockTransport.spawn.mock.results[0].value
     expect(proc.kill).toHaveBeenCalled()
@@ -83,8 +89,8 @@ describe('SessionManager', () => {
     )
   })
 
-  it('emits parsed stream-json events from stdout', () => {
-    const sessionId = manager.startSession(makeEnv(), makeProject())
+  it('emits parsed stream-json events from stdout', async () => {
+    const sessionId = await manager.startSession(makeEnv(), makeProject())
     const proc = mockTransport.spawn.mock.results[0].value
 
     const line = JSON.stringify({
@@ -105,6 +111,16 @@ describe('SessionManager', () => {
         sessionId,
         event: expect.objectContaining({ type: 'assistant' })
       })
+    )
+  })
+
+  it('skips spawn and emits error when probe rejects', async () => {
+    mockTransport.probe = vi.fn(async () => ({ ok: false as const, reason: 'no claude' }))
+    await manager.startSession(makeEnv(), makeProject())
+    expect(mockTransport.spawn).not.toHaveBeenCalled()
+    expect(onEvent).toHaveBeenCalledWith(
+      'session:status',
+      expect.objectContaining({ status: 'error', errorMessage: 'no claude' })
     )
   })
 })

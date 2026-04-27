@@ -24,7 +24,8 @@ describe('SessionManager integration (mock transport)', () => {
     const mockTransport = {
       spawn: () => spawn('bash', ['tests/integration/mock-claude.sh'], {
         stdio: ['pipe', 'pipe', 'pipe']
-      })
+      }),
+      probe: async () => ({ ok: true as const, version: '0.0.0 (Claude Code mock)' })
     }
 
     const manager = new SessionManager(
@@ -32,7 +33,7 @@ describe('SessionManager integration (mock transport)', () => {
       (channel, payload) => received.push({ channel, payload })
     )
 
-    const sessionId = manager.startSession(mockEnv, mockProject)
+    const sessionId = await manager.startSession(mockEnv, mockProject)
 
     // Send a user message to unblock the script's `read`
     await new Promise(resolve => setTimeout(resolve, 200))

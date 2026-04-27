@@ -1,10 +1,12 @@
-import {spawn} from 'node:child_process'
-import type {ChildProcess} from 'node:child_process'
-import type {ITransport, SpawnOptions} from './types'
+import { spawn } from 'node:child_process'
+import type { ChildProcess } from 'node:child_process'
+import type { HostType } from '../../shared/types'
+import type { ITransport, ProbeResult, SpawnOptions } from './types'
+import { runProbe } from './probe'
 
 export class WslTransport implements ITransport {
   public spawn(options: SpawnOptions): ChildProcess {
-    const {host, path, model, resumeSessionId} = options
+    const { host, path, model, resumeSessionId } = options
     if (host.kind !== 'wsl') throw new Error('WslTransport requires wsl host')
 
     const claudeArgs = [
@@ -28,5 +30,17 @@ export class WslTransport implements ITransport {
         )
       }
     )
+  }
+
+  public probe(host: HostType): Promise<ProbeResult> {
+    if (host.kind !== 'wsl') {
+      return Promise.resolve({ ok: false, reason: 'WslTransport requires wsl host' })
+    }
+    return runProbe({
+      bin: 'wsl.exe',
+      args: ['-d', host.distro, '--', 'claude', '--version'],
+      // wsl.exe cold start can be slow; give it more headroom than local.
+      timeoutMs: 15_000
+    })
   }
 }

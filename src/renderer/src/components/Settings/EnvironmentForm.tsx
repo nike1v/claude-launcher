@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import type { Environment, HostType } from '../../../../shared/types'
+import { EnvironmentStatus } from './EnvironmentStatus'
 
 interface Props {
   initial: Environment | null
@@ -30,6 +31,22 @@ export function EnvironmentForm({ initial, onCancel, onSave }: Props): JSX.Eleme
   const [sshKeyFile, setSshKeyFile] = useState(
     initial?.config.kind === 'ssh' ? (initial.config.keyFile ?? '') : ''
   )
+
+  // Snapshot of the host config the form currently describes — used to drive
+  // the live probe. Memoised so identical edits don't re-fire the probe each
+  // render (the EnvironmentStatus rev key handles deliberate re-checks).
+  const probeConfig = useMemo<HostType | null>(() => {
+    if (kind === 'local') return { kind: 'local' }
+    if (kind === 'wsl') return distro.trim() ? { kind: 'wsl', distro: distro.trim() } : null
+    if (!sshUser.trim() || !sshHost.trim()) return null
+    return {
+      kind: 'ssh',
+      user: sshUser.trim(),
+      host: sshHost.trim(),
+      port: sshPort ? Number(sshPort) : undefined,
+      keyFile: sshKeyFile.trim() || undefined
+    }
+  }, [kind, distro, sshUser, sshHost, sshPort, sshKeyFile])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -125,6 +142,13 @@ export function EnvironmentForm({ initial, onCancel, onSave }: Props): JSX.Eleme
             </div>
           </div>
         </>
+      )}
+
+      {probeConfig && (
+        <div className="flex items-center justify-between rounded border border-white/10 bg-white/[0.02] px-3 py-2">
+          <span className="text-xs text-white/50">Connection</span>
+          <EnvironmentStatus config={probeConfig} />
+        </div>
       )}
 
       <div className="flex gap-2 pt-1">

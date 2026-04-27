@@ -3,7 +3,9 @@ import { X, Plus, Pencil, Trash2 } from 'lucide-react'
 import type { Environment, HostType } from '../../../../shared/types'
 import { useEnvironmentsStore } from '../../store/environments'
 import { useProjectsStore } from '../../store/projects'
+import { Modal } from '../Modal'
 import { EnvironmentForm } from './EnvironmentForm'
+import { EnvironmentStatus } from './EnvironmentStatus'
 
 interface Props {
   onClose: () => void
@@ -36,8 +38,8 @@ export function SettingsModal({ onClose }: Props): JSX.Element {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-      <div className="bg-[#1a1a1a] border border-white/10 rounded-lg w-[32rem] max-h-[90vh] overflow-hidden flex flex-col">
+    <Modal onClose={onClose} panelClassName="bg-[#1a1a1a] border border-white/10 rounded-lg w-[32rem] max-h-[90vh] overflow-hidden flex flex-col">
+      <>
         <div className="flex items-center justify-between px-5 py-4 border-b border-white/10">
           <h2 className="text-sm font-semibold">Settings · Environments</h2>
           <button onClick={onClose} className="text-white/40 hover:text-white">
@@ -80,8 +82,8 @@ export function SettingsModal({ onClose }: Props): JSX.Element {
             </>
           )}
         </div>
-      </div>
-    </div>
+      </>
+    </Modal>
   )
 }
 
@@ -102,6 +104,7 @@ function EnvironmentRow({
         <div className="text-sm text-white truncate">{env.name}</div>
         <div className="text-xs text-white/40 truncate">{describeHost(env.config)}</div>
       </div>
+      <EnvironmentStatus config={env.config} compact />
       <span className="text-xs text-white/30 shrink-0">
         {projectCount} project{projectCount === 1 ? '' : 's'}
       </span>

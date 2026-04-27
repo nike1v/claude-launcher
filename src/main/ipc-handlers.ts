@@ -7,7 +7,11 @@ import { ProjectStore } from './project-store'
 import { EnvironmentStore, migrateProjectsToEnvironments } from './environment-store'
 import { TabStore } from './tab-store'
 import { HistoryReader } from './history-reader'
-import type { IpcChannels } from '../shared/types'
+import { LocalTransport } from './transports/local'
+import { WslTransport } from './transports/wsl'
+import { SshTransport } from './transports/ssh'
+import type { ITransport } from './transports/types'
+import type { HostType, IpcChannels } from '../shared/types'
 
 const CONFIG_DIR = join(homedir(), '.config', 'claude-launcher')
 const PROJECTS_PATH = join(CONFIG_DIR, 'projects.json')
@@ -38,7 +42,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): () => Promise<vo
     handler: (payload: IpcChannels[K]) => unknown
   ) => ipcMain.handle(channel as string, (_event, payload) => handler(payload))
 
-  handle('session:start', ({ projectId, resumeSessionId }) => {
+  handle('session:start', async ({ projectId, resumeSessionId }) => {
     const project = projectStore.load().find(p => p.id === projectId)
     if (!project) throw new Error(`Project ${projectId} not found`)
     const env = environmentStore.load().find(e => e.id === project.environmentId)
@@ -90,6 +94,11 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): () => Promise<vo
     safeSend('environments:loaded', { environments })
   })
 
+  handle('environments:probe', async ({ config }) => {
+    const transport = resolveTransportForConfig(config)
+    return transport.probe(config)
+  })
+
   handle('projects:history:load', async ({ projectId }) => {
     const ctx = resolveProjectAndEnv(projectStore, environmentStore, projectId)
     if (!ctx) return
@@ -111,7 +120,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): () => Promise<vo
     const channels = [
       'session:start', 'session:send', 'session:stop', 'session:interrupt', 'session:permission',
       'projects:save', 'projects:load', 'projects:history:load', 'session:history:load',
-      'environments:save', 'environments:load',
+      'environments:save', 'environments:load', 'environments:probe',
       'tabs:load', 'tabs:save', 'dialog:saveFile'
     ]
     channels.forEach(ch => ipcMain.removeHandler(ch))
@@ -129,6 +138,13 @@ function resolveProjectAndEnv(
   const env = environmentStore.load().find(e => e.id === project.environmentId)
   if (!env) return null
   return { project, env }
+}
+
+function resolveTransportForConfig(config: HostType): ITransport {
+  if (config.kind === 'local') return new LocalTransport()
+  if (config.kind === 'wsl') return new WslTransport()
+  if (config.kind === 'ssh') return new SshTransport()
+  throw new Error(`Unknown host kind: ${(config as { kind: string }).kind}`)
 }
 
 function runEnvironmentMigration(projectStore: ProjectStore, envStore: EnvironmentStore): void {
