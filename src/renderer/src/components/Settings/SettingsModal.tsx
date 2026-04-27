@@ -1,8 +1,9 @@
 import { useState } from 'react'
-import { X, Plus, Pencil, Trash2 } from 'lucide-react'
+import { X, Plus, Pencil, Trash2, GripVertical } from 'lucide-react'
 import type { Environment, HostType } from '../../../../shared/types'
 import { useEnvironmentsStore } from '../../store/environments'
 import { useProjectsStore } from '../../store/projects'
+import { useDragReorder } from '../../hooks/useDragReorder'
 import { Modal } from '../Modal'
 import { EnvironmentForm } from './EnvironmentForm'
 import { EnvironmentStatus } from './EnvironmentStatus'
@@ -12,9 +13,10 @@ interface Props {
 }
 
 export function SettingsModal({ onClose }: Props): JSX.Element {
-  const { environments, addEnvironment, updateEnvironment, removeEnvironment } = useEnvironmentsStore()
+  const { environments, addEnvironment, updateEnvironment, removeEnvironment, reorderEnvironments } = useEnvironmentsStore()
   const { projects } = useProjectsStore()
   const [editing, setEditing] = useState<Environment | 'new' | null>(null)
+  const dnd = useDragReorder({ onReorder: reorderEnvironments })
 
   const projectsForEnv = (envId: string): number =>
     projects.filter(p => p.environmentId === envId).length
@@ -62,15 +64,27 @@ export function SettingsModal({ onClose }: Props): JSX.Element {
                 </p>
               )}
               <div className="space-y-1.5">
-                {environments.map(env => (
-                  <EnvironmentRow
-                    key={env.id}
-                    env={env}
-                    projectCount={projectsForEnv(env.id)}
-                    onEdit={() => setEditing(env)}
-                    onDelete={() => handleDelete(env)}
-                  />
-                ))}
+                {environments.map(env => {
+                  const dropping = dnd.isDropTarget(env.id)
+                  const above = dropping && dnd.dropPosition === 'before'
+                  const below = dropping && dnd.dropPosition === 'after'
+                  return (
+                    <div
+                      key={env.id}
+                      {...dnd.bindRow(env.id)}
+                      className={`relative ${dnd.isDragging(env.id) ? 'opacity-40' : ''}`}
+                    >
+                      {above && <DropLine edge="top" />}
+                      <EnvironmentRow
+                        env={env}
+                        projectCount={projectsForEnv(env.id)}
+                        onEdit={() => setEditing(env)}
+                        onDelete={() => handleDelete(env)}
+                      />
+                      {below && <DropLine edge="bottom" />}
+                    </div>
+                  )
+                })}
               </div>
               <button
                 type="button"
@@ -100,6 +114,7 @@ function EnvironmentRow({
 }): JSX.Element {
   return (
     <div className="group flex items-center gap-3 px-3 py-2 rounded border border-white/10 hover:border-white/20 transition-colors">
+      <GripVertical size={12} className="text-white/20 group-hover:text-white/40 cursor-grab shrink-0" />
       <div className="flex-1 min-w-0">
         <div className="text-sm text-white truncate">{env.name}</div>
         <div className="text-xs text-white/40 truncate">{describeHost(env.config)}</div>
@@ -134,4 +149,14 @@ function describeHost(host: HostType): string {
   // Omit user@ when blank — the label collapses to just the host alias.
   const target = host.user ? `${host.user}@${host.host}` : host.host
   return `SSH · ${target}${host.port ? `:${host.port}` : ''}`
+}
+
+function DropLine({ edge }: { edge: 'top' | 'bottom' }): JSX.Element {
+  return (
+    <div
+      className={`absolute inset-x-1 h-0.5 bg-blue-400/80 rounded-full pointer-events-none ${
+        edge === 'top' ? 'top-0' : 'bottom-0'
+      }`}
+    />
+  )
 }

@@ -41,6 +41,7 @@ export function Sidebar(): JSX.Element {
         {groups.map(({ env, projects: groupProjects }) => (
           <ProjectGroup
             key={env.id}
+            groupKey={env.id}
             label={environmentLabel(env)}
             projects={groupProjects}
             activeProjectId={activeProject?.id ?? null}

@@ -2,17 +2,26 @@ import { useState } from 'react'
 import { ChevronDown, ChevronRight, Plus } from 'lucide-react'
 import type { Project } from '../../../../shared/types'
 import { ProjectItem } from './ProjectItem'
+import { useDragReorder } from '../../hooks/useDragReorder'
+import { useProjectsStore } from '../../store/projects'
 
 interface Props {
   label: string
+  // groupKey scopes drag-reorder to this environment so a project drag
+  // can't cross into a different env's bucket.
+  groupKey: string
   projects: Project[]
   activeProjectId: string | null
   onEdit: (project: Project) => void
   onAddProject?: () => void
 }
 
-export function ProjectGroup({ label, projects, activeProjectId, onEdit, onAddProject }: Props): JSX.Element {
+export function ProjectGroup({ label, groupKey, projects, activeProjectId, onEdit, onAddProject }: Props): JSX.Element {
   const [collapsed, setCollapsed] = useState(false)
+  const reorderProjects = useProjectsStore(s => s.reorderProjects)
+  const dnd = useDragReorder({
+    onReorder: reorderProjects
+  })
 
   return (
     <div className="mb-2 group/g">
@@ -37,16 +46,39 @@ export function ProjectGroup({ label, projects, activeProjectId, onEdit, onAddPr
       </div>
       {!collapsed && (
         <div className="pl-1">
-          {projects.map(project => (
-            <ProjectItem
-              key={project.id}
-              project={project}
-              isActive={project.id === activeProjectId}
-              onEdit={onEdit}
-            />
-          ))}
+          {projects.map(project => {
+            const dropping = dnd.isDropTarget(project.id)
+            const above = dropping && dnd.dropPosition === 'before'
+            const below = dropping && dnd.dropPosition === 'after'
+            return (
+              <div
+                key={project.id}
+                {...dnd.bindRow(project.id, groupKey)}
+                className={`relative ${dnd.isDragging(project.id) ? 'opacity-40' : ''}`}
+              >
+                {above && <DropLine edge="top" />}
+                <ProjectItem
+                  project={project}
+                  isActive={project.id === activeProjectId}
+                  onEdit={onEdit}
+                />
+                {below && <DropLine edge="bottom" />}
+              </div>
+            )
+          })}
         </div>
       )}
     </div>
+  )
+}
+
+// Thin blue insertion line shown above/below the row a drop is targeting.
+function DropLine({ edge }: { edge: 'top' | 'bottom' }): JSX.Element {
+  return (
+    <div
+      className={`absolute inset-x-1 h-0.5 bg-blue-400/80 rounded-full pointer-events-none ${
+        edge === 'top' ? 'top-0' : 'bottom-0'
+      }`}
+    />
   )
 }

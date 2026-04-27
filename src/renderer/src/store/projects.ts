@@ -8,6 +8,9 @@ interface ProjectsStore {
   addProject: (project: Project) => void
   updateProject: (project: Project) => void
   removeProject: (id: string) => void
+  // Move `fromId` to land directly before/after `toId` in the global projects
+  // list, preserving relative order. Persists.
+  reorderProjects: (fromId: string, toId: string, position: 'before' | 'after') => void
   setActiveProjectId: (id: string | null) => void
 }
 
@@ -33,6 +36,22 @@ export const useProjectsStore = create<ProjectsStore>((set, get) => ({
     const updated = get().projects.filter(p => p.id !== id)
     set({ projects: updated })
     window.electronAPI.invoke('projects:save', updated)
+  },
+
+  reorderProjects: (fromId, toId, position) => {
+    if (fromId === toId) return
+    const current = get().projects
+    const fromIdx = current.findIndex(p => p.id === fromId)
+    const toIdx = current.findIndex(p => p.id === toId)
+    if (fromIdx < 0 || toIdx < 0) return
+    const next = [...current]
+    const [moved] = next.splice(fromIdx, 1)
+    // After splice, indices >= fromIdx shifted left by 1; recompute target.
+    let insertAt = toIdx > fromIdx ? toIdx - 1 : toIdx
+    if (position === 'after') insertAt += 1
+    next.splice(insertAt, 0, moved)
+    set({ projects: next })
+    window.electronAPI.invoke('projects:save', next)
   },
 
   setActiveProjectId: (id) => set({ activeProjectId: id })
