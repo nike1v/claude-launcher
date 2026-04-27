@@ -10,9 +10,9 @@ interface Props {
 }
 
 const STATUS_DOT: Record<Session['status'], string> = {
-  starting: 'bg-yellow-400 animate-pulse',
+  starting: 'bg-yellow-400 status-dot-pulse',
   ready: 'bg-green-400',
-  busy: 'bg-blue-400 animate-pulse',
+  busy: 'bg-blue-400 status-dot-pulse',
   error: 'bg-red-400',
   closed: 'bg-white/20'
 }

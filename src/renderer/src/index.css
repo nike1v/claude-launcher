@@ -23,3 +23,20 @@ body {
   width: 33%;
   animation: indeterminateSlide 1.2s ease-in-out infinite;
 }
+
+/* Tab status dots are 6px, so animate-pulse's 0.5 opacity dip is hard to
+   see. This pulses both opacity and size for a more obvious heartbeat. */
+@keyframes statusDotPulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.3;
+    transform: scale(0.7);
+  }
+}
+
+.status-dot-pulse {
+  animation: statusDotPulse 1.4s ease-in-out infinite;
+}
