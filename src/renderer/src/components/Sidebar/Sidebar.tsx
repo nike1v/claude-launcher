@@ -80,13 +80,16 @@ export function Sidebar(): JSX.Element {
 }
 
 function groupByEnvironment(projects: Project[], envs: Environment[]) {
+  // Show every environment, even with zero projects, so a freshly added
+  // environment appears immediately and the user can hover its row to add
+  // its first project.
   const byId = new Map<string, { env: Environment; projects: Project[] }>()
   for (const env of envs) byId.set(env.id, { env, projects: [] })
   for (const project of projects) {
     const bucket = byId.get(project.environmentId)
     if (bucket) bucket.projects.push(project)
   }
-  return Array.from(byId.values()).filter(g => g.projects.length > 0)
+  return Array.from(byId.values())
 }
 
 function environmentLabel(env: Environment): string {
