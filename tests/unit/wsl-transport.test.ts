@@ -20,7 +20,7 @@ describe('WslTransport', () => {
     spawnMock.mockClear()
   })
 
-  it('spawns wsl.exe with correct args', () => {
+  it('spawns wsl.exe with correct args wrapped in a login bash', () => {
     const transport = new WslTransport()
     transport.spawn({
       host: {kind: 'wsl', distro: 'Ubuntu'},
@@ -35,7 +35,9 @@ describe('WslTransport', () => {
         '-d', 'Ubuntu',
         '--cd', '/home/user/project',
         '--',
-        'claude',
+        'bash',
+        // login shell wrapper: -lc <script> <argv0> <args...>
+        '-lc', 'claude "$@"', 'bash',
         '--output-format', 'stream-json',
         '--input-format', 'stream-json',
         '--verbose',

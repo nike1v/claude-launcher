@@ -3,6 +3,7 @@ import type { ChildProcess } from 'node:child_process'
 import type { HostType } from '../../shared/types'
 import type { ITransport, ProbeResult, SpawnOptions } from './types'
 import { runProbe } from './probe'
+import { shQuote } from './shell'
 
 export class SshTransport implements ITransport {
   public spawn(options: SpawnOptions): ChildProcess {
@@ -19,7 +20,11 @@ export class SshTransport implements ITransport {
     if (resumeSessionId) claudeArgs.push('--resume', resumeSessionId)
 
     const quotedArgs = claudeArgs.map(arg => JSON.stringify(arg)).join(' ')
-    const remoteCommand = `cd ${JSON.stringify(path)} && claude ${quotedArgs}`
+    // Inner script runs *inside* the remote login bash — cd into the project,
+    // then exec claude. Wrapping with bash -lc means the user's profile is
+    // sourced so PATH includes ~/.local/bin / npm-global / asdf shims.
+    const innerScript = `cd ${JSON.stringify(path)} && claude ${quotedArgs}`
+    const remoteCommand = `bash -lc ${shQuote(innerScript)}`
 
     const sshArgs = ['-T', ...sshConnectArgs(host)]
     sshArgs.push(sshTarget(host), remoteCommand)
@@ -40,8 +45,8 @@ export class SshTransport implements ITransport {
     }
     const args = ['-T', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=8']
     args.push(...sshConnectArgs(host))
-    args.push(sshTarget(host), 'claude --version')
-    return runProbe({ bin: 'ssh', args, timeoutMs: 20_000 })
+    args.push(sshTarget(host), 'bash -lc "claude --version"')
+    return runProbe({ bin: 'ssh', args, timeoutMs: 25_000 })
   }
 }
 

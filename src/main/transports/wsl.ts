@@ -3,6 +3,7 @@ import type { ChildProcess } from 'node:child_process'
 import type { HostType } from '../../shared/types'
 import type { ITransport, ProbeResult, SpawnOptions } from './types'
 import { runProbe } from './probe'
+import { loginShellArgs } from './shell'
 
 export class WslTransport implements ITransport {
   public spawn(options: SpawnOptions): ChildProcess {
@@ -18,9 +19,13 @@ export class WslTransport implements ITransport {
     if (model) claudeArgs.push('--model', model)
     if (resumeSessionId) claudeArgs.push('--resume', resumeSessionId)
 
+    // wsl.exe's default shell is non-login non-interactive — it ignores
+    // ~/.profile and so misses anything the user added there. Wrap the
+    // claude invocation in `bash -lc 'claude "$@"' bash …args` so a login
+    // shell sets up PATH (≈/.local/bin, asdf, etc.) before we exec.
     return spawn(
       'wsl.exe',
-      ['-d', host.distro, '--cd', path, '--', 'claude', ...claudeArgs],
+      ['-d', host.distro, '--cd', path, '--', 'bash', ...loginShellArgs('claude "$@"', claudeArgs)],
       {
         stdio: ['pipe', 'pipe', 'pipe'],
         env: Object.fromEntries(
@@ -38,8 +43,8 @@ export class WslTransport implements ITransport {
     }
     return runProbe({
       bin: 'wsl.exe',
-      args: ['-d', host.distro, '--', 'claude', '--version'],
-      // wsl.exe cold start can be slow; give it more headroom than local.
+      args: ['-d', host.distro, '--', 'bash', '-lc', 'claude --version'],
+      // wsl.exe cold start + login shell sourcing can both be slow.
       timeoutMs: 15_000
     })
   }
