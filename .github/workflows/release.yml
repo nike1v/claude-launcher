@@ -31,6 +31,10 @@ jobs:
       - name: Upload AppImage to release
         uses: softprops/action-gh-release@v3
         with:
+          # Tags like v0.3.0-alpha.1 / v0.3.0-rc.1 → GitHub prerelease, which
+          # keeps electron-updater (releaseType: 'release') from offering it
+          # to users on the stable channel.
+          prerelease: ${{ contains(github.ref_name, '-') }}
           files: |
             dist/*.AppImage
             dist/latest-linux.yml
@@ -59,6 +63,7 @@ jobs:
       - name: Upload Windows installer to release
         uses: softprops/action-gh-release@v3
         with:
+          prerelease: ${{ contains(github.ref_name, '-') }}
           files: |
             dist/*.exe
             dist/latest.yml
@@ -92,6 +97,7 @@ jobs:
       - name: Upload macOS artifacts to release
         uses: softprops/action-gh-release@v3
         with:
+          prerelease: ${{ contains(github.ref_name, '-') }}
           files: |
             dist/*.dmg
             dist/*.zip
