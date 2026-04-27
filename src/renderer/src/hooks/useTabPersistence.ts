@@ -64,28 +64,38 @@ async function restoreTabs(knownProjectIds: string[]): Promise<void> {
 
   for (let i = 0; i < restorable.length; i++) {
     const tab = restorable[i]
+    // Each step is wrapped independently so a transient failure (claude not
+    // on PATH, wsl.exe cold-start timeout, missing JSONL) doesn't silently
+    // drop the tab from in-memory state — which would then cascade into the
+    // next persistence write overwriting tabs.json without it. The tab's
+    // claudeSessionId from disk is preserved either way; the user can
+    // re-send a message to retry the connection.
+    let sessionId: string
     try {
-      const [events, sessionId] = await Promise.all([
-        loadSessionHistory(tab.projectId, tab.claudeSessionId),
-        startSession(tab.projectId, tab.claudeSessionId)
-      ])
-      prependEvents(sessionId, events)
-      addSession({
-        id: sessionId,
-        projectId: tab.projectId,
-        claudeSessionId: tab.claudeSessionId,
-        status: 'starting',
-        hasUnread: false,
-        lastModel: tab.lastModel,
-        lastContextWindow: tab.lastContextWindow
-      })
-      if (firstRestoredId === null) firstRestoredId = sessionId
-      // Map the saved active index (in the saved list) to the restored tab.
-      if (saved.activeIndex !== null && saved.tabs[saved.activeIndex] === tab) {
-        activeRestoredId = sessionId
-      }
+      sessionId = await startSession(tab.projectId, tab.claudeSessionId)
     } catch {
-      // Skip tabs that fail to restore (e.g. transport error, missing CLI).
+      sessionId = crypto.randomUUID()
+    }
+    addSession({
+      id: sessionId,
+      projectId: tab.projectId,
+      claudeSessionId: tab.claudeSessionId,
+      status: 'starting',
+      hasUnread: false,
+      lastModel: tab.lastModel,
+      lastContextWindow: tab.lastContextWindow
+    })
+    try {
+      const events = await loadSessionHistory(tab.projectId, tab.claudeSessionId)
+      if (events.length) prependEvents(sessionId, events)
+    } catch {
+      // History unavailable — leave the tab empty; resume still works once
+      // the first turn lands.
+    }
+    if (firstRestoredId === null) firstRestoredId = sessionId
+    // Map the saved active index (in the saved list) to the restored tab.
+    if (saved.activeIndex !== null && saved.tabs[saved.activeIndex] === tab) {
+      activeRestoredId = sessionId
     }
   }
 
