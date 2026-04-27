@@ -3,6 +3,7 @@ import type { Project } from '../../../../shared/types'
 import { useSessionsStore } from '../../store/sessions'
 import { useProjectsStore } from '../../store/projects'
 import { startSession } from '../../ipc/bridge'
+import { StatusDot } from '../StatusDot'
 
 interface Props {
   project: Project
@@ -13,6 +14,17 @@ interface Props {
 export function ProjectItem({ project, isActive, onEdit }: Props): JSX.Element {
   const { addSession, setActiveSession } = useSessionsStore()
   const { setActiveProjectId, removeProject } = useProjectsStore()
+  // Mirror the tab's status dot in the sidebar so the user can see which
+  // projects are working / errored / closed without flipping tabs. We pick
+  // the most recently added session for the project — there's at most one
+  // open per project today, but the reverse-find keeps it future-proof.
+  const sessionStatus = useSessionsStore(s => {
+    for (let i = s.tabOrder.length - 1; i >= 0; i--) {
+      const sess = s.sessions[s.tabOrder[i]]
+      if (sess?.projectId === project.id) return sess.status
+    }
+    return undefined
+  })
 
   const handleClick = async () => {
     setActiveProjectId(project.id)
@@ -52,6 +64,7 @@ export function ProjectItem({ project, isActive, onEdit }: Props): JSX.Element {
           : 'text-white/60 hover:bg-white/5 hover:text-white/90'
         }`}
     >
+      <StatusDot status={sessionStatus} className="mr-2" />
       <span className="flex-1 truncate pr-12">{project.name}</span>
       <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
         <button

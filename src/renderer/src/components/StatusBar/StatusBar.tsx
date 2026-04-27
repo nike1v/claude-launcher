@@ -5,14 +5,6 @@ import { useMessagesStore } from '../../store/messages'
 import { ContextMeter } from './ContextMeter'
 import type { AssistantEvent, InitEvent, ResultEvent } from '../../../../shared/types'
 
-const STATUS_COLOR: Record<string, string> = {
-  starting: 'bg-yellow-400',
-  ready: 'bg-green-400',
-  busy: 'bg-blue-400',
-  error: 'bg-red-400',
-  closed: 'bg-white/20'
-}
-
 export function StatusBar(): JSX.Element {
   const { sessions, activeSessionId } = useSessionsStore()
   const { projects } = useProjectsStore()
@@ -51,7 +43,8 @@ export function StatusBar(): JSX.Element {
     <div className="h-7 border-t border-white/10 flex items-center px-3 gap-3 text-xs text-white/30 shrink-0 overflow-hidden">
       {session && (
         <>
-          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${STATUS_COLOR[session.status] ?? 'bg-white/20'}`} />
+          {/* Status dot moved to the project list / tab title — the bottom
+              bar is now strictly host / cwd / context / model. */}
           <span className="shrink-0">{hostLabel}</span>
           {(initEvent?.cwd ?? project?.path) && (
             <span className="text-white/20 truncate min-w-0">{initEvent?.cwd ?? project?.path}</span>

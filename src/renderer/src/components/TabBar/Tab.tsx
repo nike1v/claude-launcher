@@ -2,20 +2,13 @@ import { X } from 'lucide-react'
 import type { Session } from '../../../../shared/types'
 import { useProjectsStore } from '../../store/projects'
 import { useEnvironmentsStore } from '../../store/environments'
+import { StatusDot } from '../StatusDot'
 
 interface Props {
   session: Session
   isActive: boolean
   onActivate: () => void
   onClose: () => void
-}
-
-const STATUS_DOT: Record<Session['status'], string> = {
-  starting: 'bg-yellow-400 status-dot-pulse',
-  ready: 'bg-green-400',
-  busy: 'bg-blue-400 status-dot-pulse',
-  error: 'bg-red-400',
-  closed: 'bg-white/20'
 }
 
 export function Tab({ session, isActive, onActivate, onClose }: Props): JSX.Element {
@@ -38,7 +31,7 @@ export function Tab({ session, isActive, onActivate, onClose }: Props): JSX.Elem
         ${isActive ? 'bg-[#1a1a1a] text-white' : 'text-white/50 hover:text-white/80 hover:bg-white/5'}`}
       onClick={onActivate}
     >
-      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${STATUS_DOT[session.status]}`} />
+      <StatusDot status={session.status} />
       <span className="text-xs truncate flex-1">
         <span className="text-white/30 mr-1">{hostLabel}</span>
         {project?.name ?? 'Unknown'}
