@@ -1,10 +1,16 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { LexicalComposer } from '@lexical/react/LexicalComposer'
 import { PlainTextPlugin } from '@lexical/react/LexicalPlainTextPlugin'
 import { ContentEditable } from '@lexical/react/LexicalContentEditable'
 import { OnChangePlugin } from '@lexical/react/LexicalOnChangePlugin'
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext'
-import { $getRoot, CLEAR_HISTORY_COMMAND, $createParagraphNode } from 'lexical'
+import {
+  $getRoot,
+  CLEAR_HISTORY_COMMAND,
+  $createParagraphNode,
+  COMMAND_PRIORITY_HIGH,
+  KEY_ENTER_COMMAND
+} from 'lexical'
 import { Send, Paperclip, X, FileText, Image as ImageIcon } from 'lucide-react'
 import { sendMessage } from '../../ipc/bridge'
 import { useMessagesStore } from '../../store/messages'
@@ -31,19 +37,24 @@ interface PendingAttachment {
 
 const MAX_INLINE_TEXT_BYTES = 256 * 1024 // 256 KB — anything larger gets a warning
 
-function SendButton({
+// Centralised submit. Both the Send button and the Enter-key plugin call this
+// so we never duplicate the echo / clear-editor logic.
+function useSubmit({
   sessionId,
   disabled,
   attachments,
   clearAttachments
-}: Props & {
+}: {
+  sessionId: string
+  disabled: boolean
   attachments: PendingAttachment[]
   clearAttachments: () => void
-}): JSX.Element {
+}): () => boolean {
   const [editor] = useLexicalComposerContext()
   const { appendEvent } = useMessagesStore()
 
-  const handleSend = useCallback(() => {
+  return useCallback(() => {
+    let didSend = false
     editor.update(() => {
       const root = $getRoot()
       const text = root.getTextContent().trim()
@@ -73,8 +84,6 @@ function SendButton({
             source: { type: 'base64', media_type: a.mediaType, data: a.data ?? '' }
           } satisfies DocumentBlock)
         }
-        // Text attachments are folded into the prompt text by the main process,
-        // so don't show them as separate chips in the bubble.
       }
       echoBlocks.push({ type: 'tool_result', tool_use_id: '__input__', content: '' })
 
@@ -87,19 +96,76 @@ function SendButton({
       root.append($createParagraphNode())
       editor.dispatchCommand(CLEAR_HISTORY_COMMAND, undefined)
       clearAttachments()
+      didSend = true
     })
+    return didSend
   }, [editor, sessionId, disabled, attachments, clearAttachments, appendEvent])
+}
 
+function ComposerInner({
+  sessionId,
+  disabled,
+  attachments,
+  clearAttachments,
+  onPaste
+}: {
+  sessionId: string
+  disabled?: boolean
+  attachments: PendingAttachment[]
+  clearAttachments: () => void
+  onPaste: (e: React.ClipboardEvent) => void
+}): JSX.Element {
+  const submit = useSubmit({ sessionId, disabled: !!disabled, attachments, clearAttachments })
   return (
-    <button
-      id={`send-btn-${sessionId}`}
-      onClick={handleSend}
-      disabled={disabled}
-      className="p-2 text-white/40 hover:text-white/80 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-    >
-      <Send size={16} />
-    </button>
+    <>
+      <div className="flex-1 relative" onPaste={onPaste}>
+        <PlainTextPlugin
+          contentEditable={
+            <ContentEditable
+              className="outline-none min-h-[1.5rem] max-h-40 overflow-y-auto text-sm text-white/90 leading-relaxed"
+            />
+          }
+          placeholder={
+            <div className="absolute top-0 left-0 text-white/30 text-sm pointer-events-none">
+              {disabled ? 'Waiting for session…' : 'Message claude…'}
+            </div>
+          }
+          ErrorBoundary={() => null}
+        />
+        <OnChangePlugin onChange={() => {}} />
+        <SubmitOnEnterPlugin submit={submit} />
+      </div>
+      <button
+        type="button"
+        onClick={() => submit()}
+        disabled={disabled}
+        className="p-2 text-white/40 hover:text-white/80 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+      >
+        <Send size={16} />
+      </button>
+    </>
   )
+}
+
+// Lexical command listener — runs before the browser inserts a newline into
+// contenteditable. Shift+Enter still reaches PlainTextPlugin's default
+// handler so the user can break lines manually.
+function SubmitOnEnterPlugin({ submit }: { submit: () => boolean }): null {
+  const [editor] = useLexicalComposerContext()
+  useEffect(() => {
+    return editor.registerCommand(
+      KEY_ENTER_COMMAND,
+      (event) => {
+        const e = event as KeyboardEvent | null
+        if (e?.shiftKey) return false
+        e?.preventDefault()
+        submit()
+        return true
+      },
+      COMMAND_PRIORITY_HIGH
+    )
+  }, [editor, submit])
+  return null
 }
 
 export function InputBar({ sessionId, disabled = false }: Props): JSX.Element {
@@ -195,33 +261,12 @@ export function InputBar({ sessionId, disabled = false }: Props): JSX.Element {
           }}
         />
         <LexicalComposer initialConfig={initialConfig}>
-          <div className="flex-1 relative" onPaste={handlePaste}>
-            <PlainTextPlugin
-              contentEditable={
-                <ContentEditable
-                  className="outline-none min-h-[1.5rem] max-h-40 overflow-y-auto text-sm text-white/90 leading-relaxed"
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault()
-                      document.getElementById(`send-btn-${sessionId}`)?.click()
-                    }
-                  }}
-                />
-              }
-              placeholder={
-                <div className="absolute top-0 left-0 text-white/30 text-sm pointer-events-none">
-                  {disabled ? 'Waiting for session…' : 'Message claude…'}
-                </div>
-              }
-              ErrorBoundary={() => null}
-            />
-            <OnChangePlugin onChange={() => {}} />
-          </div>
-          <SendButton
+          <ComposerInner
             sessionId={sessionId}
             disabled={disabled}
             attachments={attachments}
             clearAttachments={clearAttachments}
+            onPaste={handlePaste}
           />
         </LexicalComposer>
       </div>
