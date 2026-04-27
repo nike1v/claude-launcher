@@ -3,7 +3,7 @@ import { readdir, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join, resolve, sep } from 'node:path'
 import type { HostType } from '../shared/types'
-import { shQuote as shellQuote } from './transports/shell'
+import { shQuote as shellQuote } from './transports/path-probe'
 
 export interface DirListing {
   // The absolute directory we ended up listing (after resolving "" / "~").
@@ -76,17 +76,18 @@ async function listRemoteDir(host: HostType, rawPath: string): Promise<DirListin
 
 function remoteShellCommand(host: HostType, script: string): { bin: string; args: string[] } {
   if (host.kind === 'wsl') {
-    // -lc rather than -c so the user's profile-driven PATH applies for
-    // the cd / pwd / find inside the snippet (matches how claude itself
-    // is invoked, see WslTransport).
-    return { bin: 'wsl.exe', args: ['-d', host.distro, '--', 'bash', '-lc', script] }
+    // The script only uses cd/pwd/find/sed/head/sort — all in /usr/bin which
+    // is on every default PATH, so a plain `bash -c` (no profile sourcing)
+    // is enough. Avoiding -l keeps this fast and skirts any user-profile
+    // side-effects.
+    return { bin: 'wsl.exe', args: ['-d', host.distro, '--', 'bash', '-c', script] }
   }
   if (host.kind === 'ssh') {
     const args = ['-T', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=4']
     if (host.port) args.push('-p', String(host.port))
     if (host.keyFile) args.push('-i', host.keyFile)
     // Bare host = ~/.ssh/config alias; user@host overrides config user.
-    args.push(host.user ? `${host.user}@${host.host}` : host.host, `bash -lc ${shQuote(script)}`)
+    args.push(host.user ? `${host.user}@${host.host}` : host.host, `sh -c ${shQuote(script)}`)
     return { bin: 'ssh', args }
   }
   throw new Error(`Unsupported host kind: ${host.kind}`)

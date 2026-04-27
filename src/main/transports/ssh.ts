@@ -2,8 +2,8 @@ import { spawn } from 'node:child_process'
 import type { ChildProcess } from 'node:child_process'
 import type { HostType } from '../../shared/types'
 import type { ITransport, ProbeResult, SpawnOptions } from './types'
-import { runProbe } from './probe'
-import { shQuote } from './shell'
+import { runPathProbe, probeScript, shQuote } from './path-probe'
+import { getCachedPath, setCachedPath } from './path-cache'
 
 export class SshTransport implements ITransport {
   public spawn(options: SpawnOptions): ChildProcess {
@@ -19,12 +19,18 @@ export class SshTransport implements ITransport {
     if (model) claudeArgs.push('--model', model)
     if (resumeSessionId) claudeArgs.push('--resume', resumeSessionId)
 
+    // OpenSSH runs the remote command as `<user-shell> -c <cmd>` — that's
+    // non-interactive non-login on the remote, so ~/.bashrc / ~/.profile
+    // aren't sourced and claude installed via npm-global / ~/.local/bin is
+    // invisible. The probe ran a login bash + bashrc once and cached PATH;
+    // we set it explicitly here and exec claude so stdin/stdout passthrough
+    // stays clean (the previous `bash -lc` wrapper interfered with stdin
+    // in some setups, making stream-json mode bail at the 3s timeout).
+    const cachedPath = getCachedPath(host)
     const quotedArgs = claudeArgs.map(arg => JSON.stringify(arg)).join(' ')
-    // Inner script runs *inside* the remote login bash — cd into the project,
-    // then exec claude. Wrapping with bash -lc means the user's profile is
-    // sourced so PATH includes ~/.local/bin / npm-global / asdf shims.
-    const innerScript = `cd ${JSON.stringify(path)} && claude ${quotedArgs}`
-    const remoteCommand = `bash -lc ${shQuote(innerScript)}`
+    const pathExport = cachedPath ? `export PATH=${shQuote(cachedPath)}; ` : ''
+    const innerScript = `${pathExport}cd ${JSON.stringify(path)} && exec claude ${quotedArgs}`
+    const remoteCommand = `sh -c ${shQuote(innerScript)}`
 
     const sshArgs = ['-T', ...sshConnectArgs(host)]
     sshArgs.push(sshTarget(host), remoteCommand)
@@ -39,14 +45,18 @@ export class SshTransport implements ITransport {
     })
   }
 
-  public probe(host: HostType): Promise<ProbeResult> {
+  public async probe(host: HostType): Promise<ProbeResult> {
     if (host.kind !== 'ssh') {
-      return Promise.resolve({ ok: false, reason: 'SshTransport requires ssh host' })
+      return { ok: false, reason: 'SshTransport requires ssh host' }
     }
     const args = ['-T', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=8']
     args.push(...sshConnectArgs(host))
-    args.push(sshTarget(host), 'bash -lc "claude --version"')
-    return runProbe({ bin: 'ssh', args, timeoutMs: 25_000 })
+    args.push(sshTarget(host), `bash -lc ${shQuote(probeScript())}`)
+    const result = await runPathProbe({ bin: 'ssh', args, timeoutMs: 25_000 })
+    if (result.path) setCachedPath(host, result.path)
+    return result.ok
+      ? { ok: true, version: result.version ?? '' }
+      : { ok: false, reason: result.reason ?? 'probe failed' }
   }
 }
 

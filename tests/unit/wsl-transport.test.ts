@@ -1,5 +1,6 @@
 import {describe, it, expect, vi, beforeEach} from 'vitest'
 import {WslTransport} from '../../src/main/transports/wsl'
+import {setCachedPath} from '../../src/main/transports/path-cache'
 
 vi.mock('node:child_process', () => ({
   spawn: vi.fn(() => ({
@@ -20,10 +21,10 @@ describe('WslTransport', () => {
     spawnMock.mockClear()
   })
 
-  it('spawns wsl.exe with correct args wrapped in a login bash', () => {
+  it('spawns wsl.exe with claude directly when no PATH is cached', () => {
     const transport = new WslTransport()
     transport.spawn({
-      host: {kind: 'wsl', distro: 'Ubuntu'},
+      host: {kind: 'wsl', distro: 'NoCachePath'},
       path: '/home/user/project',
       model: undefined,
       resumeSessionId: undefined
@@ -32,12 +33,10 @@ describe('WslTransport', () => {
     expect(spawnMock).toHaveBeenCalledWith(
       'wsl.exe',
       [
-        '-d', 'Ubuntu',
+        '-d', 'NoCachePath',
         '--cd', '/home/user/project',
         '--',
-        'bash',
-        // login shell wrapper: -lc <script> <argv0> <args...>
-        '-lc', 'claude "$@"', 'bash',
+        'claude',
         '--output-format', 'stream-json',
         '--input-format', 'stream-json',
         '--verbose',
@@ -47,10 +46,30 @@ describe('WslTransport', () => {
     )
   })
 
+  it('prefixes claude with `env PATH=...` when a probe cached the user PATH', () => {
+    const host = {kind: 'wsl' as const, distro: 'WithPath'}
+    setCachedPath(host, '/home/user/.local/bin:/usr/bin')
+    const transport = new WslTransport()
+    transport.spawn({
+      host,
+      path: '/tmp',
+      model: undefined,
+      resumeSessionId: undefined
+    })
+
+    const args: string[] = spawnMock.mock.calls[0][1]
+    // env + PATH=... must come before claude so claude sees the user PATH.
+    const envIdx = args.indexOf('env')
+    const claudeIdx = args.indexOf('claude')
+    expect(envIdx).toBeGreaterThan(-1)
+    expect(envIdx).toBeLessThan(claudeIdx)
+    expect(args[envIdx + 1]).toBe('PATH=/home/user/.local/bin:/usr/bin')
+  })
+
   it('appends --model flag when model is specified', () => {
     const transport = new WslTransport()
     transport.spawn({
-      host: {kind: 'wsl', distro: 'Ubuntu'},
+      host: {kind: 'wsl', distro: 'ModelDistro'},
       path: '/tmp',
       model: 'claude-opus-4-7',
       resumeSessionId: undefined
@@ -64,7 +83,7 @@ describe('WslTransport', () => {
   it('appends --resume flag when resumeSessionId is provided', () => {
     const transport = new WslTransport()
     transport.spawn({
-      host: {kind: 'wsl', distro: 'Ubuntu'},
+      host: {kind: 'wsl', distro: 'ResumeDistro'},
       path: '/tmp',
       model: undefined,
       resumeSessionId: 'sess-abc'
@@ -78,7 +97,7 @@ describe('WslTransport', () => {
   it('does not inject CLAUDE_CODE_OAUTH_TOKEN', () => {
     const transport = new WslTransport()
     transport.spawn({
-      host: {kind: 'wsl', distro: 'Ubuntu'},
+      host: {kind: 'wsl', distro: 'EnvDistro'},
       path: '/tmp',
       model: undefined,
       resumeSessionId: undefined
