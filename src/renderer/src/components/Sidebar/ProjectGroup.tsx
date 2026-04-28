@@ -76,7 +76,7 @@ export function ProjectGroup({ label, groupKey, projects, activeProjectId, onEdi
 function DropLine({ edge }: { edge: 'top' | 'bottom' }) {
   return (
     <div
-      className={`absolute inset-x-1 h-0.5 bg-blue-400/80 rounded-full pointer-events-none ${
+      className={`absolute inset-x-1 h-0.5 bg-accent/80 rounded-full pointer-events-none ${
         edge === 'top' ? 'top-0' : 'bottom-0'
       }`}
     />

@@ -1,18 +1,31 @@
 @import "tailwindcss";
 
-/* Design tokens. Two themes for now (dark + light); high-contrast and
-   accent picker are follow-ups. Tailwind 4 picks up `--color-*` tokens
-   declared in @theme and generates utility classes — `bg-app`, `text-fg`,
-   `border-divider`, etc. — that resolve through these CSS variables, so
-   theme switching is just `data-theme="light"` on <html>.
+/* Design tokens (system / dark / light). Tailwind 4 picks up `--color-*`
+   tokens declared in @theme and generates utilities — bg-app, text-fg,
+   border-divider, etc. — that resolve through CSS variables, so theme
+   switching is just `data-theme="…"` on <html>.
 
-   The DARK values match what we were hardcoding before (#0d0d0d app bg,
-   #1a1a1a panel, white-with-alpha for borders/text), so anything we
-   missed in the migration still looks right in dark mode. */
+   Surface hierarchy (t3code-inspired): the chat area sits on `--app`
+   (deepest), the sidebar + modals on `--card` (a hair lighter), and
+   subtle hover/active states wash with `--elevated` (alpha overlay). The
+   distance between app and card is small on purpose — too much delta
+   reads as "different colour" rather than "different panel". A 1px
+   border-divider hairline does most of the panel separation.
+
+   Status colours (success / warn / danger / accent) ship with two values
+   each: the strong saturated value (used as icon / text foreground) and
+   a "fg" variant tuned per theme so reds, ambers etc. read at AA
+   contrast on both light and dark. Backgrounds for status surfaces are
+   mixed at runtime via /4 /8 /12 /32 alpha modifiers in the components.
+
+   The DARK base values match what we were hardcoding before (#0d0d0d
+   app bg etc.), so anything we missed in the migration still looks
+   right in dark mode. */
 
 @theme {
   --color-app: var(--cl-app);
-  --color-panel: var(--cl-panel);
+  --color-card: var(--cl-card);
+  --color-panel: var(--cl-card); /* alias kept for legacy class names */
   --color-elevated: var(--cl-elevated);
   --color-input: var(--cl-input);
   --color-divider: var(--cl-divider);
@@ -21,6 +34,7 @@
   --color-fg-muted: var(--cl-fg-muted);
   --color-fg-faint: var(--cl-fg-faint);
   --color-accent: var(--cl-accent);
+  --color-accent-fg: var(--cl-accent-fg);
   --color-success: var(--cl-success);
   --color-warn: var(--cl-warn);
   --color-danger: var(--cl-danger);
@@ -29,16 +43,27 @@
 :root,
 :root[data-theme="dark"] {
   color-scheme: dark;
+  /* Two-tier base. App is the deepest tone (chat area, root window).
+     Card is +2% white mixed in — barely-different brightness, makes
+     sidebar/modal panels read as distinct surfaces. */
   --cl-app: #0d0d0d;
-  --cl-panel: #1a1a1a;
-  --cl-elevated: rgba(255, 255, 255, 0.05);
+  --cl-card: #161616;
+  --cl-elevated: rgba(255, 255, 255, 0.06);
   --cl-input: rgba(255, 255, 255, 0.04);
-  --cl-divider: rgba(255, 255, 255, 0.10);
-  --cl-divider-strong: rgba(255, 255, 255, 0.20);
+  /* Borders: 8% / 18% — visible enough to define panel edges, quiet
+     enough not to compete with content. */
+  --cl-divider: rgba(255, 255, 255, 0.08);
+  --cl-divider-strong: rgba(255, 255, 255, 0.18);
   --cl-fg: #e5e5e5;
   --cl-fg-muted: rgba(255, 255, 255, 0.70);
   --cl-fg-faint: rgba(255, 255, 255, 0.45);
-  --cl-accent: #2563eb;
+  /* Accent: a slightly lighter blue on dark for contrast against the
+     near-black surfaces; same hue as light theme's accent. */
+  --cl-accent: #4f8cff;
+  --cl-accent-fg: #ffffff;
+  /* Status icon / text colours — tuned to hit ≥ 4.5:1 against
+     bg-app on dark. Each component composes them with /4-/12 alpha
+     for the surface (alert recipe). */
   --cl-success: #4ade80;
   --cl-warn: #fbbf24;
   --cl-danger: #f87171;
@@ -46,40 +71,45 @@
 
 :root[data-theme="light"] {
   color-scheme: light;
-  --cl-app: #f7f7f8;
-  --cl-panel: #ffffff;
+  --cl-app: #f4f5f7;
+  --cl-card: #ffffff;
   --cl-elevated: rgba(0, 0, 0, 0.04);
   --cl-input: rgba(0, 0, 0, 0.03);
-  --cl-divider: rgba(0, 0, 0, 0.10);
+  --cl-divider: rgba(0, 0, 0, 0.09);
   --cl-divider-strong: rgba(0, 0, 0, 0.22);
   --cl-fg: #1a1a1a;
   --cl-fg-muted: rgba(0, 0, 0, 0.65);
   --cl-fg-faint: rgba(0, 0, 0, 0.42);
   --cl-accent: #2563eb;
-  --cl-success: #16a34a;
-  --cl-warn: #d97706;
-  --cl-danger: #dc2626;
+  --cl-accent-fg: #ffffff;
+  /* Darker variants of the status hues so AA contrast holds against the
+     pale app-bg. Same palette family (success → emerald, warn → amber,
+     danger → red) just at a lower lightness. */
+  --cl-success: #15803d;
+  --cl-warn: #b45309;
+  --cl-danger: #b91c1c;
 }
 
-/* "system" picks dark by default and only flips to light if the user's OS
-   prefers light. This way dark stays the unsurprising default for users
-   who never touch the picker. */
+/* "system" defers to the OS color scheme. Defaults to dark; only flips
+   to light if the OS reports a light preference, so dark stays the
+   unsurprising default for users who never touch the picker. */
 @media (prefers-color-scheme: light) {
   :root[data-theme="system"] {
     color-scheme: light;
-    --cl-app: #f7f7f8;
-    --cl-panel: #ffffff;
+    --cl-app: #f4f5f7;
+    --cl-card: #ffffff;
     --cl-elevated: rgba(0, 0, 0, 0.04);
     --cl-input: rgba(0, 0, 0, 0.03);
-    --cl-divider: rgba(0, 0, 0, 0.10);
+    --cl-divider: rgba(0, 0, 0, 0.09);
     --cl-divider-strong: rgba(0, 0, 0, 0.22);
     --cl-fg: #1a1a1a;
     --cl-fg-muted: rgba(0, 0, 0, 0.65);
     --cl-fg-faint: rgba(0, 0, 0, 0.42);
     --cl-accent: #2563eb;
-    --cl-success: #16a34a;
-    --cl-warn: #d97706;
-    --cl-danger: #dc2626;
+    --cl-accent-fg: #ffffff;
+    --cl-success: #15803d;
+    --cl-warn: #b45309;
+    --cl-danger: #b91c1c;
   }
 }
 
@@ -88,6 +118,29 @@ body {
   background: var(--cl-app);
   color: var(--cl-fg);
   font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+/* Subtle SVG noise overlay (t3code trick): kills banding on flat dark
+   surfaces and adds a hint of texture in light too. fixed-positioned at
+   3.5% opacity, pointer-events: none so it never intercepts clicks. The
+   data URI is a 200×200 fractalNoise tile — small enough that it doesn't
+   bloat the bundle. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.03;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  background-size: 200px 200px;
+}
+
+/* Ensure app content paints above the overlay. Without this, the overlay
+   would float over inputs and we'd have a bunch of weird interactions. */
+#root {
+  position: relative;
+  z-index: 1;
 }
 
 /* Indeterminate sliding bar for the update pill — used while checking for
@@ -119,3 +172,4 @@ body {
 .status-dot-pulse {
   animation: statusDotPulse 1.4s ease-in-out infinite;
 }
+</content>

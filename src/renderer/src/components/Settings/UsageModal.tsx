@@ -65,7 +65,7 @@ export function UsageModal({ env, onClose }: Props) {
         <div className="flex-1 overflow-y-auto px-5 py-4">
           <ErrorBoundary
             fallback={err => (
-              <div className="text-xs text-red-300/80 whitespace-pre-wrap break-words">
+              <div className="text-xs text-danger whitespace-pre-wrap break-words">
                 Render error in usage modal:{'\n'}{err.message}
               </div>
             )}
@@ -94,7 +94,7 @@ function UsageBody({ state }: { state: ModalState }) {
 
   if (!state.ok) {
     return (
-      <div className="text-xs text-red-300/80 whitespace-pre-wrap break-words">
+      <div className="text-xs text-danger whitespace-pre-wrap break-words">
         {state.reason}
       </div>
     )
@@ -128,9 +128,9 @@ function UsageBody({ state }: { state: ModalState }) {
 
 function BarRow({ bar }: { bar: UsageBar }) {
   const tone =
-    bar.percent >= 90 ? 'bg-red-400'
-    : bar.percent >= 75 ? 'bg-amber-400'
-    : 'bg-blue-400/70'
+    bar.percent >= 90 ? 'bg-danger'
+    : bar.percent >= 75 ? 'bg-warn'
+    : 'bg-accent/70'
   return (
     <div>
       <div className="flex items-baseline justify-between gap-2 mb-1">

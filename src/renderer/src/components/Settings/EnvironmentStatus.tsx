@@ -50,13 +50,13 @@ export function EnvironmentStatus({ config, rev = 0, compact = false, onResult }
   const chip = (
     <span title={tooltip} className="inline-flex items-center gap-1 text-xs">
       {state.kind === 'checking' && <Loader2 size={12} className="animate-spin text-fg-faint" />}
-      {state.kind === 'ok' && <CheckCircle2 size={12} className="text-green-400" />}
-      {state.kind === 'error' && <XCircle size={12} className="text-red-400" />}
+      {state.kind === 'ok' && <CheckCircle2 size={12} className="text-success" />}
+      {state.kind === 'error' && <XCircle size={12} className="text-danger" />}
       {state.kind === 'idle' && <span className="w-3 h-3 rounded-full bg-elevated" />}
       {!compact && (
         <span className={
-          state.kind === 'ok' ? 'text-green-300/80'
-          : state.kind === 'error' ? 'text-red-300/80'
+          state.kind === 'ok' ? 'text-success'
+          : state.kind === 'error' ? 'text-danger'
           : 'text-fg-faint'
         }>
           {state.kind === 'ok' ? 'Claude CLI detected'

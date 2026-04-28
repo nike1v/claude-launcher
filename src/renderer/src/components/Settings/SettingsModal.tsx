@@ -158,7 +158,7 @@ function EnvironmentRow({
         type="button"
         onClick={onDelete}
         title="Remove"
-        className="p-1 rounded text-fg-faint hover:text-red-300 hover:bg-red-500/10 opacity-0 group-hover:opacity-100 transition-opacity"
+        className="p-1 rounded text-fg-faint hover:text-danger hover:bg-danger/12 opacity-0 group-hover:opacity-100 transition-opacity"
       >
         <Trash2 size={12} />
       </button>
@@ -169,7 +169,7 @@ function EnvironmentRow({
 function DropLine({ edge }: { edge: 'top' | 'bottom' }) {
   return (
     <div
-      className={`absolute inset-x-1 h-0.5 bg-blue-400/80 rounded-full pointer-events-none ${
+      className={`absolute inset-x-1 h-0.5 bg-accent/80 rounded-full pointer-events-none ${
         edge === 'top' ? 'top-0' : 'bottom-0'
       }`}
     />

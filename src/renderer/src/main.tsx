@@ -23,7 +23,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
             The launcher hit a render error. Open DevTools (Ctrl+Shift+I) for
             the full stack, then reload the window (Ctrl+R).
           </p>
-          <pre className="text-xs text-red-300/80 whitespace-pre-wrap break-words bg-elevated p-3 rounded">
+          <pre className="text-xs text-danger whitespace-pre-wrap break-words bg-elevated p-3 rounded">
             {err.stack ?? err.message}
           </pre>
         </div>

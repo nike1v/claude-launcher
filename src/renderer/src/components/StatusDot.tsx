@@ -10,11 +10,15 @@ interface Props {
   className?: string
 }
 
+// Use semantic tokens so the dots stay legible across both themes (light
+// gets darker red/green/amber for AA contrast on the pale panel; dark
+// keeps the brighter palette for legibility on near-black). The accent
+// token covers the "busy" pulse — same hue as active-tab indicator.
 const TONE: Record<Session['status'], string> = {
-  starting: 'bg-yellow-400 status-dot-pulse',
-  ready: 'bg-green-400',
-  busy: 'bg-blue-400 status-dot-pulse',
-  error: 'bg-red-400',
+  starting: 'bg-warn status-dot-pulse',
+  ready: 'bg-success',
+  busy: 'bg-accent status-dot-pulse',
+  error: 'bg-danger',
   closed: 'bg-elevated'
 }
 

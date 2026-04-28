@@ -25,8 +25,10 @@ export function App() {
 
   return (
     <div className="flex h-screen bg-app text-fg overflow-hidden">
-      {/* Sidebar */}
-      <div className="w-56 shrink-0 border-r border-divider flex flex-col">
+      {/* Sidebar — sits on bg-card (a hair lighter than bg-app) so the
+          right-edge hairline + tonal shift read as a distinct panel
+          rather than "everything is one black surface". */}
+      <div className="w-56 shrink-0 border-r border-divider flex flex-col bg-card">
         <Sidebar />
       </div>
 

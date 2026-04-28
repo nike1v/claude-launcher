@@ -190,7 +190,7 @@ function StopButton({ sessionId }: { sessionId: string }) {
       type="button"
       onClick={() => interruptSession(sessionId)}
       title="Stop"
-      className="p-2 text-red-400/80 hover:text-red-300 transition-colors"
+      className="p-2 text-danger/80 hover:text-danger transition-colors"
     >
       <Square size={14} fill="currentColor" />
     </button>
