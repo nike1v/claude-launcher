@@ -164,6 +164,30 @@ describe('SessionManager', () => {
     expect(message.length).toBeLessThan(3 * 1024)
   })
 
+  it('interrupt writes a control_request/interrupt JSON line to stdin and does NOT kill the process', async () => {
+    // Regression for the v0.4.4 bug report: signalling the child on
+    // Windows / WSL / SSH tore down the transport (wsl.exe / ssh.exe) and
+    // closed the chat, instead of just aborting the in-flight claude turn.
+    const sessionId = await manager.startSession(makeEnv(), makeProject())
+    manager.interruptSession(sessionId)
+    const proc = mockTransport.spawn.mock.results[0].value
+
+    expect(proc.kill).not.toHaveBeenCalled()
+
+    const writes = proc._written as string[]
+    const interruptLine = writes.find(line => line.includes('"control_request"'))
+    expect(interruptLine).toBeDefined()
+    const parsed = JSON.parse(interruptLine!.trim())
+    expect(parsed.type).toBe('control_request')
+    expect(parsed.request).toEqual({ subtype: 'interrupt' })
+    expect(parsed.request_id).toMatch(/^req_/)
+
+    expect(onEvent).toHaveBeenCalledWith(
+      'session:status',
+      expect.objectContaining({ sessionId, status: 'ready' })
+    )
+  })
+
   it('skips spawn and emits error when probe rejects', async () => {
     mockTransport.probe = vi.fn(async () => ({ ok: false as const, reason: 'no claude' }))
     await manager.startSession(makeEnv(), makeProject())

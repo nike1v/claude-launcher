@@ -170,9 +170,10 @@ function SendButton({
   )
 }
 
-// Visible only while the active session is busy — clicking sends SIGINT to
-// the claude subprocess so the in-flight turn aborts without ending the
-// session.
+// Visible only while the active session is busy — clicking sends a
+// stream-json control_request/interrupt over stdin so claude aborts the
+// in-flight turn without us tearing down the wsl.exe / ssh / claude child
+// (which would close the whole chat).
 function StopButton({ sessionId }: { sessionId: string }): JSX.Element | null {
   const isBusy = useSessionsStore(s => s.sessions[sessionId]?.status === 'busy')
   if (!isBusy) return null
