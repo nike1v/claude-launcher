@@ -9,7 +9,32 @@ permissions:
   contents: write
 
 jobs:
+  # Gate every release build on the test suite. The v0.4.1 → v0.4.2
+  # regression (a TDZ ReferenceError that crashed the main process at
+  # boot, presenting as a blank sidebar in the wild) would have been
+  # caught here by tests/integration/ipc-handlers-boot.test.ts, which
+  # runs registerIpcHandlers() with stubbed electron and asserts the
+  # full surface registers without throwing. If `verify` fails, no
+  # platform builds run, no artifacts upload, no release publishes.
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v5
+        with:
+          version: latest
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: 'pnpm'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pnpm install
+      - run: pnpm test
+
   build-linux:
+    needs: verify
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -49,6 +74,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   build-windows:
+    needs: verify
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v6
@@ -82,6 +108,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   build-macos:
+    needs: verify
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v6

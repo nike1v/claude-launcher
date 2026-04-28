@@ -228,3 +228,26 @@ export type IpcEventChannel = Extract<
   keyof IpcChannels,
   'session:event' | 'session:status' | 'projects:loaded' | 'environments:loaded' | 'updater:status'
 >
+
+// The shape contextBridge exposes on `window.electronAPI`. Lifted to shared/
+// so the renderer can typecheck `window.electronAPI.invoke(...)` without
+// reaching into the preload's compile unit (which lives under the node
+// tsconfig project and isn't visible to the renderer's web tsconfig).
+export interface ElectronApi {
+  platform: NodeJS.Platform
+  invoke<K extends keyof IpcChannels>(
+    channel: K,
+    payload: IpcChannels[K]
+  ): Promise<unknown>
+  on<K extends IpcEventChannel>(
+    channel: K,
+    handler: (payload: IpcChannels[K]) => void
+  ): () => void
+}
+
+declare global {
+  // eslint-disable-next-line @typescript-eslint/no-empty-object-type
+  interface Window {
+    electronAPI: ElectronApi
+  }
+}

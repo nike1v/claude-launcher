@@ -2,7 +2,8 @@
   "include": [
     "electron.vite.config.*",
     "src/main/**/*",
-    "src/preload/**/*"
+    "src/preload/**/*",
+    "src/shared/**/*"
   ],
   "compilerOptions": {
     "composite": true,
@@ -12,7 +13,10 @@
     "lib": ["ES2022"],
     "strict": true,
     "skipLibCheck": true,
-    "noEmit": false,
+    // Project references work with noEmit since TS 4.8 — keeping this on
+    // means `tsc -b` is a pure typecheck, no .d.ts files get scattered
+    // into the source tree.
+    "noEmit": true,
     "types": ["electron-vite/node", "node"]
   }
 }

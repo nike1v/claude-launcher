@@ -6,6 +6,14 @@ out/
 .vite/
 *.tsbuildinfo
 
+# Stray TS-emit output. The project compiles via electron-vite, never tsc;
+# anything `tsc -b` writes into the source tree is by accident and should
+# stay out of git.
+src/**/*.js
+src/**/*.d.ts
+electron.vite.config.js
+electron.vite.config.d.ts
+
 # Tauri / Rust
 src-tauri/target/
 target/

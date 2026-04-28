@@ -1,7 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { IpcChannels, IpcEventChannel } from '../shared/types'
+import type { ElectronApi, IpcChannels, IpcEventChannel } from '../shared/types'
 
-const api = {
+const api: ElectronApi = {
   platform: process.platform as NodeJS.Platform,
 
   invoke: <K extends keyof IpcChannels>(
@@ -21,9 +21,3 @@ const api = {
 }
 
 contextBridge.exposeInMainWorld('electronAPI', api)
-
-declare global {
-  interface Window {
-    electronAPI: typeof api
-  }
-}
