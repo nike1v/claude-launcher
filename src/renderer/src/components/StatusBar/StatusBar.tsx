@@ -3,7 +3,10 @@ import { useProjectsStore } from '../../store/projects'
 import { useEnvironmentsStore } from '../../store/environments'
 import { useMessagesStore } from '../../store/messages'
 import { ContextMeter } from './ContextMeter'
-import type { AssistantEvent, InitEvent, ResultEvent } from '../../../../shared/types'
+import type { InitEvent, StreamJsonEvent } from '../../../../shared/types'
+
+const isInit = (e: StreamJsonEvent): e is InitEvent =>
+  e.type === 'system' && e.subtype === 'init'
 
 export function StatusBar(): JSX.Element {
   const { sessions, activeSessionId } = useSessionsStore()
@@ -16,9 +19,7 @@ export function StatusBar(): JSX.Element {
   const env = project ? environments.find(e => e.id === project.environmentId) : null
 
   const messages = activeSessionId ? (messagesBySession[activeSessionId] ?? []) : []
-  const initEvent = messages
-    .map(m => m.event)
-    .find((e): e is InitEvent => e.type === 'system' && (e as { subtype?: string }).subtype === 'init')
+  const initEvent = messages.map(m => m.event).find(isInit)
 
   // The init event is a runtime stream-json event and isn't recorded to the
   // JSONL transcript, so a freshly restored tab has no init yet. Fall back to
@@ -60,7 +61,7 @@ export function StatusBar(): JSX.Element {
 }
 
 function computeContextFill(
-  events: ReadonlyArray<{ type: string }>,
+  events: readonly StreamJsonEvent[],
   model: string | undefined,
   cachedTotal: number | undefined
 ): { used: number; total: number } | null {
@@ -69,9 +70,9 @@ function computeContextFill(
   let used: number | null = null
   let totalFromResult: number | null = null
   for (let i = events.length - 1; i >= 0; i--) {
-    const ev = events[i] as AssistantEvent | ResultEvent | { type: string }
+    const ev = events[i]
     if (used === null && ev.type === 'assistant') {
-      const usage = (ev as AssistantEvent).message.usage
+      const usage = ev.message.usage
       if (usage) {
         used =
           (usage.input_tokens ?? 0) +
@@ -80,7 +81,7 @@ function computeContextFill(
       }
     }
     if (totalFromResult === null && ev.type === 'result') {
-      const mu = (ev as ResultEvent).modelUsage
+      const mu = ev.modelUsage
       if (mu) {
         for (const v of Object.values(mu)) {
           if (v?.contextWindow) { totalFromResult = v.contextWindow; break }

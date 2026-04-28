@@ -1,6 +1,16 @@
 import { create } from 'zustand'
 import type { Project } from '../../../shared/types'
 
+// Fire-and-forget IPC save with surfaced rejection. Without the .catch the
+// renderer's in-memory state diverges from disk silently when main fails to
+// write the file (permission error, disk full, IPC timeout). The console
+// error gives us at least a breadcrumb in DevTools.
+const saveProjects = (projects: Project[]): void => {
+  window.electronAPI.invoke('projects:save', projects).catch((err: unknown) => {
+    console.error('[projects:save] persistence write failed', err)
+  })
+}
+
 interface ProjectsStore {
   projects: Project[]
   activeProjectId: string | null
@@ -23,19 +33,19 @@ export const useProjectsStore = create<ProjectsStore>((set, get) => ({
   addProject: (project) => {
     const updated = [...get().projects, project]
     set({ projects: updated })
-    window.electronAPI.invoke('projects:save', updated)
+    saveProjects(updated)
   },
 
   updateProject: (project) => {
     const updated = get().projects.map(p => p.id === project.id ? project : p)
     set({ projects: updated })
-    window.electronAPI.invoke('projects:save', updated)
+    saveProjects(updated)
   },
 
   removeProject: (id) => {
     const updated = get().projects.filter(p => p.id !== id)
     set({ projects: updated })
-    window.electronAPI.invoke('projects:save', updated)
+    saveProjects(updated)
   },
 
   reorderProjects: (fromId, toId, position) => {
@@ -51,7 +61,7 @@ export const useProjectsStore = create<ProjectsStore>((set, get) => ({
     if (position === 'after') insertAt += 1
     next.splice(insertAt, 0, moved)
     set({ projects: next })
-    window.electronAPI.invoke('projects:save', next)
+    saveProjects(next)
   },
 
   setActiveProjectId: (id) => set({ activeProjectId: id })

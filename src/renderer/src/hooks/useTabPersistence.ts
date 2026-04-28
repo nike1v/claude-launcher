@@ -71,16 +71,28 @@ async function restoreTabs(knownProjectIds: string[]): Promise<void> {
     // claudeSessionId from disk is preserved either way; the user can
     // re-send a message to retry the connection.
     let sessionId: string
+    let initialStatus: import('../../../shared/types').Session['status'] = 'starting'
+    let errorMessage: string | undefined
     try {
       sessionId = await startSession(tab.projectId, tab.claudeSessionId)
-    } catch {
+    } catch (err) {
+      // startSession rejects when the IPC layer itself errors (project /
+      // env disappeared between save and restore). Fabricating a UUID lets
+      // us preserve the tab in tabs.json (so it survives the next persist
+      // write), but we tag it 'error' so ChatPanel surfaces "close and
+      // reopen" — the renderer-side id is unknown to main, so any
+      // sendMessage to it would silently no-op without this flag.
+      console.error('[restoreTabs] startSession failed for', tab.projectId, err)
       sessionId = crypto.randomUUID()
+      initialStatus = 'error'
+      errorMessage = err instanceof Error ? err.message : 'Could not start session'
     }
     addSession({
       id: sessionId,
       projectId: tab.projectId,
       claudeSessionId: tab.claudeSessionId,
-      status: 'starting',
+      status: initialStatus,
+      errorMessage,
       hasUnread: false,
       lastModel: tab.lastModel,
       lastContextWindow: tab.lastContextWindow
@@ -88,9 +100,10 @@ async function restoreTabs(knownProjectIds: string[]): Promise<void> {
     try {
       const events = await loadSessionHistory(tab.projectId, tab.claudeSessionId)
       if (events.length) prependEvents(sessionId, events)
-    } catch {
+    } catch (err) {
       // History unavailable — leave the tab empty; resume still works once
       // the first turn lands.
+      console.warn('[restoreTabs] loadSessionHistory failed for', tab.claudeSessionId, err)
     }
     if (firstRestoredId === null) firstRestoredId = sessionId
     // Map the saved active index (in the saved list) to the restored tab.

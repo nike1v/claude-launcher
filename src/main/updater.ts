@@ -66,25 +66,36 @@ export function initAutoUpdater(win: BrowserWindow): void {
     send(win, { state: 'error', message: err.message })
   })
 
+  const reportCheckError = (err: unknown): void => {
+    if (err instanceof Error && isMissingReleaseAssetError(err)) {
+      send(win, { state: 'up-to-date' })
+      return
+    }
+    const message = err instanceof Error ? err.message : 'Update check failed'
+    console.error('[updater] checkForUpdates rejected:', err)
+    send(win, { state: 'error', message })
+  }
+
   const checkForUpdates = (): void => {
     forceFreshCheck()
-    autoUpdater.checkForUpdates().catch(() => {})
+    autoUpdater.checkForUpdates().catch(reportCheckError)
   }
 
   patchHelpMenu(checkForUpdates)
 
   ipcMain.handle('updater:check', () => {
     forceFreshCheck()
-    autoUpdater.checkForUpdates().catch(() => {})
+    autoUpdater.checkForUpdates().catch(reportCheckError)
   })
 
   ipcMain.handle('updater:install', () => {
     autoUpdater.quitAndInstall()
   })
 
-  // Silent startup check — the renderer's pill is hidden until the first
-  // status event arrives, so we let `checking-for-update` be that trigger.
-  autoUpdater.checkForUpdates().catch(() => {})
+  // Silent startup check — surface failures the same way as a manual check
+  // so a broken release feed doesn't sit invisible until the user clicks
+  // "Check for updates".
+  autoUpdater.checkForUpdates().catch(reportCheckError)
 }
 
 function isMissingReleaseAssetError(err: Error): boolean {

@@ -3,7 +3,7 @@ import { readdir, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join, resolve, sep } from 'node:path'
 import type { HostType } from '../shared/types'
-import { shQuote as shellQuote } from './transports/path-probe'
+import { shQuote } from './transports/path-probe'
 
 export interface DirListing {
   // The absolute directory we ended up listing (after resolving "" / "~").
@@ -113,5 +113,3 @@ function runRemote(bin: string, args: string[]): Promise<string> {
   })
 }
 
-// Re-export under the local name so the existing call site stays readable.
-const shQuote = shellQuote

@@ -5,7 +5,6 @@ import { useProjectsStore } from '../../store/projects'
 import { useEnvironmentsStore } from '../../store/environments'
 import { useSessionsStore } from '../../store/sessions'
 import { ProjectGroup } from './ProjectGroup'
-import { HistoryList } from './HistoryList'
 import { AddProjectModal } from './AddProjectModal'
 import { UpdatePill } from './UpdatePill'
 import { SettingsModal } from '../Settings/SettingsModal'
@@ -60,8 +59,6 @@ export function Sidebar(): JSX.Element {
             No projects yet. Hover an environment and click + to add one.
           </p>
         )}
-
-        <HistoryList />
       </div>
 
       <UpdatePill />

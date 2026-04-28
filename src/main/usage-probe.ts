@@ -43,11 +43,21 @@ export async function probeUsage(host: HostType): Promise<UsageProbeResult> {
     let usageSent = false
     let settled = false
 
+    // All timers / intervals scheduled inside this promise — finish() walks
+    // the list and clears every one. Previously only hardTimer + stableTimer
+    // were tracked, so the trust-dismiss / usage-send setTimeouts could fire
+    // after settle and call .write() on a killed PTY. They no-op via the
+    // settled guard, but holding timer handles past resolve is sloppy.
+    const timers: (NodeJS.Timeout | NodeJS.Timer)[] = []
+    const track = <T extends NodeJS.Timeout | NodeJS.Timer>(t: T): T => { timers.push(t); return t }
+
     const finish = (r: UsageProbeResult): void => {
       if (settled) return
       settled = true
-      clearTimeout(hardTimer)
-      clearInterval(stableTimer)
+      for (const t of timers) {
+        clearTimeout(t as NodeJS.Timeout)
+        clearInterval(t as NodeJS.Timeout)
+      }
       try { term.kill() } catch { /* already dead */ }
       resolve(r)
     }
@@ -103,21 +113,21 @@ export async function probeUsage(host: HostType): Promise<UsageProbeResult> {
     // whether the dialog actually appeared (already-trusted dirs skip it):
     // sending a stray Enter to the prompt simply submits an empty message
     // which claude ignores — no cost, no prompt to the model.
-    setTimeout(() => {
+    track(setTimeout(() => {
       if (settled) return
       term.write('\r')
-    }, TRUST_DISMISS_DELAY_MS)
+    }, TRUST_DISMISS_DELAY_MS))
 
-    setTimeout(() => {
+    track(setTimeout(() => {
       if (settled) return
       usageSent = true
       lastDataAt = Date.now()
       term.write('/usage\r')
-    }, TRUST_DISMISS_DELAY_MS + USAGE_CMD_DELAY_MS)
+    }, TRUST_DISMISS_DELAY_MS + USAGE_CMD_DELAY_MS))
 
     // Stable-bytes detector: once output stops growing for STABLE_GAP_MS
     // *after* /usage was sent, assume it's done rendering and capture.
-    const stableTimer = setInterval(() => {
+    track(setInterval(() => {
       if (!usageSent) return
       if (Date.now() - lastDataAt < STABLE_GAP_MS) return
       const parsed = parseUsage(buf)
@@ -128,9 +138,9 @@ export async function probeUsage(host: HostType): Promise<UsageProbeResult> {
         // for a touch longer in case the panel's still painting; the hard
         // timeout will release us.
       }
-    }, 500)
+    }, 500))
 
-    const hardTimer = setTimeout(() => {
+    track(setTimeout(() => {
       const parsed = parseUsage(buf)
       if (parsed.bars.length) finishOk(parsed)
       else {
@@ -145,7 +155,7 @@ export async function probeUsage(host: HostType): Promise<UsageProbeResult> {
             : 'No output from claude — is the CLI installed and authenticated on this env?'
         })
       }
-    }, TOTAL_TIMEOUT_MS)
+    }, TOTAL_TIMEOUT_MS))
   })
 }
 
