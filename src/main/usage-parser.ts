@@ -43,10 +43,11 @@ export function parseUsage(raw: string): ParsedUsage {
     const pctMatch = /(\d+)\s*%\s*used/i.exec(window)
     if (!pctMatch) continue
     // Reset line shows up right after the percent, e.g. "Resets 4:50am
-    // (Europe/Warsaw)" or "Resets Apr 30, 4am (Europe/Warsaw)". Capture
-    // until the next double-space gap or newline so we don't pick up the
-    // *next* section's label.
-    const resetMatch = /Resets?\s+([^\n]+?)(?=\s{2,}|\n|$)/i.exec(window)
+    // (Europe/Warsaw)" or "Resets Apr 30, 4am (Europe/Warsaw)". After ANSI
+    // strip the next section's bar glyphs and status text run on the same
+    // line, so anchor the capture on the trailing "(timezone)" — every
+    // /usage reset string ends with a parenthesised tz.
+    const resetMatch = /Resets?\s+([^\n]+?\([^)\n]+\))/i.exec(window)
     bars.push({
       key: key as UsageBar['key'],
       label: labelMatch[0].replace(/\s+/g, ' ').trim(),
@@ -56,7 +57,10 @@ export function parseUsage(raw: string): ParsedUsage {
   }
 
   const costMatch = /Total\s*cost\s*:\s*\$?\s*([\d.]+)/i.exec(text)
-  const apiDurMatch = /Total\s*duration\s*\(API\)\s*:\s*([^\n]+?)(?=\s{2,}|\n|$)/i.exec(text)
+  // API duration is always a numeric value with a unit suffix (ms / s / m /
+  // h). Anchor the capture on the unit so we don't bleed into the next
+  // line's "Total duration (wall): …" or "Total code changes: …" text.
+  const apiDurMatch = /Total\s*duration\s*\(API\)\s*:\s*([\d.]+\s*(?:ms|s|m|h))\b/i.exec(text)
 
   return {
     bars,
