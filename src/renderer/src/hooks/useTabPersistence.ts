@@ -52,15 +52,31 @@ async function restoreTabs(knownProjectIds: string[]): Promise<void> {
   let saved: PersistedTabs
   try {
     saved = await loadTabs()
-  } catch {
+  } catch (err) {
+    console.warn('[restoreTabs] loadTabs failed:', err)
     return
   }
-  if (!saved.tabs.length) return
+  console.log(`[restoreTabs] saved.tabs=${saved.tabs.length}, knownProjects=${knownProjectIds.length}`)
+  if (!saved.tabs.length) {
+    console.log('[restoreTabs] no tabs in tabs.json — skipping restore (open the project from the sidebar to start fresh)')
+    return
+  }
 
   const known = new Set(knownProjectIds)
   const restorable = saved.tabs.filter(
     t => t.claudeSessionId && known.has(t.projectId)
   )
+  // Log every dropped tab with the reason — this is the most common cause
+  // of "history doesn't load": the tab persisted before claude returned a
+  // session_id, or the project was deleted, so we have nothing to resume.
+  for (const t of saved.tabs) {
+    if (!t.claudeSessionId) {
+      console.warn(`[restoreTabs] dropping tab project=${t.projectId} — no claudeSessionId saved (session never reached system:init before app close)`)
+    } else if (!known.has(t.projectId)) {
+      console.warn(`[restoreTabs] dropping tab project=${t.projectId} sess=${t.claudeSessionId} — project no longer in projects.json`)
+    }
+  }
+  console.log(`[restoreTabs] restorable=${restorable.length}`)
   if (!restorable.length) return
 
   const { addSession, setActiveSession } = useSessionsStore.getState()
@@ -75,6 +91,7 @@ async function restoreTabs(knownProjectIds: string[]): Promise<void> {
   // append-only).
   const restored = await Promise.all(
     restorable.map(async (tab, idx) => {
+      console.log(`[restoreTabs] restoring tab #${idx} project=${tab.projectId} sess=${tab.claudeSessionId}`)
       let sessionId: string
       let initialStatus: import('../../../shared/types').Session['status'] = 'starting'
       let errorMessage: string | undefined
@@ -96,15 +113,12 @@ async function restoreTabs(knownProjectIds: string[]): Promise<void> {
       try {
         const result = await loadSessionHistory(tab.projectId, tab.claudeSessionId)
         events = result.events
-        // Surface the main-side diagnostic in the renderer console so the
-        // user actually sees it in DevTools when "history doesn't load".
-        // Main-process console.* doesn't reach browser DevTools.
         if (result.diagnostic) {
           console.warn(`[history] ${tab.claudeSessionId}: ${result.diagnostic}`)
+        } else {
+          console.log(`[history] ${tab.claudeSessionId}: loaded ${events.length} events`)
         }
       } catch (err) {
-        // History unavailable — leave the tab empty; resume still works once
-        // the first turn lands.
         console.warn('[restoreTabs] loadSessionHistory failed for', tab.claudeSessionId, err)
       }
       return { idx, tab, sessionId, initialStatus, errorMessage, events }
