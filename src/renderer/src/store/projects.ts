@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { Project } from '../../../shared/types'
+import { reorderById } from '../lib/reorder'
 
 // Fire-and-forget IPC save with surfaced rejection. Without the .catch the
 // renderer's in-memory state diverges from disk silently when main fails to
@@ -49,17 +50,8 @@ export const useProjectsStore = create<ProjectsStore>((set, get) => ({
   },
 
   reorderProjects: (fromId, toId, position) => {
-    if (fromId === toId) return
-    const current = get().projects
-    const fromIdx = current.findIndex(p => p.id === fromId)
-    const toIdx = current.findIndex(p => p.id === toId)
-    if (fromIdx < 0 || toIdx < 0) return
-    const next = [...current]
-    const [moved] = next.splice(fromIdx, 1)
-    // After splice, indices >= fromIdx shifted left by 1; recompute target.
-    let insertAt = toIdx > fromIdx ? toIdx - 1 : toIdx
-    if (position === 'after') insertAt += 1
-    next.splice(insertAt, 0, moved)
+    const next = reorderById(get().projects, fromId, toId, position)
+    if (!next) return
     set({ projects: next })
     saveProjects(next)
   },

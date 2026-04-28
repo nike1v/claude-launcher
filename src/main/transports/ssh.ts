@@ -5,6 +5,7 @@ import type { ITransport, ProbeResult, SpawnOptions } from './types'
 import { runPathProbe, probeScript, shQuote } from './path-probe'
 import { getCachedPath, setCachedPath } from './path-cache'
 import { validateSshHost } from './validate-ssh'
+import { validateProjectPath, validateClaudeArg } from './validate-path'
 import { buildClaudeArgs, filteredEnv } from './shared'
 
 export class SshTransport implements ITransport {
@@ -12,6 +13,9 @@ export class SshTransport implements ITransport {
     const { host, path, model, resumeSessionId } = options
     if (host.kind !== 'ssh') throw new Error('SshTransport requires ssh host')
     validateSshHost(host)
+    validateProjectPath(path)
+    if (model) validateClaudeArg(model, 'model')
+    if (resumeSessionId) validateClaudeArg(resumeSessionId, 'resumeSessionId')
 
     const claudeArgs = buildClaudeArgs(model, resumeSessionId)
 
@@ -22,10 +26,17 @@ export class SshTransport implements ITransport {
     // we set it explicitly here and exec claude so stdin/stdout passthrough
     // stays clean (the previous `bash -lc` wrapper interfered with stdin
     // in some setups, making stream-json mode bail at the 3s timeout).
+    //
+    // *** Use shQuote(...) — NOT JSON.stringify — for path and each arg. ***
+    // The remote `sh -c` parses our string as a script. JSON.stringify wraps
+    // the value in double quotes, but inside double quotes `$(...)` and
+    // backticks still expand, so a path of `$(reboot)` (from a tampered
+    // projects.json or even a misclick in PathCombobox) would execute on
+    // the remote. Single-quote wrapping is inert.
     const cachedPath = getCachedPath(host)
-    const quotedArgs = claudeArgs.map(arg => JSON.stringify(arg)).join(' ')
+    const quotedArgs = claudeArgs.map(arg => shQuote(arg)).join(' ')
     const pathExport = cachedPath ? `export PATH=${shQuote(cachedPath)}; ` : ''
-    const innerScript = `${pathExport}cd ${JSON.stringify(path)} && exec claude ${quotedArgs}`
+    const innerScript = `${pathExport}cd ${shQuote(path)} && exec claude ${quotedArgs}`
     const remoteCommand = `sh -c ${shQuote(innerScript)}`
 
     const sshArgs = ['-T', ...sshConnectArgs(host)]

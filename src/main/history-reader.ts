@@ -6,6 +6,13 @@ import type { HostType, StreamJsonEvent } from '../shared/types'
 import { parseStreamJsonLine } from './stream-json-parser'
 import { validateSshHost, validateWslDistro } from './transports/validate-ssh'
 
+// Claude session ids are UUID-shaped strings the CLI writes into the JSONL
+// transcript filename. Anything else is renderer-injected garbage and
+// shouldn't be allowed near `path.join`, where `..` would escape the
+// project directory and let a compromised renderer read any *.jsonl on
+// disk through `session:history:load`.
+const SESSION_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/
+
 // JSONL transcripts can be hundreds of KB and grow unbounded; reading them via
 // execFile would silently truncate (default 1 MiB stdout buffer) and reject
 // with ERR_CHILD_PROCESS_STDOUT_MAXBUFFER, which our caller then turns into
@@ -59,6 +66,7 @@ function streamCommand(bin: string, args: string[]): Promise<string> {
 
 export class HistoryReader {
   public async loadSessionEvents(host: HostType, projectPath: string, sessionId: string): Promise<StreamJsonEvent[]> {
+    if (!SESSION_ID_PATTERN.test(sessionId)) return []
     if (host.kind === 'local') {
       const filePath = join(localClaudeProjectDir(projectPath), `${sessionId}.jsonl`)
       let content: string

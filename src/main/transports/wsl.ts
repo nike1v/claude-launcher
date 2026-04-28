@@ -5,6 +5,7 @@ import type { ITransport, ProbeResult, SpawnOptions } from './types'
 import { runPathProbe, probeScript } from './path-probe'
 import { getCachedPath, setCachedPath } from './path-cache'
 import { validateWslDistro } from './validate-ssh'
+import { validateProjectPath, validateClaudeArg } from './validate-path'
 import { buildClaudeArgs, filteredEnv } from './shared'
 
 export class WslTransport implements ITransport {
@@ -12,6 +13,9 @@ export class WslTransport implements ITransport {
     const { host, path, model, resumeSessionId } = options
     if (host.kind !== 'wsl') throw new Error('WslTransport requires wsl host')
     validateWslDistro(host.distro)
+    validateProjectPath(path)
+    if (model) validateClaudeArg(model, 'model')
+    if (resumeSessionId) validateClaudeArg(resumeSessionId, 'resumeSessionId')
 
     // wsl.exe spawns a non-login non-interactive shell that ignores
     // ~/.profile etc., so claude installed via npm-global / ~/.local/bin is

@@ -2,6 +2,22 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import type { Environment, HostType, Project } from '../shared/types'
+import { validateSshHost, validateWslDistro } from './transports/validate-ssh'
+import { isSameHostTarget, describeHost } from '../shared/host-utils'
+
+// True iff this HostType passes the same validation we apply at spawn time.
+// Used by the migration path so a corrupted projects.json can't smuggle a
+// host with a leading-dash hostname (or whitespace, control bytes, etc.)
+// from the old `Project.host` field into the new environments.json.
+function isValidHost(host: HostType): boolean {
+  try {
+    if (host.kind === 'ssh') validateSshHost(host)
+    else if (host.kind === 'wsl') validateWslDistro(host.distro)
+    return true
+  } catch {
+    return false
+  }
+}
 
 export class EnvironmentStore {
   public constructor(private readonly filePath: string) {}
@@ -47,6 +63,10 @@ export function migrateProjectsToEnvironments(
       continue
     }
     if (!p.host || !p.id || !p.name || !p.path) continue
+    // Skip projects whose persisted host can't pass the live validators —
+    // that would just rewrite the bogus host into environments.json and
+    // make it survive a manual cleanup of projects.json.
+    if (!isValidHost(p.host)) continue
     const env = findOrCreateEnvironment(envs, p.host)
     out.push({
       id: p.id,
@@ -62,29 +82,16 @@ export function migrateProjectsToEnvironments(
 }
 
 function findOrCreateEnvironment(envs: Environment[], host: HostType): Environment {
-  const match = envs.find(e => sameHost(e.config, host))
+  // Use the shared dedup so a v0.3 install with `port: 22` explicit doesn't
+  // double-migrate against a v0.4 environments.json that omits the port. The
+  // UI uses the same comparator for "Add Environment" duplicate detection.
+  const match = envs.find(e => isSameHostTarget(e.config, host))
   if (match) return match
   const created: Environment = {
     id: randomUUID(),
-    name: defaultEnvName(host),
+    name: describeHost(host),
     config: host
   }
   envs.push(created)
   return created
-}
-
-function sameHost(a: HostType, b: HostType): boolean {
-  if (a.kind !== b.kind) return false
-  if (a.kind === 'local' && b.kind === 'local') return true
-  if (a.kind === 'wsl' && b.kind === 'wsl') return a.distro === b.distro
-  if (a.kind === 'ssh' && b.kind === 'ssh') {
-    return a.user === b.user && a.host === b.host && (a.port ?? 22) === (b.port ?? 22)
-  }
-  return false
-}
-
-function defaultEnvName(host: HostType): string {
-  if (host.kind === 'local') return 'Local'
-  if (host.kind === 'wsl') return `WSL · ${host.distro}`
-  return `SSH · ${host.user}@${host.host}`
 }

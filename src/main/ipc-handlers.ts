@@ -37,21 +37,30 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): () => Promise<vo
 
   const sessionManager = new SessionManager(undefined, safeSend)
 
+  // Track every channel handle() registers so teardown can unhook them
+  // automatically. The previous version maintained a hardcoded array that
+  // had to be kept in sync with each `handle('foo', ...)` call below — and
+  // didn't (the boot-smoke test asserted a list that was already stale by
+  // the time dialog:saveFile shipped).
+  const registered = new Set<string>()
   const handle = <K extends keyof IpcChannels>(
     channel: K,
     handler: (payload: IpcChannels[K]) => unknown
-  ) => ipcMain.handle(channel as string, async (_event, payload) => {
-    try {
-      return await handler(payload)
-    } catch (err) {
-      // Re-throw so the renderer's .catch path still fires, but log the
-      // full error here. Without this, IPC failures only surface as the
-      // renderer's "Error invoking remote method" with no context, which
-      // makes diagnosing prod issues a guessing game.
-      console.error(`[ipc] ${channel} threw:`, err)
-      throw err
-    }
-  })
+  ) => {
+    registered.add(channel as string)
+    ipcMain.handle(channel as string, async (_event, payload) => {
+      try {
+        return await handler(payload)
+      } catch (err) {
+        // Re-throw so the renderer's .catch path still fires, but log the
+        // full error here. Without this, IPC failures only surface as the
+        // renderer's "Error invoking remote method" with no context, which
+        // makes diagnosing prod issues a guessing game.
+        console.error(`[ipc] ${channel} threw:`, err)
+        throw err
+      }
+    })
+  }
 
   handle('session:start', async ({ projectId, resumeSessionId }) => {
     const project = projectStore.load().find(p => p.id === projectId)
@@ -124,7 +133,12 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): () => Promise<vo
     try {
       return await probeUsage(config)
     } catch (err) {
-      const reason = err instanceof Error ? `${err.message}\n${err.stack ?? ''}` : String(err)
+      // Do NOT include err.stack here — that surfaces internal asar paths
+      // and node_modules layout to the renderer (and into the Settings
+      // modal DOM), which is useful info for an attacker chaining a
+      // hypothetical assistant-output XSS. The console.error in the IPC
+      // wrapper still has the full stack for debugging.
+      const reason = err instanceof Error ? err.message : String(err)
       return { ok: false, reason: `usage probe crashed: ${reason}` }
     }
   })
@@ -150,14 +164,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): () => Promise<vo
 
   return async () => {
     stopped = true
-    const channels = [
-      'session:start', 'session:send', 'session:stop', 'session:interrupt', 'session:permission',
-      'projects:save', 'projects:load', 'session:history:load',
-      'environments:save', 'environments:load', 'environments:probe', 'environments:usage',
-      'fs:listDir',
-      'tabs:load', 'tabs:save', 'dialog:saveFile'
-    ]
-    channels.forEach(ch => ipcMain.removeHandler(ch))
+    for (const channel of registered) ipcMain.removeHandler(channel)
     await sessionManager.stopAll()
   }
 }
