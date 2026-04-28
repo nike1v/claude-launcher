@@ -29,12 +29,20 @@ export function useTabPersistence(): void {
     })
   }, [projects])
 
-  // 2. Persist tab state on every change — but only after restore has run,
-  //    so we don't overwrite the on-disk state with an empty snapshot.
+  // 2. Persist tab state when the *serialised* shape changes — but only
+  //    after restore has run, so we don't overwrite the on-disk state with
+  //    an empty snapshot. The naive subscribe-and-write fired tabs.json on
+  //    every status event (busy → ready, hasUnread flips, etc.) — i.e. dozens
+  //    of writes per turn for what's actually a static shape. Diffing the
+  //    serialised JSON skips those non-events.
   useEffect(() => {
+    let prevFingerprint: string | null = null
     return useSessionsStore.subscribe((state) => {
       if (!restoredRef.current) return
       const persisted = serializeTabs(state.sessions, state.tabOrder, state.activeSessionId)
+      const fingerprint = JSON.stringify(persisted)
+      if (fingerprint === prevFingerprint) return
+      prevFingerprint = fingerprint
       saveTabs(persisted)
     })
   }, [])
@@ -59,56 +67,60 @@ async function restoreTabs(knownProjectIds: string[]): Promise<void> {
   const { prependEvents } = useMessagesStore.getState()
   const { setActiveProjectId } = useProjectsStore.getState()
 
+  // Fan out per-tab IPC calls in parallel — sequential restore meant N tabs
+  // each blocked on a cold SSH probe (up to 25 s) before the UI showed
+  // anything. Parallel cuts that to one probe-RTT for the whole restore.
+  // Order is preserved by keeping the original index on each result and
+  // calling addSession in that order at the end (zustand's tabOrder is
+  // append-only).
+  const restored = await Promise.all(
+    restorable.map(async (tab, idx) => {
+      let sessionId: string
+      let initialStatus: import('../../../shared/types').Session['status'] = 'starting'
+      let errorMessage: string | undefined
+      try {
+        sessionId = await startSession(tab.projectId, tab.claudeSessionId)
+      } catch (err) {
+        // startSession rejects when the IPC layer itself errors (project /
+        // env disappeared between save and restore). Fabricating a UUID lets
+        // us preserve the tab in tabs.json (so it survives the next persist
+        // write), but we tag it 'error' so ChatPanel surfaces "close and
+        // reopen" — the renderer-side id is unknown to main, so any
+        // sendMessage to it would silently no-op without this flag.
+        console.error('[restoreTabs] startSession failed for', tab.projectId, err)
+        sessionId = crypto.randomUUID()
+        initialStatus = 'error'
+        errorMessage = err instanceof Error ? err.message : 'Could not start session'
+      }
+      let events: import('../../../shared/types').StreamJsonEvent[] = []
+      try {
+        events = await loadSessionHistory(tab.projectId, tab.claudeSessionId)
+      } catch (err) {
+        // History unavailable — leave the tab empty; resume still works once
+        // the first turn lands.
+        console.warn('[restoreTabs] loadSessionHistory failed for', tab.claudeSessionId, err)
+      }
+      return { idx, tab, sessionId, initialStatus, errorMessage, events }
+    })
+  )
+
   let firstRestoredId: string | null = null
   let activeRestoredId: string | null = null
-
-  for (let i = 0; i < restorable.length; i++) {
-    const tab = restorable[i]
-    // Each step is wrapped independently so a transient failure (claude not
-    // on PATH, wsl.exe cold-start timeout, missing JSONL) doesn't silently
-    // drop the tab from in-memory state — which would then cascade into the
-    // next persistence write overwriting tabs.json without it. The tab's
-    // claudeSessionId from disk is preserved either way; the user can
-    // re-send a message to retry the connection.
-    let sessionId: string
-    let initialStatus: import('../../../shared/types').Session['status'] = 'starting'
-    let errorMessage: string | undefined
-    try {
-      sessionId = await startSession(tab.projectId, tab.claudeSessionId)
-    } catch (err) {
-      // startSession rejects when the IPC layer itself errors (project /
-      // env disappeared between save and restore). Fabricating a UUID lets
-      // us preserve the tab in tabs.json (so it survives the next persist
-      // write), but we tag it 'error' so ChatPanel surfaces "close and
-      // reopen" — the renderer-side id is unknown to main, so any
-      // sendMessage to it would silently no-op without this flag.
-      console.error('[restoreTabs] startSession failed for', tab.projectId, err)
-      sessionId = crypto.randomUUID()
-      initialStatus = 'error'
-      errorMessage = err instanceof Error ? err.message : 'Could not start session'
-    }
+  for (const r of restored) {
     addSession({
-      id: sessionId,
-      projectId: tab.projectId,
-      claudeSessionId: tab.claudeSessionId,
-      status: initialStatus,
-      errorMessage,
+      id: r.sessionId,
+      projectId: r.tab.projectId,
+      claudeSessionId: r.tab.claudeSessionId,
+      status: r.initialStatus,
+      errorMessage: r.errorMessage,
       hasUnread: false,
-      lastModel: tab.lastModel,
-      lastContextWindow: tab.lastContextWindow
+      lastModel: r.tab.lastModel,
+      lastContextWindow: r.tab.lastContextWindow
     })
-    try {
-      const events = await loadSessionHistory(tab.projectId, tab.claudeSessionId)
-      if (events.length) prependEvents(sessionId, events)
-    } catch (err) {
-      // History unavailable — leave the tab empty; resume still works once
-      // the first turn lands.
-      console.warn('[restoreTabs] loadSessionHistory failed for', tab.claudeSessionId, err)
-    }
-    if (firstRestoredId === null) firstRestoredId = sessionId
-    // Map the saved active index (in the saved list) to the restored tab.
-    if (saved.activeIndex !== null && saved.tabs[saved.activeIndex] === tab) {
-      activeRestoredId = sessionId
+    if (r.events.length) prependEvents(r.sessionId, r.events)
+    if (firstRestoredId === null) firstRestoredId = r.sessionId
+    if (saved.activeIndex !== null && saved.tabs[saved.activeIndex] === r.tab) {
+      activeRestoredId = r.sessionId
     }
   }
 

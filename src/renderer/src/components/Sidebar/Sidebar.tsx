@@ -1,6 +1,7 @@
 import { Settings as SettingsIcon } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import type { Environment, Project } from '../../../../shared/types'
+import { describeHost } from '../../../../shared/host-utils'
 import { useProjectsStore } from '../../store/projects'
 import { useEnvironmentsStore } from '../../store/environments'
 import { useSessionsStore } from '../../store/sessions'
@@ -10,16 +11,18 @@ import { UpdatePill } from './UpdatePill'
 import { SettingsModal } from '../Settings/SettingsModal'
 
 export function Sidebar(): JSX.Element {
-  const { projects } = useProjectsStore()
-  const { environments } = useEnvironmentsStore()
-  const { sessions, activeSessionId } = useSessionsStore()
+  const projects = useProjectsStore(s => s.projects)
+  const environments = useEnvironmentsStore(s => s.environments)
+  // Per-field selectors so the sidebar doesn't redraw on every chat event
+  // landing in `sessions[id].hasUnread` / `.status` — only the active
+  // pointer matters here, plus a single lookup of its projectId.
+  const activeSessionId = useSessionsStore(s => s.activeSessionId)
+  const activeProjectId = useSessionsStore(
+    s => (s.activeSessionId ? s.sessions[s.activeSessionId]?.projectId ?? null : null)
+  )
   const [showSettings, setShowSettings] = useState(false)
   const [addToEnv, setAddToEnv] = useState<string | null>(null)
   const [editProject, setEditProject] = useState<Project | null>(null)
-
-  const activeProject = activeSessionId
-    ? projects.find(p => p.id === sessions[activeSessionId]?.projectId)
-    : undefined
 
   const groups = useMemo(() => groupByEnvironment(projects, environments), [projects, environments])
 
@@ -43,7 +46,7 @@ export function Sidebar(): JSX.Element {
             groupKey={env.id}
             label={environmentLabel(env)}
             projects={groupProjects}
-            activeProjectId={activeProject?.id ?? null}
+            activeProjectId={activeProjectId}
             onEdit={setEditProject}
             onAddProject={() => setAddToEnv(env.id)}
           />
@@ -91,8 +94,5 @@ function groupByEnvironment(projects: Project[], envs: Environment[]) {
 }
 
 function environmentLabel(env: Environment): string {
-  if (env.name) return env.name
-  if (env.config.kind === 'local') return 'Local'
-  if (env.config.kind === 'wsl') return `WSL: ${env.config.distro}`
-  return `SSH: ${env.config.host}`
+  return env.name || describeHost(env.config)
 }

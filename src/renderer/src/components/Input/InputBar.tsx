@@ -233,12 +233,13 @@ export function InputBar({ sessionId, disabled = false }: Props): JSX.Element {
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const addFiles = useCallback(async (files: FileList | File[]) => {
-    const fileArr = Array.from(files)
-    const additions: PendingAttachment[] = []
-    for (const file of fileArr) {
-      const att = await fileToAttachment(file)
-      if (att) additions.push(att)
-    }
+    // Each fileToAttachment runs a FileReader round-trip — sequential await
+    // makes a 5-image paste a 5×readtime stall. Reads are independent and
+    // cheap to fan out.
+    const results = await Promise.all(
+      Array.from(files).map(file => fileToAttachment(file))
+    )
+    const additions = results.filter((a): a is PendingAttachment => a !== null)
     if (additions.length) setAttachments(prev => [...prev, ...additions])
   }, [])
 

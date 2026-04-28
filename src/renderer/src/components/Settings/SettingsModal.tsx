@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { X, Plus, Pencil, Trash2, GripVertical, BarChart3 } from 'lucide-react'
-import type { Environment, HostType } from '../../../../shared/types'
+import type { Environment } from '../../../../shared/types'
+import { describeHost } from '../../../../shared/host-utils'
 import { useEnvironmentsStore } from '../../store/environments'
 import { useProjectsStore } from '../../store/projects'
 import { useDragReorder } from '../../hooks/useDragReorder'
@@ -160,14 +161,6 @@ function EnvironmentRow({
       </button>
     </div>
   )
-}
-
-function describeHost(host: HostType): string {
-  if (host.kind === 'local') return 'Local'
-  if (host.kind === 'wsl') return `WSL · ${host.distro}`
-  // Omit user@ when blank — the label collapses to just the host alias.
-  const target = host.user ? `${host.user}@${host.host}` : host.host
-  return `SSH · ${target}${host.port ? `:${host.port}` : ''}`
 }
 
 function DropLine({ edge }: { edge: 'top' | 'bottom' }): JSX.Element {

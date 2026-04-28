@@ -26,12 +26,17 @@ export const useSessionsStore = create<SessionsStore>((set, get) => ({
     })),
 
   updateSession: (sessionId, update) =>
-    set(state => ({
-      sessions: {
-        ...state.sessions,
-        [sessionId]: { ...state.sessions[sessionId]!, ...update }
+    set(state => {
+      // A session:status event can arrive after removeSession (close-tab race
+      // or a transport that exited mid-cleanup). Without this guard the
+      // non-null assertion below crashes the renderer with "Cannot read
+      // properties of undefined".
+      const existing = state.sessions[sessionId]
+      if (!existing) return state
+      return {
+        sessions: { ...state.sessions, [sessionId]: { ...existing, ...update } }
       }
-    })),
+    }),
 
   removeSession: (sessionId) => {
     const { tabOrder, activeSessionId } = get()
@@ -54,10 +59,11 @@ export const useSessionsStore = create<SessionsStore>((set, get) => ({
   },
 
   markRead: (sessionId) =>
-    set(state => ({
-      sessions: {
-        ...state.sessions,
-        [sessionId]: { ...state.sessions[sessionId]!, hasUnread: false }
+    set(state => {
+      const existing = state.sessions[sessionId]
+      if (!existing) return state
+      return {
+        sessions: { ...state.sessions, [sessionId]: { ...existing, hasUnread: false } }
       }
-    }))
+    })
 }))

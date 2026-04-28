@@ -34,6 +34,11 @@ export function initAutoUpdater(win: BrowserWindow): void {
 
   autoUpdater.autoDownload = true
   autoUpdater.autoInstallOnAppQuit = false
+  // Stable channel only. electron-updater otherwise auto-flips this to true
+  // whenever app.getVersion() includes a SemVer prerelease tag — a future
+  // build accidentally tagged `0.5.0-rc.1` would silently switch every user
+  // running it onto the prerelease feed for the rest of the install's life.
+  autoUpdater.allowPrerelease = false
 
   autoUpdater.on('checking-for-update', () => {
     send(win, { state: 'checking' })

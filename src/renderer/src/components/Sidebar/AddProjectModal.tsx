@@ -7,6 +7,7 @@ import { Modal } from '../Modal'
 import { ModelCombobox } from '../Settings/ModelCombobox'
 import { PathCombobox } from '../Settings/PathCombobox'
 import { findDuplicateEnvironment } from '../../lib/environment-dedup'
+import { describeHost } from '../../../../shared/host-utils'
 
 interface Props {
   onClose: () => void
@@ -253,15 +254,10 @@ function findOrCreateEnvironment(
   if (match) return match
   const created: Environment = {
     id: crypto.randomUUID(),
-    name: defaultName(host),
+    name: describeHost(host),
     config: host
   }
   addEnvironment(created)
   return created
 }
 
-function defaultName(host: HostType): string {
-  if (host.kind === 'local') return 'Local'
-  if (host.kind === 'wsl') return `WSL · ${host.distro}`
-  return host.user ? `SSH · ${host.user}@${host.host}` : `SSH · ${host.host}`
-}

@@ -4,10 +4,14 @@ import type { HostType } from '../../shared/types'
 import type { ITransport, ProbeResult, SpawnOptions } from './types'
 import { runProbe } from './probe'
 import { buildClaudeArgs } from './shared'
+import { validateProjectPath, validateClaudeArg } from './validate-path'
 
 export class LocalTransport implements ITransport {
   public spawn(options: SpawnOptions): ChildProcess {
     const { path, model, resumeSessionId } = options
+    validateProjectPath(path)
+    if (model) validateClaudeArg(model, 'model')
+    if (resumeSessionId) validateClaudeArg(resumeSessionId, 'resumeSessionId')
     // Direct spawn — Electron is normally launched from a shell that has
     // already sourced the user's profile, so claude is on the inherited PATH.
     // Routing through `bash -lc 'claude "$@"'` re-sources the user profile on

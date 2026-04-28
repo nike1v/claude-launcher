@@ -11,7 +11,12 @@ export function App(): JSX.Element {
   useIpcListeners()
   useTabPersistence()
 
-  const { tabOrder, activeSessionId } = useSessionsStore()
+  // Select per-field so App doesn't re-render on every status / hasUnread
+  // event landing in `sessions[id]` — only the actual tab list / active
+  // pointer matter at this level. Cuts re-renders from O(events) to
+  // O(tab-changes).
+  const tabOrder = useSessionsStore(s => s.tabOrder)
+  const activeSessionId = useSessionsStore(s => s.activeSessionId)
 
   useEffect(() => {
     window.electronAPI.invoke('environments:load', {})

@@ -22,6 +22,9 @@ interface ActiveSession {
   markedReady: boolean
   stopping: boolean
   exited: Promise<void>
+  // Held on the session so handleStdout can clear it from a result/assistant
+  // event without us having to thread the closure variable through.
+  readyTimer: NodeJS.Timeout | null
 }
 
 const SHUTDOWN_GRACE_MS = 1500
@@ -87,7 +90,8 @@ export class SessionManager {
       lineBuffer: '',
       markedReady: false,
       stopping: false,
-      exited
+      exited,
+      readyTimer: null
     }
     this.sessions.set(sessionId, session)
 
@@ -98,12 +102,15 @@ export class SessionManager {
       // first assistant/result event), the fallback timer is dead weight —
       // clear it so it doesn't keep the event loop alive for the full
       // READY_FALLBACK_MS window after every session start.
-      clearTimeout(readyTimer)
+      if (session.readyTimer) {
+        clearTimeout(session.readyTimer)
+        session.readyTimer = null
+      }
       this.onEvent('session:status', { sessionId, status: 'ready' })
     }
 
     // Fallback: if init event never arrives, mark ready after timeout
-    const readyTimer = setTimeout(markReady, READY_FALLBACK_MS)
+    session.readyTimer = setTimeout(markReady, READY_FALLBACK_MS)
 
     let spawnError: string | null = null
 
@@ -132,7 +139,10 @@ export class SessionManager {
     })
     process.stdin?.on('error', () => {})
     process.on('exit', (code) => {
-      clearTimeout(readyTimer)
+      if (session.readyTimer) {
+        clearTimeout(session.readyTimer)
+        session.readyTimer = null
+      }
       this.sessions.delete(sessionId)
       resolveExited()
       if (session.stopping) return
@@ -309,11 +319,21 @@ export class SessionManager {
         markReady()
       } else if (event.type === 'result') {
         // A turn finished — back to ready so the spinner clears. We bypass
-        // markReady here because that's gated to fire only once.
+        // markReady's once-only gate here so 'ready' fires after every
+        // turn, but still drop the fallback timer so it doesn't keep the
+        // event loop alive past the genuine first ready transition.
         session.markedReady = true
+        if (session.readyTimer) {
+          clearTimeout(session.readyTimer)
+          session.readyTimer = null
+        }
         this.onEvent('session:status', { sessionId: session.sessionId, status: 'ready' })
       } else if (event.type === 'assistant') {
         session.markedReady = true
+        if (session.readyTimer) {
+          clearTimeout(session.readyTimer)
+          session.readyTimer = null
+        }
         this.onEvent('session:status', { sessionId: session.sessionId, status: 'busy' })
       }
 

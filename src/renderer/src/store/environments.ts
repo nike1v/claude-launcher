@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { Environment } from '../../../shared/types'
+import { reorderById } from '../lib/reorder'
 
 const saveEnvironments = (envs: Environment[]): void => {
   window.electronAPI.invoke('environments:save', envs).catch((err: unknown) => {
@@ -41,16 +42,8 @@ export const useEnvironmentsStore = create<EnvironmentsStore>((set, get) => ({
   },
 
   reorderEnvironments: (fromId, toId, position) => {
-    if (fromId === toId) return
-    const current = get().environments
-    const fromIdx = current.findIndex(e => e.id === fromId)
-    const toIdx = current.findIndex(e => e.id === toId)
-    if (fromIdx < 0 || toIdx < 0) return
-    const next = [...current]
-    const [moved] = next.splice(fromIdx, 1)
-    let insertAt = toIdx > fromIdx ? toIdx - 1 : toIdx
-    if (position === 'after') insertAt += 1
-    next.splice(insertAt, 0, moved)
+    const next = reorderById(get().environments, fromId, toId, position)
+    if (!next) return
     set({ environments: next })
     saveEnvironments(next)
   }
