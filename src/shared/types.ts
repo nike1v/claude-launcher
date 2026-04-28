@@ -32,6 +32,15 @@ export interface Project {
   // Lets the sidebar resume the same Claude conversation after the tab is
   // closed — we pass it as --resume and reload its JSONL transcript.
   lastClaudeSessionId?: string
+  // Latest model claude reported for this project, and the latest context
+  // window it told us about. Updated whenever new info arrives. Used by the
+  // sidebar resume flow so the StatusBar shows real values immediately
+  // instead of "blank model + 200K total" while a cold SSH session-start
+  // (which can take 5–10 s) is in flight. Mirrors PersistedTab's lastModel /
+  // lastContextWindow, but lives on the project record so it survives a tab
+  // close (which strips the entry from tabs.json).
+  lastModel?: string
+  lastContextWindow?: number
 }
 
 export interface Session {

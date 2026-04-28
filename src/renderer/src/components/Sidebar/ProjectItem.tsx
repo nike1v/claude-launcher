@@ -47,13 +47,29 @@ export function ProjectItem({ project, isActive, onEdit }: Props): JSX.Element {
     startingProjects.add(project.id)
     try {
       const resume = project.lastClaudeSessionId
-      const sessionId = await startSession(project.id, resume)
+      let sessionId: string
+      try {
+        sessionId = await startSession(project.id, resume)
+      } catch (err) {
+        // The IPC layer rejects when the project / env disappeared between
+        // store load and click, or when transport spawn ENOENTs. Without
+        // this log the user just sees nothing happen on click — surface it.
+        console.error('[ProjectItem] startSession failed for', project.id, err)
+        return
+      }
       addSession({
         id: sessionId,
         projectId: project.id,
         claudeSessionId: resume,
         status: 'starting',
-        hasUnread: false
+        hasUnread: false,
+        // Pull cached values off the project so the StatusBar shows the
+        // right model + context window immediately instead of flashing
+        // empty during the SSH cold-start window. Updated by listeners.ts
+        // on every init / result, so this is always current as of the
+        // last successful run.
+        lastModel: project.lastModel,
+        lastContextWindow: project.lastContextWindow
       })
       if (resume) {
         try {
