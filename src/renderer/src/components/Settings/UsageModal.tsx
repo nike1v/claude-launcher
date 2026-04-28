@@ -10,13 +10,23 @@ interface Props {
   onClose: () => void
 }
 
+type LoadingState = { loading: true }
+type ModalState = UsageProbeResult | LoadingState | null
+
+// Type predicate so TS can narrow `state` properly between branches —
+// without it the `'loading' in state` inline check leaves UsageProbeResult
+// fields undiscriminated past the early return.
+function isLoading(s: ModalState): s is LoadingState {
+  return s !== null && 'loading' in s && s.loading === true
+}
+
 // Renders the subscription / weekly usage bars for one environment, scraped
 // from claude's interactive `/usage` view via a one-shot PTY probe in the
 // main process. The probe takes a few seconds (claude startup + auth + API
 // round-trip), so we open the modal in a loading state and resolve once the
 // scraper returns.
-export function UsageModal({ env, onClose }: Props): JSX.Element {
-  const [state, setState] = useState<UsageProbeResult | { loading: true } | null>({ loading: true })
+export function UsageModal({ env, onClose }: Props) {
+  const [state, setState] = useState<ModalState>({ loading: true })
 
   const fetch = (): void => {
     setState({ loading: true })
@@ -40,11 +50,11 @@ export function UsageModal({ env, onClose }: Props): JSX.Element {
           <div className="flex items-center gap-1.5 shrink-0">
             <button
               onClick={fetch}
-              disabled={state && 'loading' in state && state.loading}
+              disabled={isLoading(state)}
               title="Refresh"
               className="p-1.5 rounded text-white/40 hover:text-white hover:bg-white/5 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
             >
-              <RefreshCw size={14} className={state && 'loading' in state && state.loading ? 'animate-spin' : ''} />
+              <RefreshCw size={14} className={isLoading(state) ? 'animate-spin' : ''} />
             </button>
             <button onClick={onClose} className="p-1.5 rounded text-white/40 hover:text-white hover:bg-white/5">
               <X size={14} />
@@ -68,8 +78,8 @@ export function UsageModal({ env, onClose }: Props): JSX.Element {
   )
 }
 
-function UsageBody({ state }: { state: UsageProbeResult | { loading: true } | null }): JSX.Element {
-  if (!state || ('loading' in state && state.loading)) {
+function UsageBody({ state }: { state: ModalState }) {
+  if (state === null || isLoading(state)) {
     return (
       <div className="space-y-3">
         <SkeletonBar />
@@ -116,7 +126,7 @@ function UsageBody({ state }: { state: UsageProbeResult | { loading: true } | nu
   )
 }
 
-function BarRow({ bar }: { bar: UsageBar }): JSX.Element {
+function BarRow({ bar }: { bar: UsageBar }) {
   const tone =
     bar.percent >= 90 ? 'bg-red-400'
     : bar.percent >= 75 ? 'bg-amber-400'
@@ -135,7 +145,7 @@ function BarRow({ bar }: { bar: UsageBar }): JSX.Element {
   )
 }
 
-function SkeletonBar(): JSX.Element {
+function SkeletonBar() {
   return (
     <div>
       <div className="h-3 w-32 bg-white/5 rounded mb-1.5 animate-pulse" />

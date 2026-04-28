@@ -8,7 +8,7 @@ import type { InitEvent, StreamJsonEvent } from '../../../../shared/types'
 const isInit = (e: StreamJsonEvent): e is InitEvent =>
   e.type === 'system' && e.subtype === 'init'
 
-export function StatusBar(): JSX.Element {
+export function StatusBar() {
   const { sessions, activeSessionId } = useSessionsStore()
   const { projects } = useProjectsStore()
   const { environments } = useEnvironmentsStore()

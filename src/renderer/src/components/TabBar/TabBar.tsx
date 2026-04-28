@@ -4,7 +4,7 @@ import { useMessagesStore } from '../../store/messages'
 import { stopSession } from '../../ipc/bridge'
 import { Tab } from './Tab'
 
-export function TabBar(): JSX.Element {
+export function TabBar() {
   const { sessions, tabOrder, activeSessionId, setActiveSession, removeSession } = useSessionsStore()
   const { clearSession } = useMessagesStore()
 

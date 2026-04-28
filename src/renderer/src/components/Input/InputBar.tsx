@@ -121,7 +121,7 @@ function ComposerInner({
   attachments: PendingAttachment[]
   clearAttachments: () => void
   onPaste: (e: React.ClipboardEvent) => void
-}): JSX.Element {
+}) {
   const submit = useSubmit({ sessionId, disabled: !!disabled, attachments, clearAttachments })
   return (
     <>
@@ -164,7 +164,7 @@ function SendButton({
 }: {
   disabled: boolean
   submit: () => boolean
-}): JSX.Element {
+}) {
   return (
     <button
       type="button"
@@ -182,7 +182,7 @@ function SendButton({
 // stream-json control_request/interrupt over stdin so claude aborts the
 // in-flight turn without us tearing down the wsl.exe / ssh / claude child
 // (which would close the whole chat).
-function StopButton({ sessionId }: { sessionId: string }): JSX.Element | null {
+function StopButton({ sessionId }: { sessionId: string }) {
   const isBusy = useSessionsStore(s => s.sessions[sessionId]?.status === 'busy')
   if (!isBusy) return null
   return (
@@ -243,7 +243,7 @@ function SubmitOnEnterPlugin({ submit }: { submit: () => boolean }): null {
   return null
 }
 
-export function InputBar({ sessionId, disabled = false }: Props): JSX.Element {
+export function InputBar({ sessionId, disabled = false }: Props) {
   const [attachments, setAttachments] = useState<PendingAttachment[]>([])
   const [dragActive, setDragActive] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -356,7 +356,7 @@ function AttachmentChip({
 }: {
   att: PendingAttachment
   onRemove: () => void
-}): JSX.Element {
+}) {
   const isImage = att.kind === 'image'
   return (
     <div className="flex items-center gap-1.5 bg-white/[0.06] border border-white/10 rounded px-2 py-1 text-xs text-white/70">

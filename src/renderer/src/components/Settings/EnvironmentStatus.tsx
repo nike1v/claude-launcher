@@ -21,7 +21,7 @@ interface Props {
   onResult?: (state: ProbeState) => void
 }
 
-export function EnvironmentStatus({ config, rev = 0, compact = false, onResult }: Props): JSX.Element {
+export function EnvironmentStatus({ config, rev = 0, compact = false, onResult }: Props) {
   const [state, setState] = useState<ProbeState>({ kind: 'idle' })
   const [trigger, setTrigger] = useState(0)
 

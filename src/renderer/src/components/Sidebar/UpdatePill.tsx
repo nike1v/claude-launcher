@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, type ReactNode } from 'react'
 import { checkForUpdates, installUpdate } from '../../ipc/bridge'
 import type { UpdaterStatus } from '../../../../shared/types'
 
@@ -6,7 +6,7 @@ import type { UpdaterStatus } from '../../../../shared/types'
 // after a check finishes with no update available.
 const UP_TO_DATE_LINGER_MS = 4000
 
-export function UpdatePill(): JSX.Element | null {
+export function UpdatePill() {
   const [status, setStatus] = useState<UpdaterStatus | null>(null)
   const [dismissed, setDismissed] = useState(false)
 
@@ -50,7 +50,7 @@ interface View {
   title: string
   version?: string
   tone: string
-  action: JSX.Element
+  action: ReactNode
 }
 
 function describe(status: UpdaterStatus): View {
@@ -120,7 +120,7 @@ function ActionButton({
   onClick: () => void
   label: string
   emphasized?: boolean
-}): JSX.Element {
+}) {
   // No horizontal padding so the action text starts at the same x as the
   // title text in the row above.
   return (
@@ -145,7 +145,7 @@ function ProgressBar({
   percent: number | null
   indeterminate?: boolean
   label?: string
-}): JSX.Element {
+}) {
   const showHeader = !!label || percent !== null
   return (
     <div className="flex flex-col gap-1">

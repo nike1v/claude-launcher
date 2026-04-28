@@ -14,7 +14,7 @@ interface Props {
   onClose: () => void
 }
 
-export function SettingsModal({ onClose }: Props): JSX.Element {
+export function SettingsModal({ onClose }: Props) {
   const { environments, addEnvironment, updateEnvironment, removeEnvironment, reorderEnvironments } = useEnvironmentsStore()
   const { projects } = useProjectsStore()
   const [editing, setEditing] = useState<Environment | 'new' | null>(null)
@@ -120,7 +120,7 @@ function EnvironmentRow({
   onEdit: () => void
   onDelete: () => void
   onShowUsage: () => void
-}): JSX.Element {
+}) {
   return (
     <div className="group flex items-center gap-3 px-3 py-2 rounded border border-white/10 hover:border-white/20 transition-colors">
       <GripVertical size={12} className="text-white/20 group-hover:text-white/40 cursor-grab shrink-0" />
@@ -163,7 +163,7 @@ function EnvironmentRow({
   )
 }
 
-function DropLine({ edge }: { edge: 'top' | 'bottom' }): JSX.Element {
+function DropLine({ edge }: { edge: 'top' | 'bottom' }) {
   return (
     <div
       className={`absolute inset-x-1 h-0.5 bg-blue-400/80 rounded-full pointer-events-none ${

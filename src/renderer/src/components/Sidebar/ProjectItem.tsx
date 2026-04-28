@@ -20,7 +20,7 @@ interface Props {
 // of the in-flight start and silently drop concurrent clicks.
 const startingProjects = new Set<string>()
 
-export function ProjectItem({ project, isActive, onEdit }: Props): JSX.Element {
+export function ProjectItem({ project, isActive, onEdit }: Props) {
   const { addSession, setActiveSession } = useSessionsStore()
   const { setActiveProjectId, removeProject } = useProjectsStore()
   // Mirror the tab's status dot in the sidebar so the user can see which

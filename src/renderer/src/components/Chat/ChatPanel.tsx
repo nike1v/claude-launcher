@@ -6,7 +6,7 @@ interface Props {
   sessionId: string
 }
 
-export function ChatPanel({ sessionId }: Props): JSX.Element {
+export function ChatPanel({ sessionId }: Props) {
   const { sessions } = useSessionsStore()
   const session = sessions[sessionId]
 
@@ -29,10 +29,14 @@ export function ChatPanel({ sessionId }: Props): JSX.Element {
     )
   }
 
+  // 'starting' and 'error' early-returned above, so by here status is one of
+  // 'ready' | 'busy' | 'closed'. Disable input on a closed session — the
+  // child has exited and a send would silently no-op. (The earlier
+  // `=== 'starting'` check was dead after the early-return refactor.)
   return (
     <div className="h-full flex flex-col">
       <MessageList sessionId={sessionId} />
-      <InputBar sessionId={sessionId} disabled={session.status === 'starting'} />
+      <InputBar sessionId={sessionId} disabled={session.status === 'closed'} />
     </div>
   )
 }

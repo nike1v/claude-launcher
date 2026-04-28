@@ -7,7 +7,7 @@ import { TabBar } from './components/TabBar/TabBar'
 import { ChatPanel } from './components/Chat/ChatPanel'
 import { StatusBar } from './components/StatusBar/StatusBar'
 
-export function App(): JSX.Element {
+export function App() {
   useIpcListeners()
   useTabPersistence()
 

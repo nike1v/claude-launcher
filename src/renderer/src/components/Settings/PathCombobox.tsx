@@ -14,7 +14,7 @@ interface Props {
 // we list the directory portion (prefix up to the last separator) and
 // suggest immediate subdirectories that match the trailing fragment.
 // Suggestions are debounced to keep WSL/SSH listings cheap.
-export function PathCombobox({ value, onChange, config, placeholder }: Props): JSX.Element {
+export function PathCombobox({ value, onChange, config, placeholder }: Props) {
   const [open, setOpen] = useState(false)
   const [suggestions, setSuggestions] = useState<string[]>([])
   const [loading, setLoading] = useState(false)

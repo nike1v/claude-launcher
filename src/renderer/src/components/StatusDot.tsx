@@ -29,7 +29,7 @@ const TITLE: Record<Session['status'], string> = {
 // Single source of truth for the per-session colored status dot. Used in
 // the tab bar and the sidebar project list so both surfaces always agree
 // on what's happening for a given session.
-export function StatusDot({ status, size = 'xs', className = '' }: Props): JSX.Element {
+export function StatusDot({ status, size = 'xs', className = '' }: Props) {
   const tone = status ? TONE[status] : 'bg-white/10'
   const title = status ? TITLE[status] : 'No active session'
   const dim = size === 'sm' ? 'w-2 h-2' : 'w-1.5 h-1.5'
