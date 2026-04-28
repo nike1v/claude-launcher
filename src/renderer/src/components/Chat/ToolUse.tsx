@@ -17,12 +17,12 @@ export function ToolUse({ name, input, result }: Props) {
   const isError = result?.is_error === true
 
   return (
-    <div className={`border rounded-lg overflow-hidden text-xs ${isError ? 'border-red-500/30' : 'border-divider'}`}>
+    <div className={`border rounded-lg overflow-hidden text-xs ${isError ? 'border-danger/32' : 'border-divider'}`}>
       <button
         onClick={() => setExpanded(e => !e)}
         className={`flex items-center gap-2 w-full px-3 py-2 transition-colors text-left ${
           isError
-            ? 'text-red-300/80 hover:text-red-300 hover:bg-red-500/5'
+            ? 'text-danger/80 hover:text-danger hover:bg-danger/8'
             : 'text-fg-faint hover:text-fg-muted hover:bg-elevated'
         }`}
       >
@@ -34,7 +34,10 @@ export function ToolUse({ name, input, result }: Props) {
         )}
       </button>
       {expanded && (
-        <div className="bg-black/20 border-t border-divider">
+        // Inset detail panel sits one tier deeper than the tool-use card —
+        // bg-app rather than the default bg-card the chat lives on. Reads
+        // as "drilled into" in both themes.
+        <div className="bg-app border-t border-divider">
           <div className="px-3 py-2">
             <div className="text-fg-faint mb-1">input</div>
             <pre className="text-fg-muted overflow-x-auto whitespace-pre-wrap">
@@ -44,7 +47,7 @@ export function ToolUse({ name, input, result }: Props) {
           {resultText !== null && (
             <div className="px-3 py-2 border-t border-divider">
               <div className="text-fg-faint mb-1">{isError ? 'error' : 'result'}</div>
-              <pre className={`overflow-x-auto whitespace-pre-wrap ${isError ? 'text-red-300/80' : 'text-fg-muted'}`}>
+              <pre className={`overflow-x-auto whitespace-pre-wrap ${isError ? 'text-danger' : 'text-fg-muted'}`}>
                 {resultText}
               </pre>
             </div>

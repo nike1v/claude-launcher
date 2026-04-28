@@ -32,7 +32,7 @@ export class ErrorBoundary extends Component<Props, State> {
     if (this.state.err) {
       if (this.props.fallback) return this.props.fallback(this.state.err)
       return (
-        <div className="p-4 text-xs text-red-300/80">
+        <div className="p-4 text-xs text-danger">
           Something went wrong rendering this view. Open DevTools (Ctrl+Shift+I)
           for details.
           <pre className="mt-2 whitespace-pre-wrap">{this.state.err.message}</pre>

@@ -124,7 +124,7 @@ export function ProjectItem({ project, isActive, onEdit }: Props) {
         <button
           type="button"
           onClick={handleDelete}
-          className="p-1 rounded hover:bg-red-500/20 text-fg-faint hover:text-red-300"
+          className="p-1 rounded hover:bg-danger/20 text-fg-faint hover:text-danger"
           title="Remove project"
         >
           <Trash2 size={12} />

@@ -12,13 +12,13 @@ export function ContextMeter({ used, total }: Props) {
   const percent = Math.round(ratio * 100)
 
   const tone =
-    ratio >= 0.9 ? 'bg-red-400'
-    : ratio >= 0.75 ? 'bg-amber-400'
+    ratio >= 0.9 ? 'bg-danger'
+    : ratio >= 0.75 ? 'bg-warn'
     : 'bg-fg-faint'
 
   const textTone =
-    ratio >= 0.9 ? 'text-red-300/80'
-    : ratio >= 0.75 ? 'text-amber-300/80'
+    ratio >= 0.9 ? 'text-danger'
+    : ratio >= 0.75 ? 'text-warn'
     : 'text-fg-faint'
 
   return (

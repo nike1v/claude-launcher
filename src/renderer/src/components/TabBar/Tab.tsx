@@ -37,7 +37,7 @@ export function Tab({ session, isActive, onActivate, onClose }: Props) {
         {project?.name ?? 'Unknown'}
       </span>
       {session.hasUnread && !isActive && (
-        <span className="w-1.5 h-1.5 rounded-full bg-blue-400 shrink-0" />
+        <span className="w-1.5 h-1.5 rounded-full bg-accent shrink-0" />
       )}
       <button
         onClick={e => { e.stopPropagation(); onClose() }}

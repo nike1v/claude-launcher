@@ -54,9 +54,9 @@ interface View {
 }
 
 function describe(status: UpdaterStatus): View {
-  const tonePrimary = 'bg-blue-600/90 text-fg'
+  const tonePrimary = 'bg-accent text-fg'
   const toneNeutral = 'bg-elevated text-fg-muted border border-divider'
-  const toneError = 'bg-red-600/80 text-fg'
+  const toneError = 'bg-danger/90 text-fg'
 
   switch (status.state) {
     case 'checking':
@@ -156,8 +156,11 @@ function ProgressBar({
         </div>
       )}
       <div className="h-1 rounded-full bg-elevated overflow-hidden relative">
+        {/* Use --accent-fg as the fill on accent-coloured pills (white on
+            blue) and --fg-muted on the neutral idle pill — keeps the bar
+            visible in both light and dark themes. */}
         <div
-          className={`h-full bg-white/90 ${indeterminate ? 'indeterminate-bar' : 'transition-all'}`}
+          className={`h-full bg-fg-muted ${indeterminate ? 'indeterminate-bar' : 'transition-all'}`}
           style={percent !== null ? { width: `${percent}%` } : undefined}
         />
       </div>
