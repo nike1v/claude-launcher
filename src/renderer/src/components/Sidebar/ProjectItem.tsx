@@ -2,7 +2,8 @@ import { Pencil, Trash2 } from 'lucide-react'
 import type { Project } from '../../../../shared/types'
 import { useSessionsStore } from '../../store/sessions'
 import { useProjectsStore } from '../../store/projects'
-import { startSession } from '../../ipc/bridge'
+import { useMessagesStore } from '../../store/messages'
+import { loadSessionHistory, startSession } from '../../ipc/bridge'
 import { StatusDot } from '../StatusDot'
 
 interface Props {
@@ -10,6 +11,14 @@ interface Props {
   isActive: boolean
   onEdit: (project: Project) => void
 }
+
+// Module-level guard: rapid clicks on a project before the first
+// startSession resolves used to spawn a tab per click, because the
+// "existing tab?" check ran against a store that hadn't been written to
+// yet. We can't pre-create a Session synchronously (the id is generated
+// on the main side), so instead we lock the projectId for the duration
+// of the in-flight start and silently drop concurrent clicks.
+const startingProjects = new Set<string>()
 
 export function ProjectItem({ project, isActive, onEdit }: Props): JSX.Element {
   const { addSession, setActiveSession } = useSessionsStore()
@@ -34,13 +43,34 @@ export function ProjectItem({ project, isActive, onEdit }: Props): JSX.Element {
       setActiveSession(existingId)
       return
     }
-    const sessionId = await startSession(project.id)
-    addSession({
-      id: sessionId,
-      projectId: project.id,
-      status: 'starting',
-      hasUnread: false
-    })
+    if (startingProjects.has(project.id)) return
+    startingProjects.add(project.id)
+    try {
+      const resume = project.lastClaudeSessionId
+      const sessionId = await startSession(project.id, resume)
+      addSession({
+        id: sessionId,
+        projectId: project.id,
+        claudeSessionId: resume,
+        status: 'starting',
+        hasUnread: false
+      })
+      if (resume) {
+        try {
+          const result = await loadSessionHistory(project.id, resume)
+          if (result.events.length) {
+            useMessagesStore.getState().prependEvents(sessionId, result.events)
+          }
+          if (result.diagnostic) {
+            console.warn(`[history] ${resume}: ${result.diagnostic}`)
+          }
+        } catch (err) {
+          console.warn('[ProjectItem] loadSessionHistory failed for', resume, err)
+        }
+      }
+    } finally {
+      startingProjects.delete(project.id)
+    }
   }
 
   const handleEdit = (e: React.MouseEvent) => {

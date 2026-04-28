@@ -26,6 +26,19 @@ export function useIpcListeners(): void {
             if (!current.claudeSessionId) update.claudeSessionId = event.session_id
             if (event.model && current.lastModel !== event.model) update.lastModel = event.model
             if (Object.keys(update).length) updateSession(sessionId, update)
+            // Pin the session id on the project the first time we ever see
+            // one — this lets the sidebar resume the same conversation after
+            // the tab is closed. Write-once: if the user later manages to get
+            // a fresh id (e.g. after a future "prune" action), we won't
+            // clobber it here on every init.
+            const projects = useProjectsStore.getState().projects
+            const project = projects.find(p => p.id === current.projectId)
+            if (project && !project.lastClaudeSessionId) {
+              useProjectsStore.getState().updateProject({
+                ...project,
+                lastClaudeSessionId: event.session_id
+              })
+            }
           }
         }
         // Snapshot the context window the moment claude reports one — so a
