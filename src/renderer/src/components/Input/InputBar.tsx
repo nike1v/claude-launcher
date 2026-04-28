@@ -3,6 +3,7 @@ import { LexicalComposer } from '@lexical/react/LexicalComposer'
 import { PlainTextPlugin } from '@lexical/react/LexicalPlainTextPlugin'
 import { ContentEditable } from '@lexical/react/LexicalContentEditable'
 import { OnChangePlugin } from '@lexical/react/LexicalOnChangePlugin'
+import { HistoryPlugin } from '@lexical/react/LexicalHistoryPlugin'
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext'
 import {
   $getRoot,
@@ -139,6 +140,13 @@ function ComposerInner({
           ErrorBoundary={() => null}
         />
         <OnChangePlugin onChange={() => {}} />
+        {/* Records edit history and binds Ctrl/Cmd+Z (undo) and Ctrl/Cmd+
+            Shift+Z (redo). The CLEAR_HISTORY_COMMAND that submit dispatches
+            after every send was already in place — it's HistoryPlugin's API
+            for resetting the undo stack so a sent message isn't recoverable
+            via Ctrl+Z. Without this plugin mounted, that dispatch was a
+            no-op and Ctrl+Z did nothing. */}
+        <HistoryPlugin />
         <SubmitOnEnterPlugin submit={submit} />
         <FocusOnSessionChangePlugin sessionId={sessionId} />
       </div>
