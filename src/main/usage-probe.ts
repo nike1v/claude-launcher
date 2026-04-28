@@ -156,10 +156,25 @@ interface PtyCommand {
   env: NodeJS.ProcessEnv
 }
 
+const IS_WINDOWS = process.platform === 'win32'
+
 function buildCommand(host: HostType): PtyCommand | null {
   if (host.kind === 'local') {
     const probeDir = join(homedir(), PROBE_DIR_NAME)
     try { mkdirSync(probeDir, { recursive: true }) } catch { /* nbd */ }
+    if (IS_WINDOWS) {
+      // node-pty on Windows uses CreateProcessW directly, which (unlike
+      // child_process.spawn) doesn't honour PATHEXT — passing "claude" with
+      // no extension fails as "File not found" because the npm-global shim
+      // is `claude.cmd`. Route through cmd.exe so its PATH+PATHEXT search
+      // resolves the right shim.
+      return {
+        bin: 'cmd.exe',
+        args: ['/c', 'claude', '--permission-mode', 'default'],
+        cwd: probeDir,
+        env: process.env
+      }
+    }
     return {
       bin: 'claude',
       args: ['--permission-mode', 'default'],
@@ -196,7 +211,10 @@ function buildCommand(host: HostType): PtyCommand | null {
     const inner = `[ -f ~/.bashrc ] && . ~/.bashrc 2>/dev/null; mkdir -p ~/${PROBE_DIR_NAME} && cd ~/${PROBE_DIR_NAME} && exec claude --permission-mode default`
     sshArgs.push(`bash -lc ${shQ(inner)}`)
     return {
-      bin: 'ssh',
+      // node-pty/Windows needs the explicit .exe (CreateProcessW skips
+      // PATHEXT). Windows ships OpenSSH at C:\Windows\System32\OpenSSH —
+      // ssh.exe is on the system PATH there.
+      bin: IS_WINDOWS ? 'ssh.exe' : 'ssh',
       args: sshArgs,
       cwd: process.cwd(),
       env: filteredEnv()
