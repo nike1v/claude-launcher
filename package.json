@@ -1,6 +1,6 @@
 {
   "name": "claude-launcher",
-  "version": "0.2.0",
+  "version": "0.3.0-alpha.9",
   "description": "Electron desktop app for running Claude CLI sessions",
   "repository": {
     "type": "git",
@@ -23,6 +23,7 @@
     "electron-updater": "^6.8.3",
     "lexical": "^0.21.0",
     "lucide-react": "^1.8.0",
+    "node-pty": "^1.1.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-markdown": "^9.0.0",
@@ -49,7 +50,8 @@
   },
   "pnpm": {
     "onlyBuiltDependencies": [
-      "electron"
+      "electron",
+      "node-pty"
     ]
   },
   "build": {
@@ -62,6 +64,9 @@
     "directories": {
       "output": "dist"
     },
+    "asarUnpack": [
+      "**/node_modules/node-pty/**/*"
+    ],
     "linux": {
       "artifactName": "${name}-${version}.${ext}",
       "target": [
@@ -79,8 +84,20 @@
       "category": "public.app-category.developer-tools",
       "identity": null,
       "target": [
-        { "target": "dmg", "arch": ["x64", "arm64"] },
-        { "target": "zip", "arch": ["x64", "arm64"] }
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
       ]
     }
   }

@@ -8,6 +8,7 @@ import { EnvironmentStore, migrateProjectsToEnvironments } from './environment-s
 import { TabStore } from './tab-store'
 import { HistoryReader } from './history-reader'
 import { listDir } from './dir-lister'
+import { probeUsage } from './usage-probe'
 import { LocalTransport } from './transports/local'
 import { WslTransport } from './transports/wsl'
 import { SshTransport } from './transports/ssh'
@@ -100,6 +101,19 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): () => Promise<vo
     return transport.probe(config)
   })
 
+  handle('environments:usage', async ({ config }) => {
+    // Wrap so the IPC channel always resolves with our { ok, reason }
+    // shape — a thrown error here would reject the promise and surface
+    // as an opaque "Error invoking remote method" in the renderer (and
+    // can take down the modal if it's not in the right error path).
+    try {
+      return await probeUsage(config)
+    } catch (err) {
+      const reason = err instanceof Error ? `${err.message}\n${err.stack ?? ''}` : String(err)
+      return { ok: false, reason: `usage probe crashed: ${reason}` }
+    }
+  })
+
   handle('fs:listDir', async ({ config, path }) => {
     try {
       return await listDir(config, path)
@@ -131,7 +145,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): () => Promise<vo
     const channels = [
       'session:start', 'session:send', 'session:stop', 'session:interrupt', 'session:permission',
       'projects:save', 'projects:load', 'projects:history:load', 'session:history:load',
-      'environments:save', 'environments:load', 'environments:probe',
+      'environments:save', 'environments:load', 'environments:probe', 'environments:usage',
       'fs:listDir',
       'tabs:load', 'tabs:save', 'dialog:saveFile'
     ]

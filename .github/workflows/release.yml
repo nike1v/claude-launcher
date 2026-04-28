@@ -23,6 +23,13 @@ jobs:
           node-version: '24'
           cache: 'pnpm'
 
+      # node-gyp 9.x (used by node-pty 1.1.0) imports distutils, which Python
+      # removed in 3.12 — runners default to 3.12+ and the build fails. Pin
+      # to 3.11 across all jobs so node-pty's native build succeeds.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
       - run: pnpm install
 
       - name: Build
@@ -31,6 +38,10 @@ jobs:
       - name: Upload AppImage to release
         uses: softprops/action-gh-release@v3
         with:
+          # Tags like v0.3.0-alpha.1 / v0.3.0-rc.1 → GitHub prerelease, which
+          # keeps electron-updater (releaseType: 'release') from offering it
+          # to users on the stable channel.
+          prerelease: ${{ contains(github.ref_name, '-') }}
           files: |
             dist/*.AppImage
             dist/latest-linux.yml
@@ -51,6 +62,10 @@ jobs:
           node-version: '24'
           cache: 'pnpm'
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
       - run: pnpm install
 
       - name: Build
@@ -59,6 +74,7 @@ jobs:
       - name: Upload Windows installer to release
         uses: softprops/action-gh-release@v3
         with:
+          prerelease: ${{ contains(github.ref_name, '-') }}
           files: |
             dist/*.exe
             dist/latest.yml
@@ -84,6 +100,10 @@ jobs:
           node-version: '24'
           cache: 'pnpm'
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
       - run: pnpm install
 
       - name: Build
@@ -92,6 +112,7 @@ jobs:
       - name: Upload macOS artifacts to release
         uses: softprops/action-gh-release@v3
         with:
+          prerelease: ${{ contains(github.ref_name, '-') }}
           files: |
             dist/*.dmg
             dist/*.zip

@@ -148,6 +148,26 @@ export interface ResultEvent {
 
 export type StreamJsonEvent = InitEvent | AssistantEvent | UserEvent | ResultEvent
 
+// ── Subscription usage (scraped from claude's /usage panel) ─────────────────
+
+export interface UsageBar {
+  // Stable id the renderer keys on for icons / colors.
+  key: 'session' | 'weekly_all' | 'weekly_sonnet' | 'weekly_opus' | string
+  label: string
+  percent: number
+  resetsAt?: string
+}
+
+export interface UsageReading {
+  bars: UsageBar[]
+  totalCostUsd?: string
+  totalDurationApi?: string
+}
+
+export type UsageProbeResult =
+  | { ok: true; reading: UsageReading }
+  | { ok: false; reason: string }
+
 // ── Updater ──────────────────────────────────────────────────────────────────
 
 export interface UpdaterStatus {
@@ -178,6 +198,11 @@ export interface IpcChannels {
   // version } or { ok: false, reason }. Used to populate health badges in
   // the Settings modal and to validate before "Add Environment" saves.
   'environments:probe': { config: HostType }
+  // Subscription usage probe — PTY-spawn claude on the env, type /usage,
+  // screen-scrape the panel into structured bars. There's no machine-readable
+  // /usage in claude itself, so this is the only way to surface those numbers
+  // inside the launcher.
+  'environments:usage': { config: HostType }
   // Directory listing over an environment's transport. Returns child dir
   // names (no files) so the path combobox can suggest paths as the user
   // types. `path` is the directory to list — empty = the host's home.
@@ -200,7 +225,7 @@ export type IpcInvokeChannel = Extract<
   keyof IpcChannels,
   | 'session:start' | 'session:send' | 'session:stop' | 'session:interrupt' | 'session:permission'
   | 'projects:save' | 'projects:history:load' | 'session:history:load' | 'projects:load'
-  | 'environments:save' | 'environments:load' | 'environments:probe'
+  | 'environments:save' | 'environments:load' | 'environments:probe' | 'environments:usage'
   | 'fs:listDir'
   | 'tabs:load' | 'tabs:save'
   | 'updater:check' | 'updater:install'

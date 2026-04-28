@@ -1,5 +1,8 @@
 import { ipcMain, BrowserWindow, Menu, MenuItem, app } from 'electron'
-import { autoUpdater } from 'electron-updater'
+// electron-updater is CJS — Node's ESM loader can't pull `autoUpdater` as a
+// named export, so default-import the whole module and destructure manually.
+import electronUpdater from 'electron-updater'
+const { autoUpdater } = electronUpdater
 import type { UpdaterStatus } from '../shared/types'
 
 function send(win: BrowserWindow, status: UpdaterStatus): void {
