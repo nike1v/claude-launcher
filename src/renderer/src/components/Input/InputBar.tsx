@@ -140,6 +140,7 @@ function ComposerInner({
         />
         <OnChangePlugin onChange={() => {}} />
         <SubmitOnEnterPlugin submit={submit} />
+        <FocusOnSessionChangePlugin sessionId={sessionId} />
       </div>
       <StopButton sessionId={sessionId} />
       <SendButton disabled={!!disabled} submit={submit} />
@@ -185,6 +186,23 @@ function StopButton({ sessionId }: { sessionId: string }): JSX.Element | null {
       <Square size={14} fill="currentColor" />
     </button>
   )
+}
+
+// Move focus into the editor whenever the active session changes (and on
+// first mount). Switching tabs leaves the OS-level focus on the clicked
+// tab button; the muscle memory says "I just opened this chat, I want to
+// type in it" — so we put the caret where the user expects without an
+// extra click.
+//
+// Modals (Settings, Add-Project, Usage) cover the chat with a full-screen
+// backdrop, so the user can't switch tabs while one is open — meaning
+// this won't yank focus out of an open modal field in practice.
+function FocusOnSessionChangePlugin({ sessionId }: { sessionId: string }): null {
+  const [editor] = useLexicalComposerContext()
+  useEffect(() => {
+    editor.focus()
+  }, [editor, sessionId])
+  return null
 }
 
 // Lexical command listener — runs before the browser inserts a newline into
