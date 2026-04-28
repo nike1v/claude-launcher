@@ -8,6 +8,7 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type { HostType, UsageProbeResult } from '../shared/types'
 import { parseUsage } from './usage-parser'
+import { validateSshHost, validateWslDistro } from './transports/validate-ssh'
 
 // Why a PTY: claude's /usage panel is rendered into the TUI by the CLI
 // itself — there's no machine-readable flag, no `--json` / `--print` mode
@@ -32,6 +33,10 @@ const STABLE_GAP_MS = 1500
 // to "easily long enough on the slowest realistic setup".
 const TRUST_DISMISS_DELAY_MS = 2500
 const USAGE_CMD_DELAY_MS = 2500
+// PTY output for /usage realistically fits in <100 KiB of escape codes + text.
+// 4 MiB is a generous ceiling that protects against a runaway / stuck claude
+// streaming until the hard timeout fires.
+const MAX_PTY_BUFFER_BYTES = 4 * 1024 * 1024
 
 export async function probeUsage(host: HostType): Promise<UsageProbeResult> {
   const cmd = buildCommand(host)
@@ -94,6 +99,10 @@ export async function probeUsage(host: HostType): Promise<UsageProbeResult> {
     }
 
     term.onData((d: string) => {
+      // Stop accumulating once we've seen plenty — the parser only ever looks
+      // at the most recent /usage panel render, so dropping bytes past the cap
+      // doesn't lose any signal we'd actually use.
+      if (buf.length >= MAX_PTY_BUFFER_BYTES) return
       buf += d
       lastDataAt = Date.now()
     })
@@ -194,6 +203,7 @@ function buildCommand(host: HostType): PtyCommand | null {
   }
 
   if (host.kind === 'wsl') {
+    try { validateWslDistro(host.distro) } catch { return null }
     // PTY mode lets us use a real login bash without the stdin issues that
     // forced us to drop bash from the regular spawn path. -lc sources
     // ~/.profile (where most users put PATH); we explicitly source ~/.bashrc
@@ -210,6 +220,7 @@ function buildCommand(host: HostType): PtyCommand | null {
   }
 
   if (host.kind === 'ssh') {
+    try { validateSshHost(host) } catch { return null }
     const target = host.user ? `${host.user}@${host.host}` : host.host
     const sshArgs: string[] = ['-tt']
     if (host.port) sshArgs.push('-p', String(host.port))

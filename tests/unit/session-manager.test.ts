@@ -129,6 +129,41 @@ describe('SessionManager', () => {
     )
   })
 
+  it('kills the session and emits error when stdout buffers past the cap without a newline', async () => {
+    const sessionId = await manager.startSession(makeEnv(), makeProject())
+    const proc = mockTransport.spawn.mock.results[0].value
+
+    // Push 5 MiB of unbroken bytes — well past the 4 MiB cap. Without the
+    // bound, lineBuffer would just keep growing on a runaway / corrupted
+    // stream until the heap was exhausted.
+    proc.stdout.emit('data', Buffer.alloc(5 * 1024 * 1024, 0x61))
+
+    expect(onEvent).toHaveBeenCalledWith(
+      'session:status',
+      expect.objectContaining({ sessionId, status: 'error' })
+    )
+    expect(proc.kill).toHaveBeenCalled()
+  })
+
+  it('truncates stderr accumulation past the cap in the exit-error message', async () => {
+    const sessionId = await manager.startSession(makeEnv(), makeProject())
+    const proc = mockTransport.spawn.mock.results[0].value
+
+    // 32 KiB of stderr; cap is 16 KiB and we surface only the last 2 KiB.
+    proc.stderr.emit('data', Buffer.alloc(32 * 1024, 0x78))
+    proc.emit('exit', 1)
+
+    const errorCall = onEvent.mock.calls.find(
+      ([channel, payload]) =>
+        channel === 'session:status' && payload.sessionId === sessionId && payload.status === 'error'
+    )
+    expect(errorCall).toBeDefined()
+    const message = errorCall![1].errorMessage as string
+    // We should see a tail no larger than the surface cap (~2 KiB) plus the
+    // exit-code prefix — far below the raw 32 KiB the child emitted.
+    expect(message.length).toBeLessThan(3 * 1024)
+  })
+
   it('skips spawn and emits error when probe rejects', async () => {
     mockTransport.probe = vi.fn(async () => ({ ok: false as const, reason: 'no claude' }))
     await manager.startSession(makeEnv(), makeProject())

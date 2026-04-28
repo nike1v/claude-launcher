@@ -4,6 +4,7 @@ import { homedir } from 'node:os'
 import { join, resolve, sep } from 'node:path'
 import type { HostType } from '../shared/types'
 import { shQuote } from './transports/path-probe'
+import { validateSshHost, validateWslDistro } from './transports/validate-ssh'
 
 export interface DirListing {
   // The absolute directory we ended up listing (after resolving "" / "~").
@@ -76,6 +77,7 @@ async function listRemoteDir(host: HostType, rawPath: string): Promise<DirListin
 
 function remoteShellCommand(host: HostType, script: string): { bin: string; args: string[] } {
   if (host.kind === 'wsl') {
+    validateWslDistro(host.distro)
     // The script only uses cd/pwd/find/sed/head/sort — all in /usr/bin which
     // is on every default PATH, so a plain `bash -c` (no profile sourcing)
     // is enough. Avoiding -l keeps this fast and skirts any user-profile
@@ -83,6 +85,7 @@ function remoteShellCommand(host: HostType, script: string): { bin: string; args
     return { bin: 'wsl.exe', args: ['-d', host.distro, '--', 'bash', '-c', script] }
   }
   if (host.kind === 'ssh') {
+    validateSshHost(host)
     const args = ['-T', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=4']
     if (host.port) args.push('-p', String(host.port))
     if (host.keyFile) args.push('-i', host.keyFile)

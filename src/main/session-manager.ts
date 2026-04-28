@@ -29,6 +29,14 @@ const SHUTDOWN_GRACE_MS = 1500
 // If we haven't transitioned to ready within this window, do it anyway.
 const READY_FALLBACK_MS = 5000
 
+// Bound the per-session accumulators. Stream-json events are line-delimited;
+// 4 MiB is multiple orders of magnitude above any legitimate single line and
+// guards against a runaway / corrupted stream pinning RAM. stderr is only
+// surfaced in the exit-error message, so a smaller cap keeps the UI string
+// readable.
+const MAX_LINE_BUFFER_BYTES = 4 * 1024 * 1024
+const MAX_STDERR_BYTES = 16 * 1024
+
 export class SessionManager {
   private readonly sessions = new Map<string, ActiveSession>()
 
@@ -85,6 +93,11 @@ export class SessionManager {
     const markReady = () => {
       if (session.markedReady) return
       session.markedReady = true
+      // Once we've transitioned to ready (either from system:init or from the
+      // first assistant/result event), the fallback timer is dead weight —
+      // clear it so it doesn't keep the event loop alive for the full
+      // READY_FALLBACK_MS window after every session start.
+      clearTimeout(readyTimer)
       this.onEvent('session:status', { sessionId, status: 'ready' })
     }
 
@@ -94,7 +107,16 @@ export class SessionManager {
     let spawnError: string | null = null
 
     process.stdout?.on('data', (chunk: Buffer) => this.handleStdout(session, chunk, markReady))
-    process.stderr?.on('data', (chunk: Buffer) => { stderrBuffer += chunk.toString('utf-8') })
+    process.stderr?.on('data', (chunk: Buffer) => {
+      // Bound stderr capture so a chatty / runaway claude can't pin memory.
+      // Past the cap we just drop further bytes — the exit-error message only
+      // surfaces a tail of this anyway.
+      if (stderrBuffer.length >= MAX_STDERR_BYTES) return
+      stderrBuffer += chunk.toString('utf-8')
+      if (stderrBuffer.length > MAX_STDERR_BYTES) {
+        stderrBuffer = stderrBuffer.slice(0, MAX_STDERR_BYTES)
+      }
+    })
     // EPIPE / write errors after the child exits surface here — keep ignoring
     // those, but capture the spawn failure (ENOENT when `claude` is missing
     // from PATH) so we can surface it as an error status.
@@ -116,9 +138,12 @@ export class SessionManager {
       // Treat spawn failures (ENOENT etc.) and non-zero exits as errors so the
       // tab tells the user something went wrong instead of silently going gray.
       const isError = spawnError !== null || (code !== 0 && code !== null)
+      // Trim the stderr tail we surface to the renderer — a long error string
+      // crowds out the rest of the UI and the user only needs the recent end.
+      const stderrTail = stderrBuffer.trim().slice(-2000)
       const errorMessage = spawnError
         ?? (isError
-          ? `Process exited with code ${code}${stderrBuffer.trim() ? `\n${stderrBuffer.trim()}` : ''}`
+          ? `Process exited with code ${code}${stderrTail ? `\n${stderrTail}` : ''}`
           : undefined)
       this.onEvent('session:status', {
         sessionId,
@@ -208,20 +233,41 @@ export class SessionManager {
   }
 
   public async stopAll(): Promise<void> {
-    const pending: Promise<void>[] = []
+    const live: ActiveSession[] = []
     for (const session of this.sessions.values()) {
       session.stopping = true
       try { session.process.kill() } catch { /* already dead */ }
-      pending.push(session.exited)
+      live.push(session)
     }
     this.sessions.clear()
-    if (!pending.length) return
+    if (!live.length) return
+    const allExited = Promise.all(live.map(s => s.exited)).then(() => undefined)
     const grace = new Promise<void>((resolve) => setTimeout(resolve, SHUTDOWN_GRACE_MS))
-    await Promise.race([Promise.all(pending).then(() => undefined), grace])
+    await Promise.race([allExited, grace])
+    // SIGTERM is advisory — a child blocked on a hung syscall (stuck SSH,
+    // wedged PTY) will sit through it and then through app.exit too. Force
+    // SIGKILL on anyone still alive so quit doesn't hang the UI.
+    for (const session of live) {
+      if (session.process.exitCode !== null || session.process.signalCode !== null) continue
+      try { session.process.kill('SIGKILL') } catch { /* already dead */ }
+    }
   }
 
   private handleStdout(session: ActiveSession, chunk: Buffer, markReady: () => void): void {
     session.lineBuffer += chunk.toString('utf-8')
+    // If we're still buffering past the cap, we've almost certainly hit a
+    // corrupted / non-newline-delimited stream. Kill the session rather than
+    // grow forever — the exit handler will surface the failure.
+    if (session.lineBuffer.length > MAX_LINE_BUFFER_BYTES) {
+      session.lineBuffer = ''
+      this.onEvent('session:status', {
+        sessionId: session.sessionId,
+        status: 'error',
+        errorMessage: 'claude produced a malformed stream (single line exceeded buffer cap)'
+      })
+      try { session.process.kill() } catch { /* already dead */ }
+      return
+    }
     const lines = session.lineBuffer.split('\n')
     session.lineBuffer = lines.pop() ?? ''
 
