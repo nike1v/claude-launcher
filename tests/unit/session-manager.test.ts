@@ -37,6 +37,17 @@ const makeProject = (): Project => ({
   path: '/tmp'
 })
 
+describe('SessionManager construction', () => {
+  it('constructs with no args (uses default transport resolver) without throwing', () => {
+    // Regression for v0.4.1: the parameter property used the same name as
+    // the imported default resolver, which put the imported binding in TDZ
+    // for the default expression and broke `new SessionManager()` at module
+    // init time. The whole main process then crashed silently and the
+    // renderer's IPC invokes sat unanswered (blank sidebar in the wild).
+    expect(() => new SessionManager()).not.toThrow()
+  })
+})
+
 describe('SessionManager', () => {
   let mockTransport: {
     spawn: ReturnType<typeof vi.fn>

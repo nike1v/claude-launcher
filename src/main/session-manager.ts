@@ -3,7 +3,13 @@ import type { ChildProcess } from 'node:child_process'
 import type { ITransport, SpawnOptions } from './transports/types'
 import type { Environment, HostType, Project, SendAttachment, StreamJsonEvent, UserContentBlock } from '../shared/types'
 import { parseStreamJsonLine } from './stream-json-parser'
-import { resolveTransport } from './transports'
+// Aliased on import so the parameter-property `resolveTransport` doesn't
+// shadow it in its own default expression. The right-hand side of
+// `(resolveTransport = resolveTransport)` would otherwise hit a TDZ
+// ReferenceError at construction time and cascade into the main process
+// failing to register IPC handlers — which presents to the user as a
+// blank sidebar.
+import { resolveTransport as defaultResolveTransport } from './transports'
 
 type EventCallback = (channel: string, payload: unknown) => void
 
@@ -27,7 +33,7 @@ export class SessionManager {
   private readonly sessions = new Map<string, ActiveSession>()
 
   public constructor(
-    private readonly resolveTransport: (host: HostType) => ITransport = resolveTransport,
+    private readonly resolveTransport: (host: HostType) => ITransport = defaultResolveTransport,
     private readonly onEvent: EventCallback = () => {}
   ) {}
 
