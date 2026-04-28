@@ -5,6 +5,7 @@ import type { ITransport, ProbeResult, SpawnOptions } from './types'
 import { runPathProbe, probeScript, shQuote } from './path-probe'
 import { getCachedPath, setCachedPath } from './path-cache'
 import { validateSshHost } from './validate-ssh'
+import { buildClaudeArgs, filteredEnv } from './shared'
 
 export class SshTransport implements ITransport {
   public spawn(options: SpawnOptions): ChildProcess {
@@ -12,14 +13,7 @@ export class SshTransport implements ITransport {
     if (host.kind !== 'ssh') throw new Error('SshTransport requires ssh host')
     validateSshHost(host)
 
-    const claudeArgs = [
-      '--output-format', 'stream-json',
-      '--input-format', 'stream-json',
-      '--verbose',
-      '--permission-prompt-tool', 'stdio'
-    ]
-    if (model) claudeArgs.push('--model', model)
-    if (resumeSessionId) claudeArgs.push('--resume', resumeSessionId)
+    const claudeArgs = buildClaudeArgs(model, resumeSessionId)
 
     // OpenSSH runs the remote command as `<user-shell> -c <cmd>` — that's
     // non-interactive non-login on the remote, so ~/.bashrc / ~/.profile
@@ -39,11 +33,7 @@ export class SshTransport implements ITransport {
 
     return spawn('ssh', sshArgs, {
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: Object.fromEntries(
-        Object.entries(process.env).filter(
-          ([key]) => !key.startsWith('CLAUDE_CODE_') && key !== 'CLAUDE_RPC_TOKEN'
-        )
-      )
+      env: filteredEnv()
     })
   }
 

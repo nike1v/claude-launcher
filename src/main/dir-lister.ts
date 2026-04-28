@@ -13,12 +13,17 @@ export interface DirListing {
 }
 
 const REMOTE_TIMEOUT_MS = 6000
+// Cap how many directory names we return for one listing. Big trees
+// (/usr, /home with many users) would otherwise flood the dropdown and
+// hang formatting in the renderer. Tuned to "more than the user will ever
+// scroll through, less than what hurts."
+const MAX_DIR_LIST_ENTRIES = 200
 
 // Lists immediate subdirectories of `path` over the given transport. The
 // PathCombobox in the renderer calls this per keystroke (debounced) to
 // suggest the next path segment. We only return directories — files are
-// noise in this context — and cap at 200 entries so a giant /usr or
-// /home doesn't flood the dropdown.
+// noise in this context — and cap at MAX_DIR_LIST_ENTRIES so a giant /usr
+// or /home doesn't flood the dropdown.
 export async function listDir(host: HostType, path: string): Promise<DirListing> {
   if (host.kind === 'local') return listLocalDir(path)
   return listRemoteDir(host, path)
@@ -40,7 +45,7 @@ async function listLocalDir(rawPath: string): Promise<DirListing> {
     }
     if (entry.name.startsWith('.')) continue
     dirs.push(entry.name)
-    if (dirs.length >= 200) break
+    if (dirs.length >= MAX_DIR_LIST_ENTRIES) break
   }
   dirs.sort((a, b) => a.localeCompare(b))
   return { cwd, entries: dirs }
@@ -65,7 +70,7 @@ async function listRemoteDir(host: HostType, rawPath: string): Promise<DirListin
     `case "$t" in ~|~/*) t="$HOME${'$'}{t#~}" ;; esac; ` +
     `cd "$t" 2>/dev/null || exit 2; ` +
     `pwd; ` +
-    `find . -mindepth 1 -maxdepth 1 -type d 2>/dev/null | sed 's|^\\./||' | sort | head -200`
+    `find . -mindepth 1 -maxdepth 1 -type d 2>/dev/null | sed 's|^\\./||' | sort | head -${MAX_DIR_LIST_ENTRIES}`
 
   const { bin, args } = remoteShellCommand(host, script)
   const stdout = await runRemote(bin, args)

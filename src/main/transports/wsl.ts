@@ -5,21 +5,13 @@ import type { ITransport, ProbeResult, SpawnOptions } from './types'
 import { runPathProbe, probeScript } from './path-probe'
 import { getCachedPath, setCachedPath } from './path-cache'
 import { validateWslDistro } from './validate-ssh'
+import { buildClaudeArgs, filteredEnv } from './shared'
 
 export class WslTransport implements ITransport {
   public spawn(options: SpawnOptions): ChildProcess {
     const { host, path, model, resumeSessionId } = options
     if (host.kind !== 'wsl') throw new Error('WslTransport requires wsl host')
     validateWslDistro(host.distro)
-
-    const claudeArgs = [
-      '--output-format', 'stream-json',
-      '--input-format', 'stream-json',
-      '--verbose',
-      '--permission-prompt-tool', 'stdio'
-    ]
-    if (model) claudeArgs.push('--model', model)
-    if (resumeSessionId) claudeArgs.push('--resume', resumeSessionId)
 
     // wsl.exe spawns a non-login non-interactive shell that ignores
     // ~/.profile etc., so claude installed via npm-global / ~/.local/bin is
@@ -30,15 +22,11 @@ export class WslTransport implements ITransport {
     const cachedPath = getCachedPath(host)
     const wslArgs = ['-d', host.distro, '--cd', path, '--']
     if (cachedPath) wslArgs.push('env', `PATH=${cachedPath}`)
-    wslArgs.push('claude', ...claudeArgs)
+    wslArgs.push('claude', ...buildClaudeArgs(model, resumeSessionId))
 
     return spawn('wsl.exe', wslArgs, {
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: Object.fromEntries(
-        Object.entries(process.env).filter(
-          ([key]) => !key.startsWith('CLAUDE_CODE_') && key !== 'CLAUDE_RPC_TOKEN'
-        )
-      )
+      env: filteredEnv()
     })
   }
 
