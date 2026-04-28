@@ -9,6 +9,8 @@ import { join } from 'node:path'
 import type { HostType, UsageProbeResult } from '../shared/types'
 import { parseUsage } from './usage-parser'
 import { validateSshHost, validateWslDistro } from './transports/validate-ssh'
+import { filteredEnv } from './transports/shared'
+import { shQuote } from './transports/path-probe'
 
 // Why a PTY: claude's /usage panel is rendered into the TUI by the CLI
 // itself — there's no machine-readable flag, no `--json` / `--print` mode
@@ -37,6 +39,12 @@ const USAGE_CMD_DELAY_MS = 2500
 // 4 MiB is a generous ceiling that protects against a runaway / stuck claude
 // streaming until the hard timeout fires.
 const MAX_PTY_BUFFER_BYTES = 4 * 1024 * 1024
+// PTY geometry. Wide enough that the /usage panel renders without the bars
+// wrapping mid-line (which would defeat the regex parser); tall enough that
+// the whole panel + a turn of trust-dialog noise fits without scrolling out
+// of the buffer before we read it.
+const PTY_COLS = 140
+const PTY_ROWS = 40
 
 export async function probeUsage(host: HostType): Promise<UsageProbeResult> {
   const cmd = buildCommand(host)
@@ -85,8 +93,8 @@ export async function probeUsage(host: HostType): Promise<UsageProbeResult> {
     try {
       term = ptySpawn(cmd.bin, cmd.args, {
         name: 'xterm-256color',
-        cols: 140,
-        rows: 40,
+        cols: PTY_COLS,
+        rows: PTY_ROWS,
         cwd: cmd.cwd,
         env: cmd.env
       })
@@ -230,7 +238,7 @@ function buildCommand(host: HostType): PtyCommand | null {
     // explicit bashrc source covers both PATH-in-profile and PATH-in-bashrc
     // setups.
     const inner = `[ -f ~/.bashrc ] && . ~/.bashrc 2>/dev/null; mkdir -p ~/${PROBE_DIR_NAME} && cd ~/${PROBE_DIR_NAME} && exec claude --permission-mode default`
-    sshArgs.push(`bash -lc ${shQ(inner)}`)
+    sshArgs.push(`bash -lc ${shQuote(inner)}`)
     return {
       // node-pty/Windows needs the explicit .exe (CreateProcessW skips
       // PATHEXT). Windows ships OpenSSH at C:\Windows\System32\OpenSSH —
@@ -243,18 +251,4 @@ function buildCommand(host: HostType): PtyCommand | null {
   }
 
   return null
-}
-
-function filteredEnv(): NodeJS.ProcessEnv {
-  // Same filter as the spawn transports: keep CLAUDE_CODE_OAUTH_TOKEN out of
-  // the child env so the remote/wsl claude uses its own auth, not ours.
-  return Object.fromEntries(
-    Object.entries(process.env).filter(
-      ([key]) => !key.startsWith('CLAUDE_CODE_') && key !== 'CLAUDE_RPC_TOKEN'
-    )
-  ) as NodeJS.ProcessEnv
-}
-
-function shQ(s: string): string {
-  return `'${s.replace(/'/g, `'\\''`)}'`
 }
