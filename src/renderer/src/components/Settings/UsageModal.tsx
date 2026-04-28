@@ -90,7 +90,11 @@ function UsageBody({ state }: { state: UsageProbeResult | { loading: true } | nu
     )
   }
 
-  if (state.reading.bars.length === 0) {
+  // Defensive — alpha.5 shipped with a malformed { ok: true } payload that
+  // had no `reading` field, which crashed the modal. Treat a missing /
+  // empty reading as "layout unrecognised" rather than dereferencing it.
+  const reading = state.reading
+  if (!reading || !Array.isArray(reading.bars) || reading.bars.length === 0) {
     return (
       <div className="text-xs text-white/50">
         claude responded but no usage bars were recognised. The /usage layout may
@@ -101,11 +105,11 @@ function UsageBody({ state }: { state: UsageProbeResult | { loading: true } | nu
 
   return (
     <div className="space-y-4">
-      {state.reading.bars.map(bar => <BarRow key={bar.key} bar={bar} />)}
-      {state.reading.totalCostUsd && (
+      {reading.bars.map(bar => <BarRow key={bar.key} bar={bar} />)}
+      {reading.totalCostUsd && (
         <div className="text-[11px] text-white/40 pt-3 border-t border-white/10">
-          Session cost: ${state.reading.totalCostUsd}
-          {state.reading.totalDurationApi && <> · API time: {state.reading.totalDurationApi}</>}
+          Session cost: ${reading.totalCostUsd}
+          {reading.totalDurationApi && <> · API time: {reading.totalDurationApi}</>}
         </div>
       )}
     </div>

@@ -52,6 +52,20 @@ export async function probeUsage(host: HostType): Promise<UsageProbeResult> {
       resolve(r)
     }
 
+    // Single helper for "we parsed bars successfully" so the three call
+    // sites can't drift in shape — alpha.5 shipped a typo here that made
+    // the renderer crash on a missing `reading` field.
+    const finishOk = (parsed: ReturnType<typeof parseUsage>): void => {
+      finish({
+        ok: true,
+        reading: {
+          bars: parsed.bars,
+          totalCostUsd: parsed.totalCostUsd,
+          totalDurationApi: parsed.totalDurationApi
+        }
+      })
+    }
+
     let term: ReturnType<typeof ptySpawn>
     try {
       term = ptySpawn(cmd.bin, cmd.args, {
@@ -78,7 +92,7 @@ export async function probeUsage(host: HostType): Promise<UsageProbeResult> {
       // claude exited before we got data — most likely a missing CLI or auth
       // problem. Try to surface whatever ended up in the buffer.
       const parsed = parseUsage(buf)
-      if (parsed.bars.length) finish({ ok: true, reading: { bars: parsed.bars, totalCostUsd: parsed.totalCostUsd, totalDurationApi: parsed.totalDurationApi } })
+      if (parsed.bars.length) finishOk(parsed)
       else finish({
         ok: false,
         reason: `claude exited (code=${exitCode ?? '?'}, signal=${signal ?? 'none'}) before /usage rendered`
@@ -108,7 +122,7 @@ export async function probeUsage(host: HostType): Promise<UsageProbeResult> {
       if (Date.now() - lastDataAt < STABLE_GAP_MS) return
       const parsed = parseUsage(buf)
       if (parsed.bars.length) {
-        finish({ ok: true, parsed })
+        finishOk(parsed)
       } else {
         // Output is stable but we didn't recognise any bars — keep waiting
         // for a touch longer in case the panel's still painting; the hard
@@ -118,7 +132,7 @@ export async function probeUsage(host: HostType): Promise<UsageProbeResult> {
 
     const hardTimer = setTimeout(() => {
       const parsed = parseUsage(buf)
-      if (parsed.bars.length) finish({ ok: true, reading: { bars: parsed.bars, totalCostUsd: parsed.totalCostUsd, totalDurationApi: parsed.totalDurationApi } })
+      if (parsed.bars.length) finishOk(parsed)
       else {
         // Surface a tail of the raw output so the modal shows something
         // actionable instead of just "timed out". Trim aggressively — full
