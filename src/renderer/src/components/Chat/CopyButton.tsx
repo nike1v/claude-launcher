@@ -24,7 +24,7 @@ export function CopyButton({ text, className = '' }: Props) {
       type="button"
       onClick={handleCopy}
       title={copied ? 'Copied' : 'Copy'}
-      className={`p-1 rounded text-white/30 hover:text-white/80 hover:bg-white/10 transition-colors ${className}`}
+      className={`p-1 rounded text-fg-faint hover:text-fg hover:bg-elevated transition-colors ${className}`}
     >
       {copied ? <Check size={12} /> : <Copy size={12} />}
     </button>

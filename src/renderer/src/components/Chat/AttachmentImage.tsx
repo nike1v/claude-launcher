@@ -20,13 +20,13 @@ export function AttachmentImage({ mediaType, data, name }: Props) {
       <img
         src={dataUrl}
         alt={defaultName}
-        className="max-w-xs max-h-64 rounded border border-white/10 object-contain"
+        className="max-w-xs max-h-64 rounded border border-divider object-contain"
       />
       <button
         type="button"
         onClick={handleSave}
         title={`Save ${defaultName}`}
-        className="absolute top-1 right-1 p-1 rounded bg-black/60 text-white/70 hover:text-white hover:bg-black/80 opacity-0 group-hover:opacity-100 transition-opacity"
+        className="absolute top-1 right-1 p-1 rounded bg-black/60 text-fg-muted hover:text-fg hover:bg-black/80 opacity-0 group-hover:opacity-100 transition-opacity"
       >
         <Download size={14} />
       </button>

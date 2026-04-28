@@ -14,13 +14,13 @@ export function PermissionPrompt({ sessionId, toolUseId, toolName, input }: Prop
   return (
     <div className="border border-yellow-500/30 bg-yellow-500/5 rounded-lg px-4 py-3 space-y-2">
       <p className="text-xs text-yellow-400/80 font-medium">Permission Request</p>
-      <p className="text-sm text-white/80">
-        Run: <span className="font-mono text-white">{toolName}</span>
+      <p className="text-sm text-fg">
+        Run: <span className="font-mono text-fg">{toolName}</span>
       </p>
       {/* `input` is `unknown` — coerce to boolean before short-circuiting so
           React's children type doesn't see `unknown`. */}
       {Boolean(input) && (
-        <pre className="text-xs text-white/40 overflow-x-auto whitespace-pre-wrap">
+        <pre className="text-xs text-fg-faint overflow-x-auto whitespace-pre-wrap">
           {JSON.stringify(input, null, 2)}
         </pre>
       )}

@@ -38,13 +38,13 @@ export function UsageModal({ env, onClose }: Props) {
   useEffect(() => { fetch() /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [env.id])
 
   return (
-    <Modal onClose={onClose} panelClassName="bg-[#1a1a1a] border border-white/10 rounded-lg w-[28rem] max-h-[90vh] overflow-hidden flex flex-col">
+    <Modal onClose={onClose} panelClassName="bg-panel border border-divider rounded-lg w-[28rem] max-h-[90vh] overflow-hidden flex flex-col">
       <>
-        <div className="flex items-center justify-between px-5 py-4 border-b border-white/10">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-divider">
           <div className="min-w-0">
             <h2 className="text-sm font-semibold truncate">Usage · {env.name}</h2>
-            <p className="text-[11px] text-white/40 mt-0.5">
-              Scraped from <code className="text-white/60">claude /usage</code>
+            <p className="text-[11px] text-fg-faint mt-0.5">
+              Scraped from <code className="text-fg-muted">claude /usage</code>
             </p>
           </div>
           <div className="flex items-center gap-1.5 shrink-0">
@@ -52,11 +52,11 @@ export function UsageModal({ env, onClose }: Props) {
               onClick={fetch}
               disabled={isLoading(state)}
               title="Refresh"
-              className="p-1.5 rounded text-white/40 hover:text-white hover:bg-white/5 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              className="p-1.5 rounded text-fg-faint hover:text-fg hover:bg-elevated disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
             >
               <RefreshCw size={14} className={isLoading(state) ? 'animate-spin' : ''} />
             </button>
-            <button onClick={onClose} className="p-1.5 rounded text-white/40 hover:text-white hover:bg-white/5">
+            <button onClick={onClose} className="p-1.5 rounded text-fg-faint hover:text-fg hover:bg-elevated">
               <X size={14} />
             </button>
           </div>
@@ -85,7 +85,7 @@ function UsageBody({ state }: { state: ModalState }) {
         <SkeletonBar />
         <SkeletonBar />
         <SkeletonBar />
-        <p className="text-xs text-white/40 mt-4">
+        <p className="text-xs text-fg-faint mt-4">
           Spawning claude on this environment to read /usage. Takes a few seconds…
         </p>
       </div>
@@ -106,7 +106,7 @@ function UsageBody({ state }: { state: ModalState }) {
   const reading = state.reading
   if (!reading || !Array.isArray(reading.bars) || reading.bars.length === 0) {
     return (
-      <div className="text-xs text-white/50">
+      <div className="text-xs text-fg-faint">
         claude responded but no usage bars were recognised. The /usage layout may
         have changed; try again, or check the terminal directly.
       </div>
@@ -117,7 +117,7 @@ function UsageBody({ state }: { state: ModalState }) {
     <div className="space-y-4">
       {reading.bars.map(bar => <BarRow key={bar.key} bar={bar} />)}
       {reading.totalCostUsd && (
-        <div className="text-[11px] text-white/40 pt-3 border-t border-white/10">
+        <div className="text-[11px] text-fg-faint pt-3 border-t border-divider">
           Session cost: ${reading.totalCostUsd}
           {reading.totalDurationApi && <> · API time: {reading.totalDurationApi}</>}
         </div>
@@ -134,13 +134,13 @@ function BarRow({ bar }: { bar: UsageBar }) {
   return (
     <div>
       <div className="flex items-baseline justify-between gap-2 mb-1">
-        <span className="text-xs text-white/80">{bar.label}</span>
-        <span className="text-xs tabular-nums text-white/60">{bar.percent}%</span>
+        <span className="text-xs text-fg">{bar.label}</span>
+        <span className="text-xs tabular-nums text-fg-muted">{bar.percent}%</span>
       </div>
-      <div className="relative h-1.5 rounded-full bg-white/10 overflow-hidden">
+      <div className="relative h-1.5 rounded-full bg-elevated overflow-hidden">
         <div className={`absolute inset-y-0 left-0 ${tone} rounded-full transition-[width] duration-300`} style={{ width: `${bar.percent}%` }} />
       </div>
-      {bar.resetsAt && <p className="text-[11px] text-white/40 mt-1">Resets {bar.resetsAt}</p>}
+      {bar.resetsAt && <p className="text-[11px] text-fg-faint mt-1">Resets {bar.resetsAt}</p>}
     </div>
   )
 }
@@ -148,8 +148,8 @@ function BarRow({ bar }: { bar: UsageBar }) {
 function SkeletonBar() {
   return (
     <div>
-      <div className="h-3 w-32 bg-white/5 rounded mb-1.5 animate-pulse" />
-      <div className="h-1.5 w-full bg-white/5 rounded-full animate-pulse" />
+      <div className="h-3 w-32 bg-elevated rounded mb-1.5 animate-pulse" />
+      <div className="h-1.5 w-full bg-elevated rounded-full animate-pulse" />
     </div>
   )
 }

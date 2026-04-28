@@ -61,25 +61,25 @@ export function PathCombobox({ value, onChange, config, placeholder }: Props) {
   return (
     <div ref={wrapperRef} className="relative">
       <input
-        className="w-full bg-white/5 border border-white/10 rounded px-2 py-1.5 text-sm text-white placeholder-white/30 focus:outline-none focus:border-white/30"
+        className="w-full bg-elevated border border-divider rounded px-2 py-1.5 text-sm text-fg placeholder-fg-faint focus:outline-none focus:border-divider-strong"
         value={value}
         placeholder={placeholder}
         onFocus={() => setOpen(true)}
         onChange={e => { onChange(e.target.value); setOpen(true) }}
       />
       {open && config && (suggestions.length > 0 || loading) && (
-        <ul className="absolute left-0 right-0 mt-1 bg-[#1a1a1a] border border-white/15 rounded shadow-lg z-10 max-h-56 overflow-y-auto">
+        <ul className="absolute left-0 right-0 mt-1 bg-panel border border-divider rounded shadow-lg z-10 max-h-56 overflow-y-auto">
           {loading && suggestions.length === 0 && (
-            <li className="px-2 py-1.5 text-xs text-white/30 italic">Loading…</li>
+            <li className="px-2 py-1.5 text-xs text-fg-faint italic">Loading…</li>
           )}
           {suggestions.map(name => (
             <li key={name}>
               <button
                 type="button"
                 onClick={() => handlePick(name)}
-                className="w-full text-left px-2 py-1.5 text-xs hover:bg-white/5 flex items-center gap-1.5 text-white/80"
+                className="w-full text-left px-2 py-1.5 text-xs hover:bg-elevated flex items-center gap-1.5 text-fg"
               >
-                <Folder size={12} className="text-white/30" />
+                <Folder size={12} className="text-fg-faint" />
                 <span className="truncate">{name}</span>
               </button>
             </li>

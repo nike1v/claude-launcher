@@ -49,15 +49,15 @@ export function EnvironmentStatus({ config, rev = 0, compact = false, onResult }
 
   const chip = (
     <span title={tooltip} className="inline-flex items-center gap-1 text-xs">
-      {state.kind === 'checking' && <Loader2 size={12} className="animate-spin text-white/40" />}
+      {state.kind === 'checking' && <Loader2 size={12} className="animate-spin text-fg-faint" />}
       {state.kind === 'ok' && <CheckCircle2 size={12} className="text-green-400" />}
       {state.kind === 'error' && <XCircle size={12} className="text-red-400" />}
-      {state.kind === 'idle' && <span className="w-3 h-3 rounded-full bg-white/15" />}
+      {state.kind === 'idle' && <span className="w-3 h-3 rounded-full bg-elevated" />}
       {!compact && (
         <span className={
           state.kind === 'ok' ? 'text-green-300/80'
           : state.kind === 'error' ? 'text-red-300/80'
-          : 'text-white/40'
+          : 'text-fg-faint'
         }>
           {state.kind === 'ok' ? 'Claude CLI detected'
             : state.kind === 'error' ? 'No Claude CLI'
@@ -77,7 +77,7 @@ export function EnvironmentStatus({ config, rev = 0, compact = false, onResult }
         type="button"
         onClick={() => setTrigger(t => t + 1)}
         title="Re-check"
-        className="p-1 rounded text-white/40 hover:text-white hover:bg-white/5"
+        className="p-1 rounded text-fg-faint hover:text-fg hover:bg-elevated"
       >
         <RefreshCw size={11} />
       </button>

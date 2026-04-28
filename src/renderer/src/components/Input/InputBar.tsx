@@ -129,11 +129,11 @@ function ComposerInner({
         <PlainTextPlugin
           contentEditable={
             <ContentEditable
-              className="outline-none min-h-[1.5rem] max-h-40 overflow-y-auto text-sm text-white/90 leading-relaxed"
+              className="outline-none min-h-[1.5rem] max-h-40 overflow-y-auto text-sm text-fg leading-relaxed"
             />
           }
           placeholder={
-            <div className="absolute top-0 left-0 text-white/30 text-sm pointer-events-none">
+            <div className="absolute top-0 left-0 text-fg-faint text-sm pointer-events-none">
               {disabled ? 'Waiting for session…' : 'Message claude…'}
             </div>
           }
@@ -171,7 +171,7 @@ function SendButton({
       onClick={() => submit()}
       disabled={disabled}
       title="Send"
-      className="p-2 text-white/40 hover:text-white/80 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+      className="p-2 text-fg-faint hover:text-fg disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
     >
       <Send size={16} />
     </button>
@@ -292,13 +292,13 @@ export function InputBar({ sessionId, disabled = false }: Props) {
     namespace: `chat-input-${sessionId}`,
     onError: (err: Error) => console.error(err),
     theme: {
-      root: 'outline-none min-h-[1.5rem] max-h-40 overflow-y-auto text-sm text-white/90 leading-relaxed'
+      root: 'outline-none min-h-[1.5rem] max-h-40 overflow-y-auto text-sm text-fg leading-relaxed'
     }
   }
 
   return (
     <div
-      className={`border-t border-white/10 ${dragActive ? 'bg-white/[0.04]' : ''}`}
+      className={`border-t border-divider ${dragActive ? 'bg-elevated' : ''}`}
       onDragEnter={(e) => { e.preventDefault(); setDragActive(true) }}
       onDragOver={(e) => { e.preventDefault(); setDragActive(true) }}
       onDragLeave={(e) => {
@@ -319,7 +319,7 @@ export function InputBar({ sessionId, disabled = false }: Props) {
         <button
           type="button"
           onClick={() => fileInputRef.current?.click()}
-          className="p-2 text-white/40 hover:text-white/80 transition-colors"
+          className="p-2 text-fg-faint hover:text-fg transition-colors"
           title="Attach files"
         >
           <Paperclip size={16} />
@@ -359,7 +359,7 @@ function AttachmentChip({
 }) {
   const isImage = att.kind === 'image'
   return (
-    <div className="flex items-center gap-1.5 bg-white/[0.06] border border-white/10 rounded px-2 py-1 text-xs text-white/70">
+    <div className="flex items-center gap-1.5 bg-elevated border border-divider rounded px-2 py-1 text-xs text-fg-muted">
       {isImage && att.data ? (
         <img
           src={`data:${att.mediaType};base64,${att.data}`}
@@ -375,7 +375,7 @@ function AttachmentChip({
       <button
         type="button"
         onClick={onRemove}
-        className="text-white/40 hover:text-white"
+        className="text-fg-faint hover:text-fg"
         title="Remove"
       >
         <X size={12} />

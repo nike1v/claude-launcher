@@ -14,7 +14,7 @@ export function ChatPanel({ sessionId }: Props) {
 
   if (session.status === 'starting') {
     return (
-      <div className="h-full flex items-center justify-center text-white/30 text-sm">
+      <div className="h-full flex items-center justify-center text-fg-faint text-sm">
         <span className="animate-pulse">Starting session…</span>
       </div>
     )
@@ -24,7 +24,7 @@ export function ChatPanel({ sessionId }: Props) {
     return (
       <div className="h-full flex flex-col items-center justify-center gap-3">
         <p className="text-red-400 text-sm">{session.errorMessage ?? 'Session error'}</p>
-        <p className="text-white/30 text-xs">Close this tab and reopen the project to retry.</p>
+        <p className="text-fg-faint text-xs">Close this tab and reopen the project to retry.</p>
       </div>
     )
   }

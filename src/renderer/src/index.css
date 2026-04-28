@@ -1,13 +1,92 @@
 @import "tailwindcss";
 
-:root {
+/* Design tokens. Two themes for now (dark + light); high-contrast and
+   accent picker are follow-ups. Tailwind 4 picks up `--color-*` tokens
+   declared in @theme and generates utility classes — `bg-app`, `text-fg`,
+   `border-divider`, etc. — that resolve through these CSS variables, so
+   theme switching is just `data-theme="light"` on <html>.
+
+   The DARK values match what we were hardcoding before (#0d0d0d app bg,
+   #1a1a1a panel, white-with-alpha for borders/text), so anything we
+   missed in the migration still looks right in dark mode. */
+
+@theme {
+  --color-app: var(--cl-app);
+  --color-panel: var(--cl-panel);
+  --color-elevated: var(--cl-elevated);
+  --color-input: var(--cl-input);
+  --color-divider: var(--cl-divider);
+  --color-divider-strong: var(--cl-divider-strong);
+  --color-fg: var(--cl-fg);
+  --color-fg-muted: var(--cl-fg-muted);
+  --color-fg-faint: var(--cl-fg-faint);
+  --color-accent: var(--cl-accent);
+  --color-success: var(--cl-success);
+  --color-warn: var(--cl-warn);
+  --color-danger: var(--cl-danger);
+}
+
+:root,
+:root[data-theme="dark"] {
   color-scheme: dark;
+  --cl-app: #0d0d0d;
+  --cl-panel: #1a1a1a;
+  --cl-elevated: rgba(255, 255, 255, 0.05);
+  --cl-input: rgba(255, 255, 255, 0.04);
+  --cl-divider: rgba(255, 255, 255, 0.10);
+  --cl-divider-strong: rgba(255, 255, 255, 0.20);
+  --cl-fg: #e5e5e5;
+  --cl-fg-muted: rgba(255, 255, 255, 0.70);
+  --cl-fg-faint: rgba(255, 255, 255, 0.45);
+  --cl-accent: #2563eb;
+  --cl-success: #4ade80;
+  --cl-warn: #fbbf24;
+  --cl-danger: #f87171;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --cl-app: #f7f7f8;
+  --cl-panel: #ffffff;
+  --cl-elevated: rgba(0, 0, 0, 0.04);
+  --cl-input: rgba(0, 0, 0, 0.03);
+  --cl-divider: rgba(0, 0, 0, 0.10);
+  --cl-divider-strong: rgba(0, 0, 0, 0.22);
+  --cl-fg: #1a1a1a;
+  --cl-fg-muted: rgba(0, 0, 0, 0.65);
+  --cl-fg-faint: rgba(0, 0, 0, 0.42);
+  --cl-accent: #2563eb;
+  --cl-success: #16a34a;
+  --cl-warn: #d97706;
+  --cl-danger: #dc2626;
+}
+
+/* "system" picks dark by default and only flips to light if the user's OS
+   prefers light. This way dark stays the unsurprising default for users
+   who never touch the picker. */
+@media (prefers-color-scheme: light) {
+  :root[data-theme="system"] {
+    color-scheme: light;
+    --cl-app: #f7f7f8;
+    --cl-panel: #ffffff;
+    --cl-elevated: rgba(0, 0, 0, 0.04);
+    --cl-input: rgba(0, 0, 0, 0.03);
+    --cl-divider: rgba(0, 0, 0, 0.10);
+    --cl-divider-strong: rgba(0, 0, 0, 0.22);
+    --cl-fg: #1a1a1a;
+    --cl-fg-muted: rgba(0, 0, 0, 0.65);
+    --cl-fg-faint: rgba(0, 0, 0, 0.42);
+    --cl-accent: #2563eb;
+    --cl-success: #16a34a;
+    --cl-warn: #d97706;
+    --cl-danger: #dc2626;
+  }
 }
 
 body {
   margin: 0;
-  background: #0d0d0d;
-  color: #e5e5e5;
+  background: var(--cl-app);
+  color: var(--cl-fg);
   font-family: ui-sans-serif, system-ui, sans-serif;
 }
 

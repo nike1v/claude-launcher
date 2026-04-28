@@ -24,9 +24,9 @@ export function App() {
   }, [])
 
   return (
-    <div className="flex h-screen bg-[#0d0d0d] text-[#e5e5e5] overflow-hidden">
+    <div className="flex h-screen bg-app text-fg overflow-hidden">
       {/* Sidebar */}
-      <div className="w-56 shrink-0 border-r border-white/10 flex flex-col">
+      <div className="w-56 shrink-0 border-r border-divider flex flex-col">
         <Sidebar />
       </div>
 
@@ -43,7 +43,7 @@ export function App() {
             </div>
           ))}
           {tabOrder.length === 0 && (
-            <div className="h-full flex items-center justify-center text-white/30 text-sm">
+            <div className="h-full flex items-center justify-center text-fg-faint text-sm">
               Select a project from the sidebar to start a session
             </div>
           )}
