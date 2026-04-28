@@ -1,7 +1,19 @@
-import { app, BrowserWindow, shell } from 'electron'
+import { app, BrowserWindow, session, shell } from 'electron'
 import { join } from 'node:path'
 import { registerIpcHandlers } from './ipc-handlers'
 import { initAutoUpdater } from './updater'
+
+// Only http(s) gets handed to the OS browser. file://, javascript:, data:,
+// and unknown schemes from a compromised renderer would otherwise call
+// shell.openExternal() with attacker-controlled input.
+function isSafeExternalUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url)
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:'
+  } catch {
+    return false
+  }
+}
 
 function createWindow(): BrowserWindow {
   const win = new BrowserWindow({
@@ -14,7 +26,8 @@ function createWindow(): BrowserWindow {
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
-      nodeIntegration: false
+      nodeIntegration: false,
+      sandbox: true
     }
   })
 
@@ -25,14 +38,30 @@ function createWindow(): BrowserWindow {
   }
 
   win.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url)
+    if (isSafeExternalUrl(url)) shell.openExternal(url)
     return { action: 'deny' }
+  })
+
+  // Prevent the renderer from being navigated away from our bundled UI. The
+  // only legitimate origins are the dev server (set via ELECTRON_RENDERER_URL)
+  // and our packaged file:// path.
+  win.webContents.on('will-navigate', (event, url) => {
+    const allowed = process.env['ELECTRON_RENDERER_URL']
+    if (allowed && url.startsWith(allowed)) return
+    if (url.startsWith('file://')) return
+    event.preventDefault()
+    if (isSafeExternalUrl(url)) shell.openExternal(url)
   })
 
   return win
 }
 
 app.whenReady().then(() => {
+  // Deny every renderer permission request by default. We don't ask for
+  // camera, mic, geolocation, notifications, etc., so a compromised renderer
+  // shouldn't be able to opt itself in.
+  session.defaultSession.setPermissionRequestHandler((_wc, _permission, callback) => callback(false))
+
   const win = createWindow()
   const cleanup = registerIpcHandlers(win)
   initAutoUpdater(win)

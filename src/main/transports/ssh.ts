@@ -4,11 +4,13 @@ import type { HostType } from '../../shared/types'
 import type { ITransport, ProbeResult, SpawnOptions } from './types'
 import { runPathProbe, probeScript, shQuote } from './path-probe'
 import { getCachedPath, setCachedPath } from './path-cache'
+import { validateSshHost } from './validate-ssh'
 
 export class SshTransport implements ITransport {
   public spawn(options: SpawnOptions): ChildProcess {
     const { host, path, model, resumeSessionId } = options
     if (host.kind !== 'ssh') throw new Error('SshTransport requires ssh host')
+    validateSshHost(host)
 
     const claudeArgs = [
       '--output-format', 'stream-json',
@@ -48,6 +50,11 @@ export class SshTransport implements ITransport {
   public async probe(host: HostType): Promise<ProbeResult> {
     if (host.kind !== 'ssh') {
       return { ok: false, reason: 'SshTransport requires ssh host' }
+    }
+    try {
+      validateSshHost(host)
+    } catch (err) {
+      return { ok: false, reason: err instanceof Error ? err.message : 'invalid ssh config' }
     }
     const args = ['-T', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=8']
     args.push(...sshConnectArgs(host))
