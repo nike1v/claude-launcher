@@ -19,7 +19,7 @@ export function UserMessage({ text, attachments }: Props) {
       )}
       <div className="max-w-xl flex flex-col items-end gap-2">
         {text.trim() && (
-          <div className="bg-white/[0.08] rounded-lg px-3 py-2 text-sm text-white/90 whitespace-pre-wrap">
+          <div className="bg-elevated rounded-lg px-3 py-2 text-sm text-fg whitespace-pre-wrap">
             {text}
           </div>
         )}
@@ -49,13 +49,13 @@ function DocumentChip({ block }: { block: DocumentBlock }) {
     await saveFileAs('document.pdf', block.source.media_type, block.source.data)
   }
   return (
-    <div className="group/doc flex items-center gap-2 bg-white/[0.06] rounded px-3 py-2 text-xs text-white/70">
+    <div className="group/doc flex items-center gap-2 bg-elevated rounded px-3 py-2 text-xs text-fg-muted">
       <FileText size={14} />
       <span>document ({block.source.media_type})</span>
       <button
         type="button"
         onClick={handleSave}
-        className="text-white/40 hover:text-white opacity-0 group-hover/doc:opacity-100 transition-opacity"
+        className="text-fg-faint hover:text-fg opacity-0 group-hover/doc:opacity-100 transition-opacity"
         title="Save as…"
       >
         <Download size={12} />

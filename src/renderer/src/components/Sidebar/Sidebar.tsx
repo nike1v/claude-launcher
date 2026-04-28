@@ -29,10 +29,10 @@ export function Sidebar() {
   return (
     <div className="flex flex-col h-full pt-3">
       <div className="px-3 mb-3 flex items-center justify-between">
-        <span className="text-xs font-semibold text-white/50 uppercase tracking-wider">Projects</span>
+        <span className="text-xs font-semibold text-fg-faint uppercase tracking-wider">Projects</span>
         <button
           onClick={() => setShowSettings(true)}
-          className="text-white/40 hover:text-white/80 p-0.5"
+          className="text-fg-faint hover:text-fg p-0.5"
           title="Settings"
         >
           <SettingsIcon size={14} />
@@ -53,12 +53,12 @@ export function Sidebar() {
         ))}
 
         {environments.length === 0 && (
-          <p className="px-3 text-xs text-white/30">
+          <p className="px-3 text-xs text-fg-faint">
             No environments yet. Click the gear icon to add one.
           </p>
         )}
         {environments.length > 0 && projects.length === 0 && (
-          <p className="px-3 text-xs text-white/30">
+          <p className="px-3 text-xs text-fg-faint">
             No projects yet. Hover an environment and click + to add one.
           </p>
         )}

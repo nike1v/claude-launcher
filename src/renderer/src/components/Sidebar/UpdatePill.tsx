@@ -54,9 +54,9 @@ interface View {
 }
 
 function describe(status: UpdaterStatus): View {
-  const tonePrimary = 'bg-blue-600/90 text-white'
-  const toneNeutral = 'bg-white/[0.04] text-white/70 border border-white/10'
-  const toneError = 'bg-red-600/80 text-white'
+  const tonePrimary = 'bg-blue-600/90 text-fg'
+  const toneNeutral = 'bg-elevated text-fg-muted border border-divider'
+  const toneError = 'bg-red-600/80 text-fg'
 
   switch (status.state) {
     case 'checking':
@@ -128,8 +128,8 @@ function ActionButton({
       onClick={onClick}
       className={`text-left text-xs transition-colors ${
         emphasized
-          ? 'font-semibold text-white hover:text-white/80'
-          : 'font-medium text-white/70 hover:text-white'
+          ? 'font-semibold text-fg hover:text-fg'
+          : 'font-medium text-fg-muted hover:text-fg'
       }`}
     >
       {label}
@@ -155,7 +155,7 @@ function ProgressBar({
           {percent !== null && <span className="tabular-nums opacity-90">{percent}%</span>}
         </div>
       )}
-      <div className="h-1 rounded-full bg-white/20 overflow-hidden relative">
+      <div className="h-1 rounded-full bg-elevated overflow-hidden relative">
         <div
           className={`h-full bg-white/90 ${indeterminate ? 'indeterminate-bar' : 'transition-all'}`}
           style={percent !== null ? { width: `${percent}%` } : undefined}

@@ -106,8 +106,8 @@ export function ProjectItem({ project, isActive, onEdit }: Props) {
       onClick={handleClick}
       className={`group relative flex items-center w-full px-3 py-1.5 rounded text-sm cursor-pointer transition-colors
         ${isActive
-          ? 'bg-white/10 text-white'
-          : 'text-white/60 hover:bg-white/5 hover:text-white/90'
+          ? 'bg-elevated text-fg'
+          : 'text-fg-muted hover:bg-elevated hover:text-fg'
         }`}
     >
       <StatusDot status={sessionStatus} className="mr-2" />
@@ -116,7 +116,7 @@ export function ProjectItem({ project, isActive, onEdit }: Props) {
         <button
           type="button"
           onClick={handleEdit}
-          className="p-1 rounded hover:bg-white/10 text-white/50 hover:text-white"
+          className="p-1 rounded hover:bg-elevated text-fg-faint hover:text-fg"
           title="Edit project"
         >
           <Pencil size={12} />
@@ -124,7 +124,7 @@ export function ProjectItem({ project, isActive, onEdit }: Props) {
         <button
           type="button"
           onClick={handleDelete}
-          className="p-1 rounded hover:bg-red-500/20 text-white/50 hover:text-red-300"
+          className="p-1 rounded hover:bg-red-500/20 text-fg-faint hover:text-red-300"
           title="Remove project"
         >
           <Trash2 size={12} />

@@ -91,8 +91,8 @@ export function EnvironmentForm({ initial, onCancel, onSave }: Props) {
     })
   }
 
-  const inputCls = 'w-full bg-white/5 border border-white/10 rounded px-2 py-1.5 text-sm text-white placeholder-white/30 focus:outline-none focus:border-white/30'
-  const labelCls = 'block text-xs text-white/50 mb-1'
+  const inputCls = 'w-full bg-elevated border border-divider rounded px-2 py-1.5 text-sm text-fg placeholder-fg-faint focus:outline-none focus:border-divider-strong'
+  const labelCls = 'block text-xs text-fg-faint mb-1'
 
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
@@ -118,9 +118,9 @@ export function EnvironmentForm({ initial, onCancel, onSave }: Props) {
               disabled={!!initial}
               className={`flex-1 py-1.5 text-xs rounded border transition-colors
                 ${kind === k
-                  ? 'bg-white/10 border-white/30 text-white'
-                  : 'border-white/10 text-white/40 hover:border-white/20'}
-                ${initial ? 'opacity-60 cursor-not-allowed hover:border-white/10' : ''}
+                  ? 'bg-elevated border-divider-strong text-fg'
+                  : 'border-divider text-fg-faint hover:border-divider-strong'}
+                ${initial ? 'opacity-60 cursor-not-allowed hover:border-divider' : ''}
               `}
             >
               {k.toUpperCase()}
@@ -168,7 +168,7 @@ export function EnvironmentForm({ initial, onCancel, onSave }: Props) {
               <input className={inputCls} value={sshKeyFile} onChange={e => setSshKeyFile(e.target.value)} placeholder="~/.ssh/id_rsa" />
             </div>
           </div>
-          <p className="text-[10px] text-white/40 -mt-1">
+          <p className="text-[10px] text-fg-faint -mt-1">
             Tip: leave User / Port / Key File empty if the host is defined in <span className="font-mono">~/.ssh/config</span>.
           </p>
         </>
@@ -177,14 +177,14 @@ export function EnvironmentForm({ initial, onCancel, onSave }: Props) {
       <div>
         <label className={labelCls}>Default Model (optional)</label>
         <ModelCombobox value={defaultModel} onChange={setDefaultModel} placeholder="claude-opus-4-7" />
-        <p className="mt-1 text-[10px] text-white/30">
+        <p className="mt-1 text-[10px] text-fg-faint">
           Projects under this environment use this unless they set their own model.
         </p>
       </div>
 
       {probeConfig && (
-        <div className="flex items-center justify-between rounded border border-white/10 bg-white/[0.02] px-3 py-2">
-          <span className="text-xs text-white/50">Connection</span>
+        <div className="flex items-center justify-between rounded border border-divider bg-elevated px-3 py-2">
+          <span className="text-xs text-fg-faint">Connection</span>
           <EnvironmentStatus config={probeConfig} onResult={setProbeState} />
         </div>
       )}
@@ -203,7 +203,7 @@ export function EnvironmentForm({ initial, onCancel, onSave }: Props) {
               <button
                 type="button"
                 onClick={onCancel}
-                className="flex-1 py-2 text-xs font-medium rounded border border-white/10 text-white/60 hover:text-white hover:border-white/20 transition-colors"
+                className="flex-1 py-2 text-xs font-medium rounded border border-divider text-fg-muted hover:text-fg hover:border-divider-strong transition-colors"
               >
                 Cancel
               </button>
@@ -211,13 +211,13 @@ export function EnvironmentForm({ initial, onCancel, onSave }: Props) {
                 type="submit"
                 disabled={blocked}
                 title={blocked ? reason : undefined}
-                className="flex-1 py-2 text-xs font-medium rounded bg-white/10 hover:bg-white/15 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                className="flex-1 py-2 text-xs font-medium rounded bg-elevated hover:bg-elevated disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
                 {initial ? 'Save' : 'Add Environment'}
               </button>
             </div>
             {blocked && reason && (
-              <p className="text-[10px] text-white/40 text-right">{reason}</p>
+              <p className="text-[10px] text-fg-faint text-right">{reason}</p>
             )}
           </div>
         )

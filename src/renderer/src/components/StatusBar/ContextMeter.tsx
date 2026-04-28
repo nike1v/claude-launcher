@@ -14,16 +14,16 @@ export function ContextMeter({ used, total }: Props) {
   const tone =
     ratio >= 0.9 ? 'bg-red-400'
     : ratio >= 0.75 ? 'bg-amber-400'
-    : 'bg-white/40'
+    : 'bg-fg-faint'
 
   const textTone =
     ratio >= 0.9 ? 'text-red-300/80'
     : ratio >= 0.75 ? 'text-amber-300/80'
-    : 'text-white/40'
+    : 'text-fg-faint'
 
   return (
     <span className={`flex items-center gap-1.5 ${textTone}`} title={`${used.toLocaleString()} / ${total.toLocaleString()} tokens`}>
-      <span className="relative inline-block w-12 h-1 rounded-full bg-white/10 overflow-hidden">
+      <span className="relative inline-block w-12 h-1 rounded-full bg-elevated overflow-hidden">
         <span
           className={`absolute inset-y-0 left-0 ${tone} transition-[width] duration-300`}
           style={{ width: `${percent}%` }}

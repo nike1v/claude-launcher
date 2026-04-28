@@ -17,34 +17,34 @@ export function ToolUse({ name, input, result }: Props) {
   const isError = result?.is_error === true
 
   return (
-    <div className={`border rounded-lg overflow-hidden text-xs ${isError ? 'border-red-500/30' : 'border-white/10'}`}>
+    <div className={`border rounded-lg overflow-hidden text-xs ${isError ? 'border-red-500/30' : 'border-divider'}`}>
       <button
         onClick={() => setExpanded(e => !e)}
         className={`flex items-center gap-2 w-full px-3 py-2 transition-colors text-left ${
           isError
             ? 'text-red-300/80 hover:text-red-300 hover:bg-red-500/5'
-            : 'text-white/50 hover:text-white/70 hover:bg-white/5'
+            : 'text-fg-faint hover:text-fg-muted hover:bg-elevated'
         }`}
       >
         {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
         <span className="font-mono">{name}</span>
-        {summary && <span className="font-mono text-white/40 truncate">{summary}</span>}
+        {summary && <span className="font-mono text-fg-faint truncate">{summary}</span>}
         {!result && (
-          <span className="ml-auto text-white/30 italic shrink-0">running…</span>
+          <span className="ml-auto text-fg-faint italic shrink-0">running…</span>
         )}
       </button>
       {expanded && (
-        <div className="bg-black/20 border-t border-white/10">
+        <div className="bg-black/20 border-t border-divider">
           <div className="px-3 py-2">
-            <div className="text-white/30 mb-1">input</div>
-            <pre className="text-white/60 overflow-x-auto whitespace-pre-wrap">
+            <div className="text-fg-faint mb-1">input</div>
+            <pre className="text-fg-muted overflow-x-auto whitespace-pre-wrap">
               {JSON.stringify(input, null, 2)}
             </pre>
           </div>
           {resultText !== null && (
-            <div className="px-3 py-2 border-t border-white/10">
-              <div className="text-white/30 mb-1">{isError ? 'error' : 'result'}</div>
-              <pre className={`overflow-x-auto whitespace-pre-wrap ${isError ? 'text-red-300/80' : 'text-white/60'}`}>
+            <div className="px-3 py-2 border-t border-divider">
+              <div className="text-fg-faint mb-1">{isError ? 'error' : 'result'}</div>
+              <pre className={`overflow-x-auto whitespace-pre-wrap ${isError ? 'text-red-300/80' : 'text-fg-muted'}`}>
                 {resultText}
               </pre>
             </div>

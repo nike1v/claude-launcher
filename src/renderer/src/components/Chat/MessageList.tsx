@@ -156,7 +156,7 @@ export function MessageList({ sessionId }: Props) {
           )
         })}
         {isBusy && (
-          <div className="flex items-center gap-2 text-xs text-white/40">
+          <div className="flex items-center gap-2 text-xs text-fg-faint">
             <Loader2 size={12} className="animate-spin" />
             <span className="italic">claude is thinking…</span>
           </div>

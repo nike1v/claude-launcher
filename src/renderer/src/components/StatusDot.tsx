@@ -15,7 +15,7 @@ const TONE: Record<Session['status'], string> = {
   ready: 'bg-green-400',
   busy: 'bg-blue-400 status-dot-pulse',
   error: 'bg-red-400',
-  closed: 'bg-white/20'
+  closed: 'bg-elevated'
 }
 
 const TITLE: Record<Session['status'], string> = {
@@ -30,7 +30,7 @@ const TITLE: Record<Session['status'], string> = {
 // the tab bar and the sidebar project list so both surfaces always agree
 // on what's happening for a given session.
 export function StatusDot({ status, size = 'xs', className = '' }: Props) {
-  const tone = status ? TONE[status] : 'bg-white/10'
+  const tone = status ? TONE[status] : 'bg-elevated'
   const title = status ? TITLE[status] : 'No active session'
   const dim = size === 'sm' ? 'w-2 h-2' : 'w-1.5 h-1.5'
   return (

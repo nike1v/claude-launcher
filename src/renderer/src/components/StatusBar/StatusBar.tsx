@@ -41,18 +41,18 @@ export function StatusBar() {
     : ''
 
   return (
-    <div className="h-7 border-t border-white/10 flex items-center px-3 gap-3 text-xs text-white/30 shrink-0 overflow-hidden">
+    <div className="h-7 border-t border-divider flex items-center px-3 gap-3 text-xs text-fg-faint shrink-0 overflow-hidden">
       {session && (
         <>
           {/* Status dot moved to the project list / tab title — the bottom
               bar is now strictly host / cwd / context / model. */}
           <span className="shrink-0">{hostLabel}</span>
           {(initEvent?.cwd ?? project?.path) && (
-            <span className="text-white/20 truncate min-w-0">{initEvent?.cwd ?? project?.path}</span>
+            <span className="text-fg-faint truncate min-w-0">{initEvent?.cwd ?? project?.path}</span>
           )}
           <div className="ml-auto flex items-center gap-3 shrink-0">
             {ctx && <ContextMeter used={ctx.used} total={ctx.total} />}
-            {modelLabel && <span className="text-white/20">{modelLabel}</span>}
+            {modelLabel && <span className="text-fg-faint">{modelLabel}</span>}
           </div>
         </>
       )}

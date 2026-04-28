@@ -31,11 +31,11 @@ export function TabBar() {
   }, [activeSessionId, tabOrder])
 
   if (tabOrder.length === 0) {
-    return <div className="h-10 border-b border-white/10" />
+    return <div className="h-10 border-b border-divider" />
   }
 
   return (
-    <div className="flex border-b border-white/10 overflow-x-auto h-10 shrink-0">
+    <div className="flex border-b border-divider overflow-x-auto h-10 shrink-0">
       {tabOrder.map(sessionId => {
         const session = sessions[sessionId]
         if (!session) return null

@@ -15,7 +15,7 @@ export function ToolGroup({ toolNames, children }: Props) {
       <button
         type="button"
         onClick={() => setExpanded(e => !e)}
-        className="flex items-center gap-2 text-white/40 hover:text-white/70 transition-colors"
+        className="flex items-center gap-2 text-fg-faint hover:text-fg-muted transition-colors"
       >
         {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
         <Wrench size={12} />

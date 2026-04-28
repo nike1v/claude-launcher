@@ -98,15 +98,15 @@ export function AddProjectModal({ onClose, editProject, presetEnvironmentId }: P
     onClose()
   }
 
-  const inputCls = 'w-full bg-white/5 border border-white/10 rounded px-2 py-1.5 text-sm text-white placeholder-white/30 focus:outline-none focus:border-white/30'
-  const labelCls = 'block text-xs text-white/50 mb-1'
+  const inputCls = 'w-full bg-elevated border border-divider rounded px-2 py-1.5 text-sm text-fg placeholder-fg-faint focus:outline-none focus:border-divider-strong'
+  const labelCls = 'block text-xs text-fg-faint mb-1'
 
   return (
-    <Modal onClose={onClose} panelClassName="bg-[#1a1a1a] border border-white/10 rounded-lg p-5 w-96 max-h-[90vh] overflow-y-auto">
+    <Modal onClose={onClose} panelClassName="bg-panel border border-divider rounded-lg p-5 w-96 max-h-[90vh] overflow-y-auto">
       <>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-sm font-semibold">{editProject ? 'Edit Project' : 'Add Project'}</h2>
-          <button onClick={onClose} className="text-white/40 hover:text-white"><X size={16} /></button>
+          <button onClick={onClose} className="text-fg-faint hover:text-fg"><X size={16} /></button>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-3">
@@ -118,7 +118,7 @@ export function AddProjectModal({ onClose, editProject, presetEnvironmentId }: P
           {lockedToEnv && editEnv ? (
             <div>
               <label className={labelCls}>Environment</label>
-              <div className="text-xs text-white/60 px-2 py-1.5 rounded bg-white/[0.04] border border-white/10">
+              <div className="text-xs text-fg-muted px-2 py-1.5 rounded bg-elevated border border-divider">
                 {editEnv.name}
               </div>
             </div>
@@ -133,8 +133,8 @@ export function AddProjectModal({ onClose, editProject, presetEnvironmentId }: P
                     onClick={() => setHostKind(k)}
                     className={`flex-1 py-1.5 text-xs rounded border transition-colors
                       ${hostKind === k
-                        ? 'bg-white/10 border-white/30 text-white'
-                        : 'border-white/10 text-white/40 hover:border-white/20'}
+                        ? 'bg-elevated border-divider-strong text-fg'
+                        : 'border-divider text-fg-faint hover:border-divider-strong'}
                     `}
                   >
                     {k.toUpperCase()}
@@ -222,7 +222,7 @@ export function AddProjectModal({ onClose, editProject, presetEnvironmentId }: P
               placeholder={editEnv?.defaultModel || 'claude-opus-4-7'}
             />
             {editEnv?.defaultModel && !model && (
-              <p className="mt-1 text-[10px] text-white/30">
+              <p className="mt-1 text-[10px] text-fg-faint">
                 Inherits "{editEnv.defaultModel}" from {editEnv.name}.
               </p>
             )}
@@ -231,7 +231,7 @@ export function AddProjectModal({ onClose, editProject, presetEnvironmentId }: P
           <button
             type="submit"
             disabled={!name.trim() || !path.trim()}
-            className="w-full py-2 bg-white/10 hover:bg-white/15 disabled:opacity-40 disabled:cursor-not-allowed rounded text-sm font-medium transition-colors"
+            className="w-full py-2 bg-elevated hover:bg-elevated disabled:opacity-40 disabled:cursor-not-allowed rounded text-sm font-medium transition-colors"
           >
             {editProject ? 'Save Changes' : 'Add Project'}
           </button>
