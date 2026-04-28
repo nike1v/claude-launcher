@@ -84,5 +84,7 @@ export async function loadTabs(): Promise<import('../../../shared/types').Persis
 }
 
 export function saveTabs(state: import('../../../shared/types').PersistedTabs): void {
-  window.electronAPI.invoke('tabs:save', state)
+  window.electronAPI.invoke('tabs:save', state).catch((err: unknown) => {
+    console.error('[tabs:save] persistence write failed', err)
+  })
 }

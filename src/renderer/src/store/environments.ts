@@ -1,6 +1,12 @@
 import { create } from 'zustand'
 import type { Environment } from '../../../shared/types'
 
+const saveEnvironments = (envs: Environment[]): void => {
+  window.electronAPI.invoke('environments:save', envs).catch((err: unknown) => {
+    console.error('[environments:save] persistence write failed', err)
+  })
+}
+
 interface EnvironmentsStore {
   environments: Environment[]
   setEnvironments: (envs: Environment[]) => void
@@ -19,19 +25,19 @@ export const useEnvironmentsStore = create<EnvironmentsStore>((set, get) => ({
   addEnvironment: (env) => {
     const updated = [...get().environments, env]
     set({ environments: updated })
-    window.electronAPI.invoke('environments:save', updated)
+    saveEnvironments(updated)
   },
 
   updateEnvironment: (env) => {
     const updated = get().environments.map(e => e.id === env.id ? env : e)
     set({ environments: updated })
-    window.electronAPI.invoke('environments:save', updated)
+    saveEnvironments(updated)
   },
 
   removeEnvironment: (id) => {
     const updated = get().environments.filter(e => e.id !== id)
     set({ environments: updated })
-    window.electronAPI.invoke('environments:save', updated)
+    saveEnvironments(updated)
   },
 
   reorderEnvironments: (fromId, toId, position) => {
@@ -46,6 +52,6 @@ export const useEnvironmentsStore = create<EnvironmentsStore>((set, get) => ({
     if (position === 'after') insertAt += 1
     next.splice(insertAt, 0, moved)
     set({ environments: next })
-    window.electronAPI.invoke('environments:save', next)
+    saveEnvironments(next)
   }
 }))
