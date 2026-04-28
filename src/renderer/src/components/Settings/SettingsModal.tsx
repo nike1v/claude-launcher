@@ -128,7 +128,10 @@ function EnvironmentRow({
         <div className="text-xs text-white/40 truncate">{describeHost(env.config)}</div>
       </div>
       <EnvironmentStatus config={env.config} compact />
-      <span className="text-xs text-white/30 shrink-0">
+      {/* Fixed width + right-align so "1 project" and "4 projects" occupy the
+          same column across rows — otherwise the trailing action icons land
+          at different x positions per row when revealed on hover. */}
+      <span className="text-xs text-white/30 shrink-0 w-20 text-right tabular-nums">
         {projectCount} project{projectCount === 1 ? '' : 's'}
       </span>
       <button
