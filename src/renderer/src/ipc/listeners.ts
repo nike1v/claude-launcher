@@ -26,18 +26,19 @@ export function useIpcListeners(): void {
             if (!current.claudeSessionId) update.claudeSessionId = event.session_id
             if (event.model && current.lastModel !== event.model) update.lastModel = event.model
             if (Object.keys(update).length) updateSession(sessionId, update)
-            // Pin the session id on the project the first time we ever see
-            // one — this lets the sidebar resume the same conversation after
-            // the tab is closed. Write-once: if the user later manages to get
-            // a fresh id (e.g. after a future "prune" action), we won't
-            // clobber it here on every init.
+            // Pin metadata on the project record. claudeSessionId is
+            // write-once (resume target). lastModel tracks latest so the
+            // StatusBar can show a real model name immediately on a sidebar
+            // re-open instead of a blank flash through the SSH cold-start.
             const projects = useProjectsStore.getState().projects
             const project = projects.find(p => p.id === current.projectId)
-            if (project && !project.lastClaudeSessionId) {
-              useProjectsStore.getState().updateProject({
-                ...project,
-                lastClaudeSessionId: event.session_id
-              })
+            if (project) {
+              const projectUpdate: Partial<typeof project> = {}
+              if (!project.lastClaudeSessionId) projectUpdate.lastClaudeSessionId = event.session_id
+              if (event.model && project.lastModel !== event.model) projectUpdate.lastModel = event.model
+              if (Object.keys(projectUpdate).length) {
+                useProjectsStore.getState().updateProject({ ...project, ...projectUpdate })
+              }
             }
           }
         }
@@ -52,6 +53,17 @@ export function useIpcListeners(): void {
                 const current = useSessionsStore.getState().sessions[sessionId]
                 if (current && current.lastContextWindow !== v.contextWindow) {
                   updateSession(sessionId, { lastContextWindow: v.contextWindow })
+                  // Mirror onto the project so the next sidebar re-open
+                  // shows the right context-window total before its first
+                  // result lands.
+                  const project = useProjectsStore.getState().projects
+                    .find(p => p.id === current.projectId)
+                  if (project && project.lastContextWindow !== v.contextWindow) {
+                    useProjectsStore.getState().updateProject({
+                      ...project,
+                      lastContextWindow: v.contextWindow
+                    })
+                  }
                 }
                 break
               }
