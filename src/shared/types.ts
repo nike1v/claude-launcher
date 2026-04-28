@@ -28,6 +28,10 @@ export interface Project {
   environmentId: string
   path: string
   model?: string
+  // Pinned on the first system:init for this project and never auto-updated.
+  // Lets the sidebar resume the same Claude conversation after the tab is
+  // closed — we pass it as --resume and reload its JSONL transcript.
+  lastClaudeSessionId?: string
 }
 
 export interface Session {
