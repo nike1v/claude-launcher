@@ -94,7 +94,14 @@ async function restoreTabs(knownProjectIds: string[]): Promise<void> {
       }
       let events: import('../../../shared/types').StreamJsonEvent[] = []
       try {
-        events = await loadSessionHistory(tab.projectId, tab.claudeSessionId)
+        const result = await loadSessionHistory(tab.projectId, tab.claudeSessionId)
+        events = result.events
+        // Surface the main-side diagnostic in the renderer console so the
+        // user actually sees it in DevTools when "history doesn't load".
+        // Main-process console.* doesn't reach browser DevTools.
+        if (result.diagnostic) {
+          console.warn(`[history] ${tab.claudeSessionId}: ${result.diagnostic}`)
+        }
       } catch (err) {
         // History unavailable — leave the tab empty; resume still works once
         // the first turn lands.

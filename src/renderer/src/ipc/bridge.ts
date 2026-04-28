@@ -40,8 +40,14 @@ export function respondPermission(
   window.electronAPI.invoke('session:permission', { sessionId, decision, toolUseId })
 }
 
-export async function loadSessionHistory(projectId: string, sessionId: string): Promise<import('../../../shared/types').StreamJsonEvent[]> {
-  return window.electronAPI.invoke('session:history:load', { projectId, sessionId }) as Promise<import('../../../shared/types').StreamJsonEvent[]>
+export async function loadSessionHistory(
+  projectId: string,
+  sessionId: string
+): Promise<{ events: import('../../../shared/types').StreamJsonEvent[]; diagnostic?: string }> {
+  return window.electronAPI.invoke('session:history:load', { projectId, sessionId }) as Promise<{
+    events: import('../../../shared/types').StreamJsonEvent[]
+    diagnostic?: string
+  }>
 }
 
 export function installUpdate(): void {
