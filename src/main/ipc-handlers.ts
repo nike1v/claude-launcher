@@ -10,6 +10,7 @@ import { HistoryReader } from './history-reader'
 import { listDir } from './dir-lister'
 import { probeUsage } from './usage-probe'
 import { resolveTransport } from './transports'
+import { sanitizeDefaultName, validateSaveFilePayload } from './attachment-limits'
 import type { IpcChannels } from '../shared/types'
 
 const CONFIG_DIR = join(homedir(), '.config', 'claude-launcher')
@@ -65,9 +66,15 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): () => Promise<vo
   })
 
   handle('dialog:saveFile', async ({ defaultName, mediaType, data }) => {
+    // Reject before opening the dialog so a malicious renderer can't OOM us
+    // by sending multi-GB base64. Also strip path separators / control chars
+    // from the suggested name — the user picks the actual path, but the
+    // suggestion shouldn't silently traverse out of their pwd.
+    validateSaveFilePayload(data)
+    const safeName = sanitizeDefaultName(defaultName)
     const result = await dialog.showSaveDialog(mainWindow, {
-      defaultPath: defaultName,
-      filters: filtersFor(defaultName, mediaType)
+      defaultPath: safeName,
+      filters: filtersFor(safeName, mediaType)
     })
     if (result.canceled || !result.filePath) return { saved: false }
     await writeFile(result.filePath, Buffer.from(data, 'base64'))

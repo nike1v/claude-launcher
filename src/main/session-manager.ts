@@ -3,6 +3,7 @@ import type { ChildProcess } from 'node:child_process'
 import type { ITransport, SpawnOptions } from './transports/types'
 import type { Environment, HostType, Project, SendAttachment, StreamJsonEvent, UserContentBlock } from '../shared/types'
 import { parseStreamJsonLine } from './stream-json-parser'
+import { validateAttachments } from './attachment-limits'
 // Aliased on import so the parameter-property `resolveTransport` doesn't
 // shadow it in its own default expression. The right-hand side of
 // `(resolveTransport = resolveTransport)` would otherwise hit a TDZ
@@ -158,6 +159,12 @@ export class SessionManager {
   public sendMessage(sessionId: string, text: string, attachments: SendAttachment[] = []): void {
     const session = this.sessions.get(sessionId)
     if (!session) return
+    // Bound the attachment payload before it lands in the JSON line we write
+    // to claude's stdin. Without this, a renderer (or a compromised one) could
+    // OOM the main process via base64 inflation. Throws — the IPC wrapper logs
+    // and rejects the invoke; the user will see the failure in DevTools rather
+    // than have the chat silently swallow their message.
+    validateAttachments(attachments)
     const content = attachments.length === 0
       ? text
       : buildContentBlocks(text, attachments)
