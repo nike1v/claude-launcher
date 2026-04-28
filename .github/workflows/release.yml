@@ -83,11 +83,6 @@ jobs:
 
   build-macos:
     runs-on: macos-latest
-    env:
-      # Skip code signing — we ship unsigned macOS builds. Users will need
-      # to right-click → Open the first time, and the auto-updater is
-      # effectively disabled until we add Apple Developer ID signing.
-      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
     steps:
       - uses: actions/checkout@v6
 
