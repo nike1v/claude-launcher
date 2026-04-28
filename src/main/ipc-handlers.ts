@@ -124,13 +124,6 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): () => Promise<vo
     }
   })
 
-  handle('projects:history:load', async ({ projectId }) => {
-    const ctx = resolveProjectAndEnv(projectStore, environmentStore, projectId)
-    if (!ctx) return
-    const entries = await historyReader.loadHistory(ctx.env.config, ctx.project.path)
-    safeSend('projects:history', { projectId, entries })
-  })
-
   handle('session:history:load', async ({ projectId, sessionId }) => {
     const ctx = resolveProjectAndEnv(projectStore, environmentStore, projectId)
     if (!ctx) return []
@@ -144,7 +137,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): () => Promise<vo
     stopped = true
     const channels = [
       'session:start', 'session:send', 'session:stop', 'session:interrupt', 'session:permission',
-      'projects:save', 'projects:load', 'projects:history:load', 'session:history:load',
+      'projects:save', 'projects:load', 'session:history:load',
       'environments:save', 'environments:load', 'environments:probe', 'environments:usage',
       'fs:listDir',
       'tabs:load', 'tabs:save', 'dialog:saveFile'

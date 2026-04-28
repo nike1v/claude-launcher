@@ -61,12 +61,6 @@ export interface PersistedTabs {
   activeIndex: number | null
 }
 
-export interface HistoryEntry {
-  sessionId: string
-  createdAt: string
-  summary?: string
-}
-
 // ── Stream-JSON events (Claude CLI --output-format stream-json) ──────────────
 
 export interface TokenUsage {
@@ -189,7 +183,6 @@ export interface IpcChannels {
   'session:permission': { sessionId: string; decision: 'allow' | 'deny'; toolUseId: string }
   'dialog:saveFile': { defaultName: string; mediaType: string; data: string }
   'projects:save': Project[]
-  'projects:history:load': { projectId: string }
   'session:history:load': { projectId: string; sessionId: string }
   'projects:load': Record<string, never>
   'environments:save': Environment[]
@@ -215,7 +208,6 @@ export interface IpcChannels {
   // Main → Renderer (events)
   'session:event': { sessionId: string; event: StreamJsonEvent }
   'session:status': { sessionId: string; status: Session['status']; errorMessage?: string }
-  'projects:history': { projectId: string; entries: HistoryEntry[] }
   'projects:loaded': { projects: Project[] }
   'environments:loaded': { environments: Environment[] }
   'updater:status': UpdaterStatus
@@ -224,7 +216,7 @@ export interface IpcChannels {
 export type IpcInvokeChannel = Extract<
   keyof IpcChannels,
   | 'session:start' | 'session:send' | 'session:stop' | 'session:interrupt' | 'session:permission'
-  | 'projects:save' | 'projects:history:load' | 'session:history:load' | 'projects:load'
+  | 'projects:save' | 'session:history:load' | 'projects:load'
   | 'environments:save' | 'environments:load' | 'environments:probe' | 'environments:usage'
   | 'fs:listDir'
   | 'tabs:load' | 'tabs:save'
@@ -234,5 +226,5 @@ export type IpcInvokeChannel = Extract<
 
 export type IpcEventChannel = Extract<
   keyof IpcChannels,
-  'session:event' | 'session:status' | 'projects:history' | 'projects:loaded' | 'environments:loaded' | 'updater:status'
+  'session:event' | 'session:status' | 'projects:loaded' | 'environments:loaded' | 'updater:status'
 >

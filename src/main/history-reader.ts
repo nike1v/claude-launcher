@@ -1,18 +1,16 @@
-import { execFile, spawn } from 'node:child_process'
-import { promisify } from 'node:util'
-import { readdir, readFile, stat } from 'node:fs/promises'
+import { spawn } from 'node:child_process'
+import { readFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join, sep } from 'node:path'
-import type { HistoryEntry, HostType, StreamJsonEvent } from '../shared/types'
+import type { HostType, StreamJsonEvent } from '../shared/types'
 import { parseStreamJsonLine } from './stream-json-parser'
 
-const execFileAsync = promisify(execFile)
-
 // JSONL transcripts can be hundreds of KB and grow unbounded; reading them via
-// execFile would silently truncate (default 1 MiB stdout buffer) and reject with
-// ERR_CHILD_PROCESS_STDOUT_MAXBUFFER, which our caller then turns into "no
-// history". Streaming the child's stdout sidesteps both the size cap and the
-// hard 5 s timeout we used previously (cold-start `wsl.exe` can blow past it).
+// execFile would silently truncate (default 1 MiB stdout buffer) and reject
+// with ERR_CHILD_PROCESS_STDOUT_MAXBUFFER, which our caller then turns into
+// "no history". Streaming the child's stdout sidesteps both the size cap and
+// the hard 5 s timeout we used previously (cold-start `wsl.exe` can blow past
+// it).
 const REMOTE_READ_TIMEOUT_MS = 30_000
 
 function streamCommand(bin: string, args: string[]): Promise<string> {
@@ -43,11 +41,7 @@ export class HistoryReader {
       } catch {
         return []
       }
-      return content.split('\n')
-        .map(line => line.trim())
-        .filter(Boolean)
-        .map(line => parseStreamJsonLine(line))
-        .filter((e): e is StreamJsonEvent => e !== null)
+      return parseJsonl(content)
     }
 
     const filePath = `${remoteClaudeProjectDir(projectPath)}/${shellEscape(sessionId)}.jsonl`
@@ -58,62 +52,16 @@ export class HistoryReader {
     } catch {
       return []
     }
-    return output.split('\n')
-      .map(line => line.trim())
-      .filter(Boolean)
-      .map(line => parseStreamJsonLine(line))
-      .filter((e): e is StreamJsonEvent => e !== null)
-  }
-
-  public async loadHistory(host: HostType, projectPath: string): Promise<HistoryEntry[]> {
-    if (host.kind === 'local') return loadLocalHistory(projectPath)
-
-    const historyDir = remoteClaudeProjectDir(projectPath)
-    const command = buildListCommand(host, historyDir)
-
-    let output: string
-    try {
-      const { stdout } = await execFileAsync(command.bin, command.args, { timeout: 5000 })
-      output = stdout
-    } catch {
-      return []
-    }
-
-    return parseHistoryOutput(output)
+    return parseJsonl(output)
   }
 }
 
-async function loadLocalHistory(projectPath: string): Promise<HistoryEntry[]> {
-  const dir = localClaudeProjectDir(projectPath)
-  let files: string[]
-  try {
-    files = (await readdir(dir)).filter(f => f.endsWith('.jsonl'))
-  } catch {
-    return []
-  }
-
-  const withMtime = await Promise.all(
-    files.map(async f => {
-      const full = join(dir, f)
-      const s = await stat(full)
-      return { full, mtime: s.mtimeMs }
-    })
-  )
-  withMtime.sort((a, b) => b.mtime - a.mtime)
-
-  const entries: HistoryEntry[] = []
-  for (const { full } of withMtime.slice(0, 20)) {
-    try {
-      const content = await readFile(full, 'utf-8')
-      const firstLine = content.split('\n')[0]?.trim()
-      if (!firstLine) continue
-      const entry = parseJSONLFirstLine(full, firstLine)
-      if (entry) entries.push(entry)
-    } catch {
-      // skip unreadable files
-    }
-  }
-  return entries
+function parseJsonl(content: string): StreamJsonEvent[] {
+  return content.split('\n')
+    .map(line => line.trim())
+    .filter(Boolean)
+    .map(line => parseStreamJsonLine(line))
+    .filter((e): e is StreamJsonEvent => e !== null)
 }
 
 function localClaudeProjectDir(projectPath: string): string {
@@ -122,15 +70,15 @@ function localClaudeProjectDir(projectPath: string): string {
 }
 
 function remoteClaudeProjectDir(projectPath: string): string {
-  // Use $HOME (not ~) so the path expands inside the double-quoted string
-  // we pass to bash -c. Tildes do NOT expand inside any kind of quotes.
+  // Use $HOME (not ~) so the path expands inside the double-quoted string we
+  // pass to bash -c. Tildes don't expand inside any kind of quotes.
   const slug = projectPath.split('/').join('-')
   return `$HOME/.claude/projects/${shellEscape(slug)}`
 }
 
 // Quote-only escape for embedding inside a bash double-quoted string. The
-// callers always wrap the result in `"..."`, so we just need to neutralise
-// the four characters that have meaning there.
+// callers always wrap the result in `"..."`, so we just need to neutralise the
+// four characters that have meaning there.
 function shellEscape(s: string): string {
   return s.replace(/[\\"`$]/g, '\\$&')
 }
@@ -145,70 +93,4 @@ function buildCatCommand(host: HostType, filePath: string): { bin: string; args:
   if (host.keyFile) sshArgs.push('-i', host.keyFile)
   sshArgs.push(`${host.user}@${host.host}`, cmd)
   return { bin: 'ssh', args: sshArgs }
-}
-
-function buildListCommand(
-  host: HostType,
-  historyDir: string
-): { bin: string; args: string[] } {
-  const shellScript = [
-    `if [ -d "${historyDir}" ]; then`,
-    `  ls -t "${historyDir}"/*.jsonl 2>/dev/null | head -20 | while read f; do`,
-    `    echo "FILE:$f"`,
-    `    head -1 "$f" 2>/dev/null`,
-    `  done`,
-    `fi`
-  ].join('\n')
-
-  if (host.kind === 'wsl') {
-    return { bin: 'wsl.exe', args: ['-d', host.distro, '--', 'bash', '-c', shellScript] }
-  }
-
-  const sshArgs = ['-T']
-  if (host.port) sshArgs.push('-p', String(host.port))
-  if (host.keyFile) sshArgs.push('-i', host.keyFile)
-  sshArgs.push(`${host.user}@${host.host}`, shellScript)
-
-  return { bin: 'ssh', args: sshArgs }
-}
-
-function parseHistoryOutput(output: string): HistoryEntry[] {
-  const entries: HistoryEntry[] = []
-  const lines = output.split('\n')
-  let currentFile: string | null = null
-
-  for (const line of lines) {
-    if (line.startsWith('FILE:')) {
-      currentFile = line.slice(5).trim()
-      continue
-    }
-    if (currentFile && line.trim()) {
-      const entry = parseJSONLFirstLine(currentFile, line.trim())
-      if (entry) entries.push(entry)
-      currentFile = null
-    }
-  }
-
-  return entries
-}
-
-function parseJSONLFirstLine(filePath: string, firstLine: string): HistoryEntry | null {
-  try {
-    const data = JSON.parse(firstLine) as Record<string, unknown>
-    const sessionId = filePath.split(/[/\\]/).pop()?.replace('.jsonl', '') ?? filePath
-    const createdAt = typeof data.timestamp === 'string' ? data.timestamp : new Date().toISOString()
-    const summary = extractSummary(data)
-    return { sessionId, createdAt, summary }
-  } catch {
-    return null
-  }
-}
-
-function extractSummary(data: Record<string, unknown>): string | undefined {
-  if (typeof data.content === 'string') return data.content.slice(0, 80)
-  if (Array.isArray(data.content)) {
-    const first = data.content[0] as Record<string, unknown> | undefined
-    if (first && typeof first.text === 'string') return first.text.slice(0, 80)
-  }
-  return undefined
 }

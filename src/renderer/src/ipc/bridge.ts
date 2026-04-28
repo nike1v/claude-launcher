@@ -40,10 +40,6 @@ export function respondPermission(
   window.electronAPI.invoke('session:permission', { sessionId, decision, toolUseId })
 }
 
-export function loadHistory(projectId: string): void {
-  window.electronAPI.invoke('projects:history:load', { projectId })
-}
-
 export async function loadSessionHistory(projectId: string, sessionId: string): Promise<import('../../../shared/types').StreamJsonEvent[]> {
   return window.electronAPI.invoke('session:history:load', { projectId, sessionId }) as Promise<import('../../../shared/types').StreamJsonEvent[]>
 }
