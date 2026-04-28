@@ -9,11 +9,8 @@ import { TabStore } from './tab-store'
 import { HistoryReader } from './history-reader'
 import { listDir } from './dir-lister'
 import { probeUsage } from './usage-probe'
-import { LocalTransport } from './transports/local'
-import { WslTransport } from './transports/wsl'
-import { SshTransport } from './transports/ssh'
-import type { ITransport } from './transports/types'
-import type { HostType, IpcChannels } from '../shared/types'
+import { resolveTransport } from './transports'
+import type { IpcChannels } from '../shared/types'
 
 const CONFIG_DIR = join(homedir(), '.config', 'claude-launcher')
 const PROJECTS_PATH = join(CONFIG_DIR, 'projects.json')
@@ -42,7 +39,18 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): () => Promise<vo
   const handle = <K extends keyof IpcChannels>(
     channel: K,
     handler: (payload: IpcChannels[K]) => unknown
-  ) => ipcMain.handle(channel as string, (_event, payload) => handler(payload))
+  ) => ipcMain.handle(channel as string, async (_event, payload) => {
+    try {
+      return await handler(payload)
+    } catch (err) {
+      // Re-throw so the renderer's .catch path still fires, but log the
+      // full error here. Without this, IPC failures only surface as the
+      // renderer's "Error invoking remote method" with no context, which
+      // makes diagnosing prod issues a guessing game.
+      console.error(`[ipc] ${channel} threw:`, err)
+      throw err
+    }
+  })
 
   handle('session:start', async ({ projectId, resumeSessionId }) => {
     const project = projectStore.load().find(p => p.id === projectId)
@@ -97,7 +105,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): () => Promise<vo
   })
 
   handle('environments:probe', async ({ config }) => {
-    const transport = resolveTransportForConfig(config)
+    const transport = resolveTransport(config)
     return transport.probe(config)
   })
 
@@ -157,13 +165,6 @@ function resolveProjectAndEnv(
   const env = environmentStore.load().find(e => e.id === project.environmentId)
   if (!env) return null
   return { project, env }
-}
-
-function resolveTransportForConfig(config: HostType): ITransport {
-  if (config.kind === 'local') return new LocalTransport()
-  if (config.kind === 'wsl') return new WslTransport()
-  if (config.kind === 'ssh') return new SshTransport()
-  throw new Error(`Unknown host kind: ${(config as { kind: string }).kind}`)
 }
 
 function runEnvironmentMigration(projectStore: ProjectStore, envStore: EnvironmentStore): void {

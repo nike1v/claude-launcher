@@ -8,7 +8,11 @@ const makeProcess = () => {
   const stdinWritten: string[] = []
   const stdin = Object.assign(new EventEmitter(), {
     write: vi.fn((data: string) => stdinWritten.push(data)),
-    end: vi.fn()
+    end: vi.fn(),
+    // session-manager's writeStdin guard checks these before writing —
+    // matches the shape of a real node Writable stream.
+    writable: true,
+    destroyed: false
   })
   return Object.assign(emitter, {
     pid: 42,

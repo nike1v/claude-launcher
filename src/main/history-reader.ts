@@ -17,16 +17,29 @@ function streamCommand(bin: string, args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
     const child = spawn(bin, args, { stdio: ['ignore', 'pipe', 'pipe'] })
     const chunks: Buffer[] = []
+    let settled = false
+    const settle = (fn: () => void): void => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      // Detach all listeners before kill so a chunk that fires between
+      // `kill` and the actual process exit doesn't push into a buffer that
+      // nobody owns any more.
+      child.stdout.removeAllListeners('data')
+      child.stderr.removeAllListeners('data')
+      fn()
+    }
     const timer = setTimeout(() => {
-      child.kill()
-      reject(new Error('timeout'))
+      settle(() => {
+        try { child.kill() } catch { /* already exited */ }
+        reject(new Error('timeout'))
+      })
     }, REMOTE_READ_TIMEOUT_MS)
     child.stdout.on('data', (c: Buffer) => chunks.push(c))
     child.stderr.on('data', () => {})
-    child.on('error', (err) => { clearTimeout(timer); reject(err) })
+    child.on('error', (err) => { settle(() => reject(err)) })
     child.on('close', () => {
-      clearTimeout(timer)
-      resolve(Buffer.concat(chunks).toString('utf-8'))
+      settle(() => resolve(Buffer.concat(chunks).toString('utf-8')))
     })
   })
 }
@@ -76,9 +89,12 @@ function remoteClaudeProjectDir(projectPath: string): string {
   return `$HOME/.claude/projects/${shellEscape(slug)}`
 }
 
-// Quote-only escape for embedding inside a bash double-quoted string. The
-// callers always wrap the result in `"..."`, so we just need to neutralise the
-// four characters that have meaning there.
+// Quote-only escape for embedding inside a bash double-quoted string. We
+// keep this distinct from path-probe's `shQuote` (which wraps the whole
+// string in single quotes) — the call sites here interpolate the result
+// inside `"..."` so they need backslash-escapes for the four chars that
+// retain meaning under double-quotes; a single-quote wrap would break the
+// $HOME expansion the caller relies on.
 function shellEscape(s: string): string {
   return s.replace(/[\\"`$]/g, '\\$&')
 }

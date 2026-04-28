@@ -3,9 +3,7 @@ import type { ChildProcess } from 'node:child_process'
 import type { ITransport, SpawnOptions } from './transports/types'
 import type { Environment, HostType, Project, SendAttachment, StreamJsonEvent, UserContentBlock } from '../shared/types'
 import { parseStreamJsonLine } from './stream-json-parser'
-import { LocalTransport } from './transports/local'
-import { WslTransport } from './transports/wsl'
-import { SshTransport } from './transports/ssh'
+import { resolveTransport } from './transports'
 
 type EventCallback = (channel: string, payload: unknown) => void
 
@@ -29,7 +27,7 @@ export class SessionManager {
   private readonly sessions = new Map<string, ActiveSession>()
 
   public constructor(
-    private readonly resolveTransport: (host: HostType) => ITransport = resolveDefaultTransport,
+    private readonly resolveTransport: (host: HostType) => ITransport = resolveTransport,
     private readonly onEvent: EventCallback = () => {}
   ) {}
 
@@ -136,7 +134,7 @@ export class SessionManager {
       type: 'user',
       message: { role: 'user', content }
     }) + '\n'
-    session.process.stdin?.write(payload)
+    if (!this.writeStdin(sessionId, payload)) return
     // Flip to busy immediately so the renderer can show a "thinking" indicator
     // while we wait for the first stream-json event back from claude.
     this.onEvent('session:status', { sessionId, status: 'busy' })
@@ -153,7 +151,34 @@ export class SessionManager {
         content: [{ type: 'tool_result', tool_use_id: toolUseId, content }]
       }
     }) + '\n'
-    session.process.stdin?.write(payload)
+    this.writeStdin(sessionId, payload)
+  }
+
+  // Wrap every stdin write so a closed/destroyed pipe (claude exited between
+  // the renderer queueing input and main attempting the write) flips the
+  // session to 'error' instead of throwing into the void. Returns true if
+  // the write was issued, false if the pipe was unavailable and the caller
+  // should bail out of any post-write side-effects (status flips, etc.).
+  private writeStdin(sessionId: string, payload: string): boolean {
+    const session = this.sessions.get(sessionId)
+    if (!session) return false
+    const stdin = session.process.stdin
+    if (!stdin || stdin.destroyed || !stdin.writable) {
+      this.onEvent('session:status', {
+        sessionId,
+        status: 'error',
+        errorMessage: 'Connection to claude was lost. Close the tab and reopen the project to retry.'
+      })
+      return false
+    }
+    try {
+      stdin.write(payload)
+      return true
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : 'write to claude stdin failed'
+      this.onEvent('session:status', { sessionId, status: 'error', errorMessage: reason })
+      return false
+    }
   }
 
   public stopSession(sessionId: string): void {
@@ -245,9 +270,3 @@ function extensionFromName(name: string): string {
   return name.slice(dot + 1).toLowerCase()
 }
 
-function resolveDefaultTransport(host: HostType): ITransport {
-  if (host.kind === 'local') return new LocalTransport()
-  if (host.kind === 'wsl') return new WslTransport()
-  if (host.kind === 'ssh') return new SshTransport()
-  throw new Error(`Unknown host kind: ${(host as { kind: string }).kind}`)
-}
