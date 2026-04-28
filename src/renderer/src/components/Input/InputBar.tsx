@@ -189,20 +189,28 @@ function StopButton({ sessionId }: { sessionId: string }): JSX.Element | null {
   )
 }
 
-// Move focus into the editor whenever the active session changes (and on
-// first mount). Switching tabs leaves the OS-level focus on the clicked
-// tab button; the muscle memory says "I just opened this chat, I want to
-// type in it" — so we put the caret where the user expects without an
-// extra click.
+// Move focus into the editor whenever *this* tab becomes the active one.
+// All tabs are mounted at once (App.tsx renders ChatPanel for every tab in
+// tabOrder, hiding inactive ones with display:none), so the InputBar's
+// `sessionId` prop never changes once mounted — watching only that misses
+// every tab-switch via TabBar / sidebar clicks. Subscribing to
+// `activeSessionId === sessionId` flips false→true exactly when this tab
+// gains focus, which is what we want.
 //
 // Modals (Settings, Add-Project, Usage) cover the chat with a full-screen
 // backdrop, so the user can't switch tabs while one is open — meaning
 // this won't yank focus out of an open modal field in practice.
 function FocusOnSessionChangePlugin({ sessionId }: { sessionId: string }): null {
   const [editor] = useLexicalComposerContext()
+  const isActive = useSessionsStore(s => s.activeSessionId === sessionId)
   useEffect(() => {
-    editor.focus()
-  }, [editor, sessionId])
+    if (!isActive) return
+    // Defer one frame so the parent's display:hidden → h-full className flip
+    // has actually painted before we focus. Lexical's editor.focus() on a
+    // still-display:none element silently no-ops in some browsers.
+    const id = requestAnimationFrame(() => editor.focus())
+    return () => cancelAnimationFrame(id)
+  }, [editor, isActive])
   return null
 }
 

@@ -25,10 +25,17 @@ const REMOTE_READ_TIMEOUT_MS = 30_000
 // truncated-at-the-end, or someone pointed us at the wrong path.
 const MAX_REMOTE_BYTES = 50 * 1024 * 1024
 
-function streamCommand(bin: string, args: string[]): Promise<string> {
+interface StreamResult {
+  stdout: string
+  stderr: string
+  exitCode: number | null
+}
+
+function streamCommand(bin: string, args: string[]): Promise<StreamResult> {
   return new Promise((resolve, reject) => {
     const child = spawn(bin, args, { stdio: ['ignore', 'pipe', 'pipe'] })
-    const chunks: Buffer[] = []
+    const stdoutChunks: Buffer[] = []
+    const stderrChunks: Buffer[] = []
     let totalBytes = 0
     let settled = false
     const settle = (fn: () => void): void => {
@@ -54,12 +61,19 @@ function streamCommand(bin: string, args: string[]): Promise<string> {
         })
         return
       }
-      chunks.push(c)
+      stdoutChunks.push(c)
     })
-    child.stderr.on('data', () => {})
+    // Capture stderr (was discarded) so a failed remote `cat` — missing
+    // file, ssh refused, wrong slug — surfaces a real reason in the
+    // console instead of silently returning [].
+    child.stderr.on('data', (c: Buffer) => { stderrChunks.push(c) })
     child.on('error', (err) => { settle(() => reject(err)) })
-    child.on('close', () => {
-      settle(() => resolve(Buffer.concat(chunks).toString('utf-8')))
+    child.on('close', (code) => {
+      settle(() => resolve({
+        stdout: Buffer.concat(stdoutChunks).toString('utf-8'),
+        stderr: Buffer.concat(stderrChunks).toString('utf-8'),
+        exitCode: code
+      }))
     })
   })
 }
@@ -80,13 +94,25 @@ export class HistoryReader {
 
     const filePath = `${remoteClaudeProjectDir(projectPath)}/${shellEscape(sessionId)}.jsonl`
     const command = buildCatCommand(host, filePath)
-    let output: string
+    let result: StreamResult
     try {
-      output = await streamCommand(command.bin, command.args)
-    } catch {
+      result = await streamCommand(command.bin, command.args)
+    } catch (err) {
+      // SSH refused, key prompt, wsl.exe cold-start timeout, etc. The user
+      // sees "no history" but the cause is sitting here in main's console.
+      console.error(`[history-reader] ${host.kind} streamCommand failed for ${filePath}:`, err)
       return []
     }
-    return parseJsonl(output)
+    if (result.exitCode !== 0) {
+      // cat 1: file missing (likely wrong slug or claude on remote uses a
+      // different transcript dir). ssh 255: connection error. Surface the
+      // exit code + stderr tail so the user has something to grep for in
+      // DevTools when "history doesn't load" gets reported.
+      console.warn(
+        `[history-reader] ${host.kind} cat exited ${result.exitCode} for ${filePath} — stderr: ${result.stderr.trim().slice(-500)}`
+      )
+    }
+    return parseJsonl(result.stdout)
   }
 }
 
@@ -121,7 +147,10 @@ function shellEscape(s: string): string {
 }
 
 function buildCatCommand(host: HostType, filePath: string): { bin: string; args: string[] } {
-  const cmd = `cat "${filePath}" 2>/dev/null`
+  // Don't suppress cat's stderr — when the transcript file is missing we
+  // want the "No such file or directory" message to surface in main's
+  // console so we can debug "history doesn't load" reports.
+  const cmd = `cat "${filePath}"`
   if (host.kind === 'wsl') {
     validateWslDistro(host.distro)
     return { bin: 'wsl.exe', args: ['-d', host.distro, '--', 'bash', '-c', cmd] }
