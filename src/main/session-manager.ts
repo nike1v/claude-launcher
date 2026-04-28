@@ -221,14 +221,37 @@ export class SessionManager {
     this.onEvent('session:status', { sessionId, status: 'closed' })
   }
 
-  // Abort the current in-flight turn without killing the process. Claude
-  // CLI handles SIGINT by stopping the active LLM call / tool run and
-  // returning to the prompt. We also flip the renderer back to 'ready' so
-  // the spinner clears even if the CLI doesn't emit an immediate result.
+  // Abort the current in-flight turn without killing the process. We send
+  // claude's stream-json control_request/interrupt over stdin instead of
+  // posix-signalling the child:
+  //
+  //   1. On Windows, Node's kill('SIGINT') is just TerminateProcess under
+  //      the hood — there are no real signals — so the "interrupt" was in
+  //      fact killing claude every time.
+  //   2. For WSL / SSH transports the OS child is wsl.exe / ssh.exe, not
+  //      claude itself; signalling those tears down the whole transport
+  //      connection (the symptom the user reported: "Stop closes the chat
+  //      instead of stopping the message").
+  //
+  // The control_request shape comes from the Claude Agent SDK's stream-json
+  // protocol. We don't track the response (control_response) — the renderer
+  // just needs the spinner cleared, and the next assistant/result event will
+  // confirm the turn ended.
   public interruptSession(sessionId: string): void {
     const session = this.sessions.get(sessionId)
     if (!session) return
-    try { session.process.kill('SIGINT') } catch { /* already exited */ }
+    const payload = JSON.stringify({
+      type: 'control_request',
+      request_id: `req_${randomUUID()}`,
+      request: { subtype: 'interrupt' }
+    }) + '\n'
+    // Best-effort write: don't go through writeStdin (which would flip the
+    // session to 'error' on a broken pipe). If the pipe is gone the next
+    // exit handler will surface that on its own; nothing useful to do here.
+    const stdin = session.process.stdin
+    if (stdin && !stdin.destroyed && stdin.writable) {
+      try { stdin.write(payload) } catch { /* swallow — session is winding down */ }
+    }
     this.onEvent('session:status', { sessionId, status: 'ready' })
   }
 
