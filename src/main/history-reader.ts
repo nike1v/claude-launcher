@@ -78,18 +78,30 @@ function streamCommand(bin: string, args: string[]): Promise<StreamResult> {
   })
 }
 
+export interface HistoryLoadResult {
+  events: StreamJsonEvent[]
+  // Populated when we returned [] for a non-trivial reason — slug mismatch,
+  // ssh refused, file missing, etc. The renderer logs this to its console
+  // so the user sees it in DevTools (main-process console.* doesn't reach
+  // browser DevTools, which is what the user actually has open).
+  diagnostic?: string
+}
+
 export class HistoryReader {
-  public async loadSessionEvents(host: HostType, projectPath: string, sessionId: string): Promise<StreamJsonEvent[]> {
-    if (!SESSION_ID_PATTERN.test(sessionId)) return []
+  public async loadSessionEvents(host: HostType, projectPath: string, sessionId: string): Promise<HistoryLoadResult> {
+    if (!SESSION_ID_PATTERN.test(sessionId)) {
+      return { events: [], diagnostic: `rejected sessionId ${JSON.stringify(sessionId)} (must match ${SESSION_ID_PATTERN})` }
+    }
     if (host.kind === 'local') {
       const filePath = join(localClaudeProjectDir(projectPath), `${sessionId}.jsonl`)
       let content: string
       try {
         content = await readFile(filePath, 'utf-8')
-      } catch {
-        return []
+      } catch (err) {
+        const reason = err instanceof Error ? err.message : String(err)
+        return { events: [], diagnostic: `read ${filePath} failed: ${reason}` }
       }
-      return parseJsonl(content)
+      return { events: parseJsonl(content) }
     }
 
     const filePath = `${remoteClaudeProjectDir(projectPath)}/${shellEscape(sessionId)}.jsonl`
@@ -98,21 +110,20 @@ export class HistoryReader {
     try {
       result = await streamCommand(command.bin, command.args)
     } catch (err) {
-      // SSH refused, key prompt, wsl.exe cold-start timeout, etc. The user
-      // sees "no history" but the cause is sitting here in main's console.
-      console.error(`[history-reader] ${host.kind} streamCommand failed for ${filePath}:`, err)
-      return []
+      const reason = err instanceof Error ? err.message : String(err)
+      return { events: [], diagnostic: `${host.kind} cat ${filePath} threw: ${reason}` }
     }
     if (result.exitCode !== 0) {
-      // cat 1: file missing (likely wrong slug or claude on remote uses a
-      // different transcript dir). ssh 255: connection error. Surface the
-      // exit code + stderr tail so the user has something to grep for in
-      // DevTools when "history doesn't load" gets reported.
-      console.warn(
-        `[history-reader] ${host.kind} cat exited ${result.exitCode} for ${filePath} — stderr: ${result.stderr.trim().slice(-500)}`
-      )
+      // cat 1 = file missing (likely slug mismatch with what claude on
+      // remote actually wrote); ssh 255 = connection error. Hand the
+      // renderer the exit code + stderr tail so the user can paste it
+      // into a bug report instead of just "history doesn't load".
+      return {
+        events: parseJsonl(result.stdout),
+        diagnostic: `${host.kind} \`cat "${filePath}"\` exited ${result.exitCode}; stderr: ${result.stderr.trim().slice(-500) || '(empty)'}`
+      }
     }
-    return parseJsonl(result.stdout)
+    return { events: parseJsonl(result.stdout) }
   }
 }
 

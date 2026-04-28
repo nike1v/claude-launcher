@@ -155,7 +155,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): () => Promise<vo
 
   handle('session:history:load', async ({ projectId, sessionId }) => {
     const ctx = resolveProjectAndEnv(projectStore, environmentStore, projectId)
-    if (!ctx) return []
+    if (!ctx) return { events: [], diagnostic: `project ${projectId} or its environment not found` }
     return historyReader.loadSessionEvents(ctx.env.config, ctx.project.path, sessionId)
   })
 
