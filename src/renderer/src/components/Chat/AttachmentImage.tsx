@@ -7,7 +7,7 @@ interface Props {
   name?: string
 }
 
-export function AttachmentImage({ mediaType, data, name }: Props): JSX.Element {
+export function AttachmentImage({ mediaType, data, name }: Props) {
   const dataUrl = `data:${mediaType};base64,${data}`
   const defaultName = name ?? `image.${extensionFromMime(mediaType)}`
 

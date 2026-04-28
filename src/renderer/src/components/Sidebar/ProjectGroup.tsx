@@ -16,7 +16,7 @@ interface Props {
   onAddProject?: () => void
 }
 
-export function ProjectGroup({ label, groupKey, projects, activeProjectId, onEdit, onAddProject }: Props): JSX.Element {
+export function ProjectGroup({ label, groupKey, projects, activeProjectId, onEdit, onAddProject }: Props) {
   const [collapsed, setCollapsed] = useState(false)
   const reorderProjects = useProjectsStore(s => s.reorderProjects)
   const dnd = useDragReorder({
@@ -73,7 +73,7 @@ export function ProjectGroup({ label, groupKey, projects, activeProjectId, onEdi
 }
 
 // Thin blue insertion line shown above/below the row a drop is targeting.
-function DropLine({ edge }: { edge: 'top' | 'bottom' }): JSX.Element {
+function DropLine({ edge }: { edge: 'top' | 'bottom' }) {
   return (
     <div
       className={`absolute inset-x-1 h-0.5 bg-blue-400/80 rounded-full pointer-events-none ${

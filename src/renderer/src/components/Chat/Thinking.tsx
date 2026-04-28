@@ -5,7 +5,7 @@ interface Props {
   text: string
 }
 
-export function Thinking({ text }: Props): JSX.Element {
+export function Thinking({ text }: Props) {
   const [expanded, setExpanded] = useState(false)
   if (!text.trim()) return <></>
 

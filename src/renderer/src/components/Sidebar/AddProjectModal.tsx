@@ -27,7 +27,7 @@ const HOST_KINDS: ReadonlyArray<'local' | 'wsl' | 'ssh'> =
 // now resolves (or creates) an Environment under the hood and stores
 // project.environmentId. Phase 2 will replace this with a proper Settings
 // modal that manages environments separately.
-export function AddProjectModal({ onClose, editProject, presetEnvironmentId }: Props): JSX.Element {
+export function AddProjectModal({ onClose, editProject, presetEnvironmentId }: Props) {
   const { addProject, updateProject } = useProjectsStore()
   const { environments, addEnvironment } = useEnvironmentsStore()
 
@@ -48,7 +48,7 @@ export function AddProjectModal({ onClose, editProject, presetEnvironmentId }: P
     editEnv?.config.kind === 'wsl' ? editEnv.config.distro : 'Ubuntu'
   )
   const [sshUser, setSshUser] = useState(
-    editEnv?.config.kind === 'ssh' ? editEnv.config.user : ''
+    editEnv?.config.kind === 'ssh' ? (editEnv.config.user ?? '') : ''
   )
   const [sshHost, setSshHost] = useState(
     editEnv?.config.kind === 'ssh' ? editEnv.config.host : ''

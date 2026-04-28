@@ -19,8 +19,11 @@ beforeEach(() => {
 })
 
 function getStatusHandler(): (status: UpdaterStatus) => void {
-  const call = mockOn.mock.calls.find(([ch]: [string]) => ch === 'updater:status')
-  return call?.[1]
+  // mock.calls is any[][] — one entry per call, each entry being the args.
+  // Annotate as any[] so the destructure compiles under strict TS without
+  // claiming a fixed-length tuple shape that doesn't match the runtime.
+  const call = mockOn.mock.calls.find((c: unknown[]) => c[0] === 'updater:status')
+  return call?.[1] as (status: UpdaterStatus) => void
 }
 
 describe('UpdatePill', () => {

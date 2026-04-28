@@ -10,7 +10,7 @@ interface Props {
   result?: ToolResultBlock
 }
 
-export function ToolUse({ name, input, result }: Props): JSX.Element {
+export function ToolUse({ name, input, result }: Props) {
   const [expanded, setExpanded] = useState(false)
   const summary = summarizeInput(name, input)
   const resultText = result ? extractResultText(result) : null

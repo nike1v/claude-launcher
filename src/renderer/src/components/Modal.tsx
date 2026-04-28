@@ -10,7 +10,7 @@ interface Props {
 // Shared modal shell: backdrop click and Esc both close. Children are the
 // modal panel contents — Modal renders the dimmed overlay and centers the
 // panel; the panel's own chrome (border, padding, etc.) stays in the caller.
-export function Modal({ onClose, children, panelClassName = '' }: Props): JSX.Element {
+export function Modal({ onClose, children, panelClassName = '' }: Props) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose()

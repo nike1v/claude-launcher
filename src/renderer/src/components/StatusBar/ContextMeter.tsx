@@ -7,7 +7,7 @@ interface Props {
 //   [▮▮▮▮░░░░░░] 23% · 47K / 200K
 // Color shifts as we approach the compact threshold so the user has a
 // visual signal that they should /compact or wrap up the conversation.
-export function ContextMeter({ used, total }: Props): JSX.Element {
+export function ContextMeter({ used, total }: Props) {
   const ratio = total > 0 ? Math.min(1, used / total) : 0
   const percent = Math.round(ratio * 100)
 

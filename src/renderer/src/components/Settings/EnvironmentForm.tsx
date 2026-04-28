@@ -16,14 +16,14 @@ const HOST_KINDS: ReadonlyArray<'local' | 'wsl' | 'ssh'> =
     ? ['local', 'wsl', 'ssh']
     : ['local', 'ssh']
 
-export function EnvironmentForm({ initial, onCancel, onSave }: Props): JSX.Element {
+export function EnvironmentForm({ initial, onCancel, onSave }: Props) {
   const [name, setName] = useState(initial?.name ?? '')
   const [kind, setKind] = useState<'local' | 'wsl' | 'ssh'>(initial?.config.kind ?? 'local')
   const [distro, setDistro] = useState(
     initial?.config.kind === 'wsl' ? initial.config.distro : 'Ubuntu'
   )
   const [sshUser, setSshUser] = useState(
-    initial?.config.kind === 'ssh' ? initial.config.user : ''
+    initial?.config.kind === 'ssh' ? (initial.config.user ?? '') : ''
   )
   const [sshHost, setSshHost] = useState(
     initial?.config.kind === 'ssh' ? initial.config.host : ''

@@ -18,7 +18,7 @@ const KNOWN_MODELS: ReadonlyArray<{ id: string; label: string }> = [
   { id: 'claude-haiku-4-5', label: 'Haiku 4.5' }
 ]
 
-export function ModelCombobox({ value, onChange, placeholder, className = '' }: Props): JSX.Element {
+export function ModelCombobox({ value, onChange, placeholder, className = '' }: Props) {
   const [open, setOpen] = useState(false)
   const wrapperRef = useRef<HTMLDivElement>(null)
 

@@ -6,7 +6,7 @@ interface Props {
   text: string
 }
 
-export function AssistantMessage({ text }: Props): JSX.Element {
+export function AssistantMessage({ text }: Props) {
   return (
     <div className="group max-w-3xl">
       <div className="flex items-center gap-1 mb-1">

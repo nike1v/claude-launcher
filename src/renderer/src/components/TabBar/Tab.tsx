@@ -11,7 +11,7 @@ interface Props {
   onClose: () => void
 }
 
-export function Tab({ session, isActive, onActivate, onClose }: Props): JSX.Element {
+export function Tab({ session, isActive, onActivate, onClose }: Props) {
   const { projects } = useProjectsStore()
   const { environments } = useEnvironmentsStore()
   const project = projects.find(p => p.id === session.projectId)

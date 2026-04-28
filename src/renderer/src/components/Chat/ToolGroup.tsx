@@ -6,7 +6,7 @@ interface Props {
   children: ReactNode
 }
 
-export function ToolGroup({ toolNames, children }: Props): JSX.Element {
+export function ToolGroup({ toolNames, children }: Props) {
   const [expanded, setExpanded] = useState(false)
   const summary = summarize(toolNames)
 

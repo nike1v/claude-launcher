@@ -7,7 +7,7 @@ interface Props {
   input: unknown
 }
 
-export function PermissionPrompt({ sessionId, toolUseId, toolName, input }: Props): JSX.Element {
+export function PermissionPrompt({ sessionId, toolUseId, toolName, input }: Props) {
   const handle = (decision: 'allow' | 'deny') =>
     respondPermission(sessionId, decision, toolUseId)
 
@@ -17,7 +17,9 @@ export function PermissionPrompt({ sessionId, toolUseId, toolName, input }: Prop
       <p className="text-sm text-white/80">
         Run: <span className="font-mono text-white">{toolName}</span>
       </p>
-      {input && (
+      {/* `input` is `unknown` — coerce to boolean before short-circuiting so
+          React's children type doesn't see `unknown`. */}
+      {Boolean(input) && (
         <pre className="text-xs text-white/40 overflow-x-auto whitespace-pre-wrap">
           {JSON.stringify(input, null, 2)}
         </pre>

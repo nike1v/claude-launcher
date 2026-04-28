@@ -9,7 +9,7 @@ interface Props {
   attachments?: ReadonlyArray<ImageBlock | DocumentBlock>
 }
 
-export function UserMessage({ text, attachments }: Props): JSX.Element {
+export function UserMessage({ text, attachments }: Props) {
   const hasAttachments = attachments && attachments.length > 0
 
   return (
@@ -44,7 +44,7 @@ export function UserMessage({ text, attachments }: Props): JSX.Element {
   )
 }
 
-function DocumentChip({ block }: { block: DocumentBlock }): JSX.Element {
+function DocumentChip({ block }: { block: DocumentBlock }) {
   const handleSave = async () => {
     await saveFileAs('document.pdf', block.source.media_type, block.source.data)
   }

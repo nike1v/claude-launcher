@@ -16,7 +16,7 @@ interface Props {
   sessionId: string
 }
 
-export function MessageList({ sessionId }: Props): JSX.Element {
+export function MessageList({ sessionId }: Props) {
   const { messagesBySession } = useMessagesStore()
   const messages = messagesBySession[sessionId] ?? []
   const status = useSessionsStore(s => s.sessions[sessionId]?.status)

@@ -31,6 +31,11 @@ jobs:
         with:
           python-version: '3.11'
       - run: pnpm install
+      # Type-check via the project references *before* tests. Catches the
+      # whole class of "renamed a field" / "JSX namespace" / "discriminated
+      # union" bugs that vitest can't see (it runs the bundler, not tsc).
+      # Cheap to gate on — adds ~3 s on a warm cache.
+      - run: pnpm exec tsc -b
       - run: pnpm test
 
   build-linux:

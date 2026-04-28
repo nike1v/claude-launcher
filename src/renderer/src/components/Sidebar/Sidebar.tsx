@@ -10,7 +10,7 @@ import { AddProjectModal } from './AddProjectModal'
 import { UpdatePill } from './UpdatePill'
 import { SettingsModal } from '../Settings/SettingsModal'
 
-export function Sidebar(): JSX.Element {
+export function Sidebar() {
   const projects = useProjectsStore(s => s.projects)
   const environments = useEnvironmentsStore(s => s.environments)
   // Per-field selectors so the sidebar doesn't redraw on every chat event
