@@ -64,10 +64,18 @@ export function AddProjectModal({ onClose, editProject, presetEnvironmentId }: P
   // system:init, but exposed here so the user can paste a different one
   // from the on-disk transcript directory.
   const [claudeSessionId, setClaudeSessionId] = useState(editProject?.lastClaudeSessionId ?? '')
+  // Tracked so the save guard below can tell "user cleared a previously-
+  // pinned id" apart from "no id was pinned at form open". Snapshot at
+  // construction so subsequent edits don't move the goalposts.
+  const hadInitialSessionId = !!editProject?.lastClaudeSessionId
+  const clearedSessionId = hadInitialSessionId && !claudeSessionId.trim()
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!name.trim() || !path.trim()) return
+    // Mirror the disabled-button guard for keyboard submits — Enter inside
+    // any input bypasses the button's disabled attribute.
+    if (clearedSessionId) return
 
     let envId: string
     if (presetEnvironmentId && !editProject) {
@@ -252,21 +260,34 @@ export function AddProjectModal({ onClose, editProject, presetEnvironmentId }: P
                 Claude Session ID (resume target, optional)
               </label>
               <input
-                className={inputCls}
+                className={`${inputCls} ${clearedSessionId ? 'border-danger/40' : ''}`}
                 value={claudeSessionId}
                 onChange={e => setClaudeSessionId(e.target.value)}
-                placeholder="auto-pinned on first session"
+                placeholder={hadInitialSessionId ? '' : 'auto-pinned on first session'}
                 spellCheck={false}
               />
-              <p className="mt-1 text-[10px] text-fg-faint break-words">
-                Transcripts live in <span className="font-mono text-fg-muted">{transcriptDirHint(editEnv.config, path.trim() || editProject.path)}</span> — paste a <span className="font-mono">…jsonl</span> filename (without extension) to resume that conversation. Leave empty to start fresh next time; the field auto-fills when claude reports its session id.
-              </p>
+              {clearedSessionId ? (
+                // Guard: once a session id has been pinned, clearing it via
+                // this field would skip the explicit reset path (which
+                // confirms + closes any open tab). Block save and steer the
+                // user to the reset button on the project row.
+                <p className="mt-1 text-[10px] text-danger break-words">
+                  Use the reset-conversation button on the project row to
+                  clear this — it also closes any open tab and confirms
+                  before unpinning. Saving now would silently lose the
+                  pinned id.
+                </p>
+              ) : (
+                <p className="mt-1 text-[10px] text-fg-faint break-words">
+                  Transcripts live in <span className="font-mono text-fg-muted">{transcriptDirHint(editEnv.config, path.trim() || editProject.path)}</span> — paste a <span className="font-mono">…jsonl</span> filename (without extension) to resume that conversation. The field auto-fills when claude reports its session id.
+                </p>
+              )}
             </div>
           )}
 
           <button
             type="submit"
-            disabled={!name.trim() || !path.trim()}
+            disabled={!name.trim() || !path.trim() || clearedSessionId}
             className="w-full py-2 bg-elevated hover:bg-elevated disabled:opacity-40 disabled:cursor-not-allowed rounded text-sm font-medium transition-colors"
           >
             {editProject ? 'Save Changes' : 'Add Project'}
