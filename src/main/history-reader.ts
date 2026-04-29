@@ -1,8 +1,9 @@
 import { spawn } from 'node:child_process'
 import { readFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
-import { join, sep } from 'node:path'
+import { join } from 'node:path'
 import type { HostType, StreamJsonEvent } from '../shared/types'
+import { claudeProjectSlug } from '../shared/host-utils'
 import { parseStreamJsonLine } from './stream-json-parser'
 import { validateSshHost, validateWslDistro } from './transports/validate-ssh'
 import { sshConnectArgs, sshTarget } from './transports/ssh-args'
@@ -136,26 +137,14 @@ function parseJsonl(content: string): StreamJsonEvent[] {
     .filter((e): e is StreamJsonEvent => e !== null)
 }
 
-// Trailing slashes confuse the slug — `/srv/` would split to ['', 'srv', '']
-// and join into `-srv-` (extra trailing dash), but claude on the remote
-// normalizes the path before slugifying so its actual transcript dir is
-// `-srv`. Strip trailing separators so our slug matches what claude wrote.
-function stripTrailingSep(p: string, separator: string): string {
-  let end = p.length
-  while (end > 1 && p[end - 1] === separator) end--
-  return p.slice(0, end)
-}
-
 function localClaudeProjectDir(projectPath: string): string {
-  const slug = stripTrailingSep(projectPath, sep).split(sep).join('-')
-  return join(homedir(), '.claude', 'projects', slug)
+  return join(homedir(), '.claude', 'projects', claudeProjectSlug(projectPath))
 }
 
 function remoteClaudeProjectDir(projectPath: string): string {
   // Use $HOME (not ~) so the path expands inside the double-quoted string we
   // pass to bash -c. Tildes don't expand inside any kind of quotes.
-  const slug = stripTrailingSep(projectPath, '/').split('/').join('-')
-  return `$HOME/.claude/projects/${shellEscape(slug)}`
+  return `$HOME/.claude/projects/${shellEscape(claudeProjectSlug(projectPath))}`
 }
 
 // Quote-only escape for embedding inside a bash double-quoted string. We

@@ -27,8 +27,16 @@ export function Modal({ onClose, children, panelClassName = '' }: Props) {
   }
 
   return (
+    // onClick stopPropagation prevents clicks inside the modal from
+    // bubbling out to whatever element rendered <Modal /> in the React
+    // tree — important when a modal is mounted inside a parent that
+    // already has its own onClick handler (e.g. a clickable list row),
+    // because otherwise pressing Confirm would also "click" that row.
+    // Backdrop close is handled at onMouseDown above, so the existing
+    // close-on-backdrop-click UX still works.
     <div
       onMouseDown={handleBackdrop}
+      onClick={e => e.stopPropagation()}
       className="fixed inset-0 bg-overlay flex items-center justify-center z-50"
     >
       <div className={panelClassName}>
