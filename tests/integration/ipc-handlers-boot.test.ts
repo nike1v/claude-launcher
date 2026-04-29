@@ -65,7 +65,7 @@ describe('registerIpcHandlers boot smoke', () => {
       'session:start', 'session:send', 'session:stop',
       'session:interrupt', 'session:permission',
       'projects:save', 'projects:load',
-      'session:history:load',
+      'session:history:load', 'session:history:list',
       'environments:save', 'environments:load',
       'environments:probe', 'environments:usage',
       'fs:listDir',

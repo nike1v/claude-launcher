@@ -59,6 +59,14 @@ export async function loadSessionHistory(
   }>
 }
 
+// Lists the claude session ids found in the project's transcripts dir on
+// its env. Used by the project-edit autocomplete so the user can pick a
+// real conversation instead of typing a UUID. Returns [] for fresh
+// projects or unreachable envs — the UI treats empty as "no suggestions".
+export async function listSessionIds(projectId: string): Promise<string[]> {
+  return window.electronAPI.invoke('session:history:list', { projectId }) as Promise<string[]>
+}
+
 export function installUpdate(): void {
   window.electronAPI.invoke('updater:install', {})
 }

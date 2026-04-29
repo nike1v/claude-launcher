@@ -197,6 +197,11 @@ export interface IpcChannels {
   'dialog:saveFile': { defaultName: string; mediaType: string; data: string }
   'projects:save': Project[]
   'session:history:load': { projectId: string; sessionId: string }
+  // Lists claude session ids (jsonl filenames minus extension) found in
+  // the project's transcripts directory on its environment. Returns []
+  // when the directory doesn't exist or the env is unreachable —
+  // callers treat that as "no suggestions to offer", not an error.
+  'session:history:list': { projectId: string }
   'projects:load': Record<string, never>
   'environments:save': Environment[]
   'environments:load': Record<string, never>
@@ -233,7 +238,7 @@ export interface IpcChannels {
 export type IpcInvokeChannel = Extract<
   keyof IpcChannels,
   | 'session:start' | 'session:send' | 'session:stop' | 'session:interrupt' | 'session:permission'
-  | 'projects:save' | 'session:history:load' | 'projects:load'
+  | 'projects:save' | 'session:history:load' | 'session:history:list' | 'projects:load'
   | 'environments:save' | 'environments:load' | 'environments:probe' | 'environments:usage'
   | 'fs:listDir'
   | 'tabs:load' | 'tabs:save'

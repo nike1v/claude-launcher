@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process'
-import { readFile } from 'node:fs/promises'
+import { readdir, readFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type { HostType, StreamJsonEvent } from '../shared/types'
@@ -126,6 +126,61 @@ export class HistoryReader {
       }
     }
     return { events: parseJsonl(result.stdout) }
+  }
+
+  // Returns the session ids (jsonl filename minus extension) found in
+  // claude's transcripts directory for this project. Powers the
+  // session-id autocomplete in the project-edit modal so the user can
+  // pick from real conversations instead of typing a UUID by hand.
+  // Returns [] when the directory doesn't exist (fresh project) or when
+  // the env is unreachable — never throws, callers treat empty as "no
+  // suggestions" rather than a hard failure.
+  public async listSessionIds(host: HostType, projectPath: string): Promise<string[]> {
+    if (host.kind === 'local') {
+      try {
+        const entries = await readdir(localClaudeProjectDir(projectPath))
+        return entries
+          .filter(name => name.endsWith('.jsonl'))
+          .map(name => name.slice(0, -'.jsonl'.length))
+      } catch {
+        return []
+      }
+    }
+
+    // Remote: ask the env to list .jsonl filenames in the transcripts
+    // dir. `2>/dev/null` swallows "no such file" so a fresh project
+    // returns an empty list rather than an error message.
+    const dir = remoteClaudeProjectDir(projectPath)
+    const remoteCmd = `ls -1 ${dir} 2>/dev/null | grep '\\.jsonl$' || true`
+    let cmd: { bin: string; args: string[] }
+    try {
+      if (host.kind === 'wsl') {
+        validateWslDistro(host.distro)
+        cmd = { bin: 'wsl.exe', args: ['-d', host.distro, '--', 'bash', '-c', remoteCmd] }
+      } else if (host.kind === 'ssh') {
+        validateSshHost(host)
+        cmd = {
+          bin: 'ssh',
+          args: ['-T', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=4',
+            ...sshConnectArgs(host), sshTarget(host), remoteCmd]
+        }
+      } else {
+        return []
+      }
+    } catch {
+      return []
+    }
+    let result: StreamResult
+    try {
+      result = await streamCommand(cmd.bin, cmd.args)
+    } catch {
+      return []
+    }
+    return result.stdout
+      .split('\n')
+      .map(line => line.trim())
+      .filter(line => line.endsWith('.jsonl'))
+      .map(line => line.slice(0, -'.jsonl'.length))
   }
 }
 
