@@ -1,10 +1,12 @@
+import { useState } from 'react'
 import { MessageSquarePlus, Pencil, Trash2 } from 'lucide-react'
 import type { Project } from '../../../../shared/types'
 import { useSessionsStore } from '../../store/sessions'
 import { useProjectsStore } from '../../store/projects'
 import { useMessagesStore } from '../../store/messages'
-import { loadSessionHistory, startSession } from '../../ipc/bridge'
+import { loadSessionHistory, startSession, stopSession } from '../../ipc/bridge'
 import { StatusDot } from '../StatusDot'
+import { ConfirmDialog } from '../ConfirmDialog'
 
 interface Props {
   project: Project
@@ -21,8 +23,10 @@ interface Props {
 const startingProjects = new Set<string>()
 
 export function ProjectItem({ project, isActive, onEdit }: Props) {
-  const { addSession, setActiveSession } = useSessionsStore()
+  const { addSession, setActiveSession, removeSession } = useSessionsStore()
   const { setActiveProjectId, removeProject, updateProject } = useProjectsStore()
+  const { clearSession } = useMessagesStore()
+  const [confirmReset, setConfirmReset] = useState(false)
   // Mirror the tab's status dot in the sidebar so the user can see which
   // projects are working / errored / closed without flipping tabs. We pick
   // the most recently added session for the project — there's at most one
@@ -101,16 +105,32 @@ export function ProjectItem({ project, isActive, onEdit }: Props) {
     }
   }
 
-  // Forget the pinned claudeSessionId so the next click on this project
-  // starts a fresh conversation instead of resuming. The transcript on
-  // disk is untouched — only the renderer-side resume reference is
-  // cleared. listeners.ts re-pins the field on the first system:init of
-  // the new session, so we're back to the write-once steady state with
-  // a different conversation.
-  const handleResetConversation = (e: React.MouseEvent) => {
+  const openResetConfirm = (e: React.MouseEvent) => {
     e.stopPropagation()
     if (!project.lastClaudeSessionId) return
-    if (!window.confirm(`Start a fresh conversation in "${project.name}" next time you open it?\n\nThe existing transcript stays on disk; this just unpins the resume reference.`)) return
+    setConfirmReset(true)
+  }
+
+  // Forget the pinned claudeSessionId so the next click on this project
+  // starts a fresh conversation instead of resuming. Closes any live tab
+  // for this project first — without that, the open tab keeps its
+  // claudeSessionId in the sessions store and the user would still be
+  // talking to the now-detached conversation.
+  //
+  // Order matters: stop the live process → drop the renderer session
+  // entry → drop messages → finally clear the project pin. listeners.ts
+  // re-pins on the next session's first init, so we're back to the
+  // write-once steady state with a different conversation.
+  const handleResetConfirmed = () => {
+    setConfirmReset(false)
+    const { sessions, tabOrder } = useSessionsStore.getState()
+    for (const id of tabOrder) {
+      if (sessions[id]?.projectId === project.id) {
+        stopSession(id)
+        removeSession(id)
+        clearSession(id)
+      }
+    }
     updateProject({
       ...project,
       lastClaudeSessionId: undefined,
@@ -121,6 +141,14 @@ export function ProjectItem({ project, isActive, onEdit }: Props) {
       lastContextWindow: undefined
     })
   }
+
+  // Tab-count for the open project, surfaced in the confirm copy so the
+  // user knows the click will close active tabs. Counted at render time
+  // because the user might open / close tabs between hovering the
+  // button and confirming.
+  const openTabCount = useSessionsStore(s =>
+    s.tabOrder.reduce((n, id) => (s.sessions[id]?.projectId === project.id ? n + 1 : n), 0)
+  )
 
   return (
     // Active-project visual: accent-tinted background + a 2px accent
@@ -147,7 +175,7 @@ export function ProjectItem({ project, isActive, onEdit }: Props) {
         {project.lastClaudeSessionId && (
           <button
             type="button"
-            onClick={handleResetConversation}
+            onClick={openResetConfirm}
             className="p-1 rounded hover:bg-elevated text-fg-faint hover:text-fg"
             title="Start fresh conversation next time"
           >
@@ -171,6 +199,25 @@ export function ProjectItem({ project, isActive, onEdit }: Props) {
           <Trash2 size={12} />
         </button>
       </div>
+      {confirmReset && (
+        <ConfirmDialog
+          title={`Start fresh conversation in "${project.name}"?`}
+          tone="danger"
+          confirmLabel="Reset conversation"
+          body={
+            <>
+              <p>The transcript on disk stays untouched — this just unpins the resume reference so the next click on this project starts a new claude session.</p>
+              {openTabCount > 0 && (
+                <p className="mt-2 text-danger">
+                  {openTabCount === 1 ? 'The currently open tab' : `${openTabCount} open tabs`} for this project will be closed and reopened blank when you click again.
+                </p>
+              )}
+            </>
+          }
+          onConfirm={handleResetConfirmed}
+          onCancel={() => setConfirmReset(false)}
+        />
+      )}
     </div>
   )
 }

@@ -7,7 +7,7 @@ import { Modal } from '../Modal'
 import { ModelCombobox } from '../Settings/ModelCombobox'
 import { PathCombobox } from '../Settings/PathCombobox'
 import { findDuplicateEnvironment } from '../../lib/environment-dedup'
-import { describeHost } from '../../../../shared/host-utils'
+import { describeHost, transcriptDirHint } from '../../../../shared/host-utils'
 
 interface Props {
   onClose: () => void
@@ -59,6 +59,11 @@ export function AddProjectModal({ onClose, editProject, presetEnvironmentId }: P
   const [sshKeyFile, setSshKeyFile] = useState(
     editEnv?.config.kind === 'ssh' ? (editEnv.config.keyFile ?? '') : ''
   )
+  // Edit-only field: the claudeSessionId we pass as `--resume` next time
+  // this project is opened. Auto-pinned by listeners.ts on the first
+  // system:init, but exposed here so the user can paste a different one
+  // from the on-disk transcript directory.
+  const [claudeSessionId, setClaudeSessionId] = useState(editProject?.lastClaudeSessionId ?? '')
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -90,7 +95,15 @@ export function AddProjectModal({ onClose, editProject, presetEnvironmentId }: P
       name: name.trim(),
       environmentId: envId,
       path: path.trim(),
-      model: model.trim() || undefined
+      model: model.trim() || undefined,
+      // Carry the manually-edited session id through. Empty string maps
+      // to undefined so the listener's write-once pin re-fires on the
+      // next session start. lastModel / lastContextWindow are
+      // intentionally NOT touched here — they're auto-managed and
+      // would be confusing to expose for direct editing.
+      lastClaudeSessionId: claudeSessionId.trim() || undefined,
+      lastModel: editProject?.lastModel,
+      lastContextWindow: editProject?.lastContextWindow
     }
 
     if (editProject) updateProject(project)
@@ -227,6 +240,29 @@ export function AddProjectModal({ onClose, editProject, presetEnvironmentId }: P
               </p>
             )}
           </div>
+
+          {/* Session id is editable only when editing an existing project —
+              for fresh projects there's nothing to pin yet, the listener
+              will write the id on first system:init. The helper text shows
+              the on-disk transcripts dir for the current env so the user
+              knows where to look if they want to paste a different id. */}
+          {editProject && editEnv && (
+            <div>
+              <label className={labelCls}>
+                Claude Session ID (resume target, optional)
+              </label>
+              <input
+                className={inputCls}
+                value={claudeSessionId}
+                onChange={e => setClaudeSessionId(e.target.value)}
+                placeholder="auto-pinned on first session"
+                spellCheck={false}
+              />
+              <p className="mt-1 text-[10px] text-fg-faint break-words">
+                Transcripts live in <span className="font-mono text-fg-muted">{transcriptDirHint(editEnv.config, path.trim() || editProject.path)}</span> — paste a <span className="font-mono">…jsonl</span> filename (without extension) to resume that conversation. Leave empty to start fresh next time; the field auto-fills when claude reports its session id.
+              </p>
+            </div>
+          )}
 
           <button
             type="submit"

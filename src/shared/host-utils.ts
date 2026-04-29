@@ -49,3 +49,29 @@ export function describeHost(host: HostType): string {
 function normalizeDistro(d: string): string {
   return d.trim().toLowerCase()
 }
+
+// Mirrors how the Claude Code CLI slugifies a project path before using it
+// as the directory name under ~/.claude/projects/. Pure string manipulation
+// so it can run on either side (main uses it to build cat command paths,
+// renderer uses it to display the on-disk path in project settings as a
+// helper-text hint). Trailing separators are stripped first — `/srv/`
+// would otherwise produce `-srv-` while claude itself normalises to
+// `-srv` (see history-reader-slug.test.ts for the regression).
+export function claudeProjectSlug(projectPath: string): string {
+  let end = projectPath.length
+  while (end > 1 && (projectPath[end - 1] === '/' || projectPath[end - 1] === '\\')) end--
+  return projectPath.slice(0, end).split(/[/\\]/).join('-')
+}
+
+// Human-readable hint for where the JSONL transcript files live for a
+// project on a given environment. Used by the project-settings UI to
+// help the user paste a session id manually if they want to resume a
+// specific transcript. The exact resolved path differs by host kind:
+// local → ~/.claude/projects/<slug>/, WSL → same path on the distro,
+// SSH → $HOME/.claude/projects/<slug>/ on the remote.
+export function transcriptDirHint(host: HostType, projectPath: string): string {
+  const slug = claudeProjectSlug(projectPath)
+  if (host.kind === 'local') return `~/.claude/projects/${slug}/`
+  if (host.kind === 'wsl') return `~/.claude/projects/${slug}/  (on WSL · ${host.distro})`
+  return `$HOME/.claude/projects/${slug}/  (on ${host.user ? `${host.user}@${host.host}` : host.host})`
+}
