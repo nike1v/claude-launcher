@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { X } from 'lucide-react'
 import type { Environment, HostType, Project } from '../../../../shared/types'
 import { useProjectsStore } from '../../store/projects'
@@ -8,6 +8,7 @@ import { ModelCombobox } from '../Settings/ModelCombobox'
 import { PathCombobox } from '../Settings/PathCombobox'
 import { findDuplicateEnvironment } from '../../lib/environment-dedup'
 import { describeHost, transcriptDirHint } from '../../../../shared/host-utils'
+import { listSessionIds } from '../../ipc/bridge'
 
 interface Props {
   onClose: () => void
@@ -69,6 +70,30 @@ export function AddProjectModal({ onClose, editProject, presetEnvironmentId }: P
   // construction so subsequent edits don't move the goalposts.
   const hadInitialSessionId = !!editProject?.lastClaudeSessionId
   const clearedSessionId = hadInitialSessionId && !claudeSessionId.trim()
+  // Available session ids for autocomplete + soft validation. null while
+  // we haven't asked yet (so we don't flag a typed id as "missing"
+  // before the list arrives); empty array means we asked but found
+  // nothing (fresh project, unreachable env, etc.) — also no warning,
+  // just no suggestions.
+  const [availableIds, setAvailableIds] = useState<string[] | null>(null)
+  useEffect(() => {
+    if (!editProject) return
+    let cancelled = false
+    listSessionIds(editProject.id).then(ids => {
+      if (!cancelled) setAvailableIds(ids)
+    }).catch(() => {
+      if (!cancelled) setAvailableIds([])
+    })
+    return () => { cancelled = true }
+  }, [editProject?.id])
+  // Soft warning: typed id isn't in the listed transcripts. Doesn't
+  // block save — we trust the user (the ls might've failed, or they
+  // pasted from a transcript not yet flushed to disk).
+  const trimmedId = claudeSessionId.trim()
+  const idNotFound = !!trimmedId
+    && availableIds !== null
+    && availableIds.length > 0
+    && !availableIds.includes(trimmedId)
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -260,26 +285,54 @@ export function AddProjectModal({ onClose, editProject, presetEnvironmentId }: P
                 Claude Session ID (resume target, optional)
               </label>
               <input
-                className={`${inputCls} ${clearedSessionId ? 'border-danger/40' : ''}`}
+                list={`session-ids-${editProject.id}`}
+                className={`${inputCls} ${
+                  clearedSessionId
+                    ? 'border-danger/40'
+                    : idNotFound
+                    ? 'border-warn/40'
+                    : ''
+                }`}
                 value={claudeSessionId}
                 onChange={e => setClaudeSessionId(e.target.value)}
                 placeholder={hadInitialSessionId ? '' : 'auto-pinned on first session'}
                 spellCheck={false}
               />
+              {/* Native autocomplete from the env's transcripts dir. The
+                  Chromium <datalist> dropdown filters by what the user has
+                  typed, no custom widget needed. Hidden when the list is
+                  still loading or genuinely empty. */}
+              {availableIds && availableIds.length > 0 && (
+                <datalist id={`session-ids-${editProject.id}`}>
+                  {availableIds.map(id => <option key={id} value={id} />)}
+                </datalist>
+              )}
               {clearedSessionId ? (
-                // Guard: once a session id has been pinned, clearing it via
-                // this field would skip the explicit reset path (which
-                // confirms + closes any open tab). Block save and steer the
-                // user to the reset button on the project row.
+                // Hard guard: clearing a previously-pinned id via this
+                // field skips the explicit reset path (which confirms +
+                // closes any open tab). Block save and steer the user to
+                // the reset button on the project row.
                 <p className="mt-1 text-[10px] text-danger break-words">
                   Use the reset-conversation button on the project row to
                   clear this — it also closes any open tab and confirms
                   before unpinning. Saving now would silently lose the
                   pinned id.
                 </p>
+              ) : idNotFound ? (
+                // Soft warning: typed id wasn't in the env's transcripts
+                // list. Most likely a typo, but we don't block — the ls
+                // might have failed, or the file may exist but be missed
+                // (rare). Surface the path so the user can verify.
+                <p className="mt-1 text-[10px] text-warn break-words">
+                  No transcript with this id found in <span className="font-mono">{transcriptDirHint(editEnv.config, path.trim() || editProject.path)}</span>. Saving anyway will let you resume only if claude can find it.
+                </p>
               ) : (
                 <p className="mt-1 text-[10px] text-fg-faint break-words">
-                  Transcripts live in <span className="font-mono text-fg-muted">{transcriptDirHint(editEnv.config, path.trim() || editProject.path)}</span> — paste a <span className="font-mono">…jsonl</span> filename (without extension) to resume that conversation. The field auto-fills when claude reports its session id.
+                  {availableIds === null
+                    ? 'Loading saved conversations…'
+                    : availableIds.length === 0
+                    ? <>No saved conversations yet at <span className="font-mono text-fg-muted">{transcriptDirHint(editEnv.config, path.trim() || editProject.path)}</span> — the field will auto-fill on the first session.</>
+                    : <>{availableIds.length} saved conversation{availableIds.length === 1 ? '' : 's'} available — pick from the dropdown or paste a <span className="font-mono">…jsonl</span> filename without the extension.</>}
                 </p>
               )}
             </div>

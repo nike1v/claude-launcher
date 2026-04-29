@@ -159,6 +159,12 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): () => Promise<vo
     return historyReader.loadSessionEvents(ctx.env.config, ctx.project.path, sessionId)
   })
 
+  handle('session:history:list', async ({ projectId }) => {
+    const ctx = resolveProjectAndEnv(projectStore, environmentStore, projectId)
+    if (!ctx) return []
+    return historyReader.listSessionIds(ctx.env.config, ctx.project.path)
+  })
+
   handle('tabs:load', () => tabStore.load())
   handle('tabs:save', (state) => { tabStore.save(state) })
 
