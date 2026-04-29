@@ -5,10 +5,14 @@ import { join } from 'node:path'
 import { ProjectStore } from '../../src/main/project-store'
 import type { Project } from '../../src/shared/types'
 
+// Matches the v0.4+ Project shape (environmentId, not the legacy host
+// field). Before validate-persisted.ts the store cast loaded JSON
+// directly, so the old fixture limped along — now the loader actually
+// checks every field, so the fixture has to be valid.
 const makeProject = (overrides: Partial<Project> = {}): Project => ({
   id: 'proj-1',
   name: 'Test Project',
-  host: { kind: 'wsl', distro: 'Ubuntu' },
+  environmentId: 'env-1',
   path: '/home/user/myproject',
   ...overrides
 })
