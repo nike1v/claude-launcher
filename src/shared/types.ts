@@ -264,12 +264,10 @@ export interface ElectronApi {
   // Renderer zoom controls. Levels are Chromium webFrame integers — 0
   // is 100 %, each step ≈ ±20 %. The preload layer routes these to
   // electron's webFrame so the renderer never imports electron directly.
+  // (Clipboard write goes through the regular `clipboard:write` IPC
+  // channel — bridge.ts has the wrapper, see copyText there.)
   getZoomLevel(): number
   setZoomLevel(level: number): void
-  // Native clipboard write — preload layer routes to electron.clipboard,
-  // bypassing the browser's permission gate (which our deny-all
-  // permission handler blocks for clipboard-sanitized-write).
-  copyText(text: string): void
 }
 
 declare global {
