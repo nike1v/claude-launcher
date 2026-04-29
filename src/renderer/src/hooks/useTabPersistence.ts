@@ -56,11 +56,7 @@ async function restoreTabs(knownProjectIds: string[]): Promise<void> {
     console.warn('[restoreTabs] loadTabs failed:', err)
     return
   }
-  console.log(`[restoreTabs] saved.tabs=${saved.tabs.length}, knownProjects=${knownProjectIds.length}`)
-  if (!saved.tabs.length) {
-    console.log('[restoreTabs] no tabs in tabs.json — skipping restore (open the project from the sidebar to start fresh)')
-    return
-  }
+  if (!saved.tabs.length) return
 
   const known = new Set(knownProjectIds)
   const restorable = saved.tabs.filter(
@@ -69,6 +65,9 @@ async function restoreTabs(knownProjectIds: string[]): Promise<void> {
   // Log every dropped tab with the reason — this is the most common cause
   // of "history doesn't load": the tab persisted before claude returned a
   // session_id, or the project was deleted, so we have nothing to resume.
+  // Surface dropped tabs only when something's actually wrong — both
+  // these branches mean the user will see fewer tabs than they had at
+  // app close, and the warning explains why if they go looking.
   for (const t of saved.tabs) {
     if (!t.claudeSessionId) {
       console.warn(`[restoreTabs] dropping tab project=${t.projectId} — no claudeSessionId saved (session never reached system:init before app close)`)
@@ -76,7 +75,6 @@ async function restoreTabs(knownProjectIds: string[]): Promise<void> {
       console.warn(`[restoreTabs] dropping tab project=${t.projectId} sess=${t.claudeSessionId} — project no longer in projects.json`)
     }
   }
-  console.log(`[restoreTabs] restorable=${restorable.length}`)
   if (!restorable.length) return
 
   const { addSession, setActiveSession } = useSessionsStore.getState()
@@ -98,7 +96,6 @@ async function restoreTabs(knownProjectIds: string[]): Promise<void> {
   let activeRestoredId: string | null = null
   for (let i = 0; i < restorable.length; i++) {
     const tab = restorable[i]
-    console.log(`[restoreTabs] restoring tab #${i} project=${tab.projectId} sess=${tab.claudeSessionId}`)
     let sessionId: string
     try {
       sessionId = await startSession(tab.projectId, tab.claudeSessionId)
@@ -144,10 +141,13 @@ async function restoreTabs(knownProjectIds: string[]): Promise<void> {
     void loadSessionHistory(tab.projectId, tab.claudeSessionId)
       .then(result => {
         if (result.events.length) prependEvents(sessionId, result.events)
+        // Only surface a diagnostic when there is one — it means main
+        // returned [] for a non-trivial reason (slug mismatch, ssh
+        // refused, file missing, etc.) and the user is looking at an
+        // empty history. The success-path used to log here too; that
+        // was useful while debugging the SSH history bug, noise now.
         if (result.diagnostic) {
           console.warn(`[history] ${tab.claudeSessionId}: ${result.diagnostic}`)
-        } else {
-          console.log(`[history] ${tab.claudeSessionId}: loaded ${result.events.length} events`)
         }
       })
       .catch(err => console.warn('[restoreTabs] loadSessionHistory failed for', tab.claudeSessionId, err))
