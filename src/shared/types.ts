@@ -261,6 +261,10 @@ export interface ElectronApi {
   // electron's webFrame so the renderer never imports electron directly.
   getZoomLevel(): number
   setZoomLevel(level: number): void
+  // Native clipboard write — preload layer routes to electron.clipboard,
+  // bypassing the browser's permission gate (which our deny-all
+  // permission handler blocks for clipboard-sanitized-write).
+  copyText(text: string): void
 }
 
 declare global {
