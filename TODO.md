@@ -1,76 +1,86 @@
 # TODO
 
-## Phase 0 — spike / validation
+Tracks open work that isn't a captured commit yet. The original
+pre-MVP planning notes (Tauri scaffold, Phase 1 build, etc.) all
+shipped in v0.1–v0.3 and have been removed from this doc — git
+history is the source of truth for "what was the plan back then".
 
-- [ ] Confirm `claude --output-format stream-json --input-format stream-json` works **without** any `CLAUDE_CODE_*` env vars and uses the host's `~/.claude/credentials.json` for auth. Test on WSL.
-- [ ] Confirm the same via `wsl.exe -d <distro> --cd <path> -- claude …` from a Windows terminal.
-- [ ] Confirm the same via `ssh user@host 'cd <path> && claude …'` from a Windows terminal.
-- [ ] Document the stream-json event shapes we need to render (user msg, assistant delta, tool_use, tool_result, error, permission request, end-of-turn).
+## Open
 
-## Phase 1 — MVP app
+### Slash command autocomplete + execution
+**What:** while typing in the chat input, when the user types `/` at
+the start of a line offer an autocomplete dropdown for the slash
+commands the underlying claude CLI supports (`/compact`, `/clear`,
+`/usage`, `/init`, `/cost`, `/model`, `/agents`, `/mcp`, etc.). On
+selection, send the slash line to claude's stdin so claude executes
+it — same wire format as a normal user message, the CLI distinguishes.
 
-### Scaffolding
-- [ ] Pick stack: Tauri + React + TypeScript (default) — confirm or swap.
-- [ ] `npm create tauri-app@latest` → scaffold in repo root.
-- [ ] Set up basic CI: `cargo check`, `npm run build`, format/lint.
-- [ ] Decide on project-config file location (`%APPDATA%/claude-launcher/projects.json`).
+**Open questions:**
+- How do we discover the available commands? Hardcoded list per claude
+  version, or scrape `/help` output once on session start? Hardcoded
+  is simpler but goes stale; scraped is robust but adds a 1-shot
+  startup probe.
+- Some commands take arguments (`/model claude-opus-4-7`, `/agents
+  list`) — the autocomplete needs to know the argument grammar to be
+  useful past the command name.
+- Some commands change session state in ways we'd want to surface in
+  the UI (`/compact` collapses the conversation, `/clear` resets it).
+  We need to either re-read the JSONL transcript after the command
+  settles, or parse the assistant's confirmation event.
 
-### Projects UI
-- [ ] Sidebar listing projects with name + host label.
-- [ ] "Add project" form: name, host type (Local / WSL / SSH), path, optional model.
-- [ ] Edit / delete project.
-- [ ] Persist projects to disk.
+### Use Claude Agent SDK in-process for local environments?
+**Status:** open question, not yet decided.
 
-### Tab manager
-- [ ] Open project → create new tab.
-- [ ] Tab bar with close button.
-- [ ] Multiple tabs live simultaneously (independent subprocesses).
-- [ ] Remember last-opened tabs on app restart (optional).
+The current model spawns the `claude` binary as a child process per
+session. The Anthropic Agent SDK (`@anthropic-ai/claude-agent-sdk` or
+similar — name varies) embeds the same agent runtime as a library, so
+local sessions could run inside our main process directly without the
+subprocess hop. WSL/SSH would still need to spawn the CLI on the
+remote.
 
-### Transport layer (Rust)
-- [ ] `Host::Local` — spawn `claude.exe` via `tokio::process::Command`, piped stdin/stdout.
-- [ ] `Host::Wsl { distro }` — spawn via `wsl.exe -d <distro> --cd <path> -- claude …`.
-- [ ] `Host::Ssh { user, host, port, keyFile }` — spawn via system `ssh` with stdin/stdout piped. (Consider `russh` later for native SSH.)
-- [ ] Line-buffered JSON stream reader; forward each event to the frontend via Tauri events.
-- [ ] Graceful kill on tab close (signal + fallback timeout).
+Rough sketch (full plan in `docs/providers.md`):
+- This would slot in as a second `IProvider` choice for local-only
+  environments. Faster cold start (no claude CLI boot time per
+  session), no stream-json IPC overhead, direct API for caching /
+  citations / batching.
+- We'd own auth (user supplies API key OR we wrap their existing
+  `~/.claude/credentials.json` somehow).
+- We'd lose `/usage` (CLI-specific) and have to reimplement slash
+  commands ourselves (the Agent SDK doesn't ship `/compact` etc. —
+  those are CLI features).
 
-### Chat UI
-- [ ] Render assistant message deltas.
-- [ ] Render user messages (input box → send → stream-json request).
-- [ ] Render tool use (collapsed by default, expandable).
-- [ ] Render tool results.
-- [ ] Render errors.
-- [ ] Permission prompt UI (approve / deny).
-- [ ] Scroll-to-bottom on new content, with "follow" toggle.
-- [ ] Per-tab loading state while `claude` spins up.
+**Decide before**: doing the multi-provider refactor in
+`docs/providers.md`. The Agent SDK provider would be the second
+provider after the current claude-CLI one — the refactor is the gate.
 
-### Polish
-- [ ] App icon, window chrome, basic theme (dark/light).
-- [ ] Keyboard shortcuts: `Ctrl+T` new tab, `Ctrl+W` close tab, `Ctrl+number` switch.
-- [ ] Status bar per tab: host label, connection state, model in use.
+## Deferred / nice-to-have (no urgency)
 
-## Phase 2 — feature parity
+- **Search across chat history** — browse / grep the JSONL transcripts.
+  Open question: scope per-project, per-environment, or global.
+- **Export current chat to markdown / clipboard** — top-of-chat menu.
+- **Manage / prune saved conversations** — pairs with `lastClaudeSessionId`
+  reset, lets the user list / delete transcripts on the env.
 
-- [ ] Slash command autocomplete in input.
-- [ ] File attach / drag-and-drop.
-- [ ] Session resume (pick a prior session for a project).
-- [ ] Per-project overrides (model, effort, setting-sources).
-- [ ] Markdown rendering for assistant output (code blocks, inline code, links).
-- [ ] Syntax highlighting.
-- [ ] Copy message / copy code button.
-- [ ] Cost / token usage display per tab (parse from stream-json end-of-turn events).
+## Closed (recent shipped work)
 
-## Phase 3 — nice-to-have
+See git log for details. Quick index:
 
-- [ ] Native SSH via `russh` (drop system-ssh dependency).
-- [ ] Per-host daemon (optional) for lower spawn latency.
-- [ ] Search across tabs.
-- [ ] Export a session to markdown.
-- [ ] Theme system.
-
-## Open questions
-
-- [ ] How does `claude` behave when spawned non-interactively with no TTY? Any features that silently degrade?
-- [ ] Best way to detect permission requests in stream-json vs. regular tool uses? (`--permission-prompt-tool stdio` flag implications.)
-- [ ] Do we need `--replay-user-messages` like the desktop app uses, or just feed user messages as stream-json events?
-- [ ] How should "new chat" work — start a fresh `claude` process, or send a reset command to the existing one?
+- v0.4.37 — runtime validators for persisted JSON
+- v0.4.38 — `docs/providers.md` (multi-provider planning)
+- v0.4.36 — pruned debug breadcrumbs from restoreTabs
+- v0.4.35 — session-id autocomplete + soft validation in project edit
+- v0.4.33 — editable session id in project settings; ConfirmDialog
+- v0.4.32 — reset-conversation hover button on project rows
+- v0.4.30 — copy via `clipboard:write` IPC (preload sandbox restrictions)
+- v0.4.28 — instant tab paint on cold restore (sync `startSession` +
+  background `_runSession`)
+- v0.4.25 — Ctrl/Cmd+/-/0 zoom, high-contrast theme, mac-shortcut
+  parity
+- v0.4.20 — accent palette picker (six colour families × three themes)
+- v0.4.17 — system / light / dark theme picker
+- v0.4.14 — strip trailing slash from history-reader slug (RCE
+  diagnostic)
+- v0.4.8 — whole-codebase review fixes (SSH `$(…)` RCE, sessionId
+  path-traversal, more)
+- v0.4.4 — phase-2 security/leak/memory hardening (BrowserWindow
+  sandbox, validators, bounds)
