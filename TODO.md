@@ -28,30 +28,39 @@ it — same wire format as a normal user message, the CLI distinguishes.
   We need to either re-read the JSONL transcript after the command
   settles, or parse the assistant's confirmation event.
 
-### Use Claude Agent SDK in-process for local environments?
-**Status:** open question, not yet decided.
+### Multi-provider via CLI abstraction
+**What:** abstract the claude-CLI-shaped pieces of the codebase
+(argv builder, stream-json parser, control protocol, transcript
+layout, `/usage` scrape) behind an `IProvider` interface, so adding
+a second CLI (Codex, Aider, Gemini) becomes "implement `IProvider`"
+instead of "rewrite session-manager".
 
-The current model spawns the `claude` binary as a child process per
-session. The Anthropic Agent SDK (`@anthropic-ai/claude-agent-sdk` or
-similar — name varies) embeds the same agent runtime as a library, so
-local sessions could run inside our main process directly without the
-subprocess hop. WSL/SSH would still need to spawn the CLI on the
-remote.
+Detailed plan in `docs/providers.md`. Migration steps:
+1. Define `IProvider` + a normalised event shape.
+2. Refactor claude-specific code into `ClaudeProvider` — pure
+   internal refactor, no user-visible change.
+3. Renderer chat components consume normalised events instead of
+   claude's native stream-json shapes — pure internal refactor.
+4. Implement the second CLI as another `IProvider`. Add provider
+   selection to the project / environment UI.
 
-Rough sketch (full plan in `docs/providers.md`):
-- This would slot in as a second `IProvider` choice for local-only
-  environments. Faster cold start (no claude CLI boot time per
-  session), no stream-json IPC overhead, direct API for caching /
-  citations / batching.
-- We'd own auth (user supplies API key OR we wrap their existing
-  `~/.claude/credentials.json` somehow).
-- We'd lose `/usage` (CLI-specific) and have to reimplement slash
-  commands ourselves (the Agent SDK doesn't ship `/compact` etc. —
-  those are CLI features).
+Steps 1–3 are the gate. Without them, every new provider is a
+half-rewrite.
 
-**Decide before**: doing the multi-provider refactor in
-`docs/providers.md`. The Agent SDK provider would be the second
-provider after the current claude-CLI one — the refactor is the gate.
+**Explicit non-goal — no embedded SDKs.** Claude Agent SDK was
+considered as an alternative for local-only sessions (skips the
+~1–2 s CLI cold-start, direct API for caching / batching / citations).
+Rejected because:
+- Doesn't help WSL / SSH — Agent SDK runs in our local process,
+  its tools (Bash / Read / Write / Edit) execute on the local
+  filesystem only. To run it on a remote we'd have to spawn it
+  there, which is functionally identical to spawning the CLI.
+- Splits the architecture into "in-process for local, child process
+  for remote" — two ways to do everything, more surface area.
+- Loses the user's existing claude setup (credentials, MCP servers,
+  hooks, plugins) — we'd need to read / mirror `~/.claude/` ourselves.
+
+Spawn-the-binary stays the universal pattern for every provider.
 
 ## Deferred / nice-to-have (no urgency)
 

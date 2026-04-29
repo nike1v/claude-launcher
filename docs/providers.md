@@ -1,10 +1,34 @@
 # Adding new LLM providers
 
 This doc sketches what it takes to add a second provider (Codex CLI, Aider,
-Gemini CLI, direct Anthropic SDK, etc.) alongside the current `claude` CLI
-transport. It's the deliverable that gates real "let's add provider X" work
-— so we go in with the right scope already mapped, instead of finding the
-hard parts halfway through implementation.
+Gemini CLI) alongside the current `claude` CLI transport. It's the
+deliverable that gates real "let's add provider X" work — so we go in
+with the right scope already mapped, instead of finding the hard parts
+halfway through implementation.
+
+## Constraint: every provider is a CLI we spawn
+
+Before the design — the universal pattern is **spawn-the-binary over a
+transport**. No embedded SDKs, no in-process agent runtimes, no hybrid
+"local uses SDK / remote uses CLI" splits. Reasons:
+
+- WSL / SSH environments can't use an embedded SDK. The SDK's tools run
+  in whichever process holds it, and that process is our Electron main
+  on the user's local machine — not in the remote distro / host. To
+  reach a remote, you have to spawn something there, which is what
+  the CLI model already does.
+- Splitting the architecture into "in-process for local, child process
+  for remote" doubles the surface area: two parsers, two control
+  protocols, two auth flows, two ways every feature has to be wired.
+- The user's existing claude setup (credentials, MCP servers, hooks,
+  plugins) lives next to wherever claude is installed. Spawning the
+  user's installed binary inherits all of that for free; an embedded
+  SDK would need us to mirror or re-parse those configs ourselves.
+
+So: the Codex / Aider / Gemini integrations are all spawned binaries
+over the existing transport layer. The variation between providers is
+in **what binary**, **what argv**, **what wire format on stdout**,
+**what control commands on stdin**, and **what on-disk transcripts**.
 
 The launcher today is **claude-shaped end-to-end**: every transport spawns
 the `claude` binary, every parser expects claude's `--output-format
@@ -71,23 +95,18 @@ So the work is in two layers:
 ```ts
 // src/main/providers/types.ts (proposed)
 export interface IProvider {
-  // Display id ('claude', 'codex', 'aider', 'gemini', 'anthropic-sdk').
-  // Persisted on Environment / Project so we know which provider to
-  // construct when restoring tabs.
+  // Display id ('claude', 'codex', 'aider', 'gemini'). Persisted on
+  // Environment / Project so we know which provider to construct
+  // when restoring tabs.
   readonly id: string
 
   // Human-readable name shown in the UI. 'Claude Code', 'OpenAI Codex',
   // 'Aider', etc.
   readonly label: string
 
-  // Which transports this provider supports. Most CLIs work over local /
-  // WSL / SSH. A direct-SDK provider only supports `local` (no child
-  // process at all — runs in the main process or hits the API directly).
-  readonly supportedTransports: ReadonlyArray<HostType['kind']>
-
-  // Where the provider stores its on-disk transcripts, if anywhere. null
-  // means "no transcripts" (direct-SDK probably keeps nothing on disk;
-  // some CLIs might log to stderr only).
+  // Where the provider stores its on-disk transcripts on the
+  // environment, if anywhere. null means "no transcripts" — some CLIs
+  // log only to stderr or keep no record at all.
   transcriptDir(host: HostType, projectPath: string): string | null
 
   // Build the argv for `transport.spawn`. The transport handles host
@@ -102,20 +121,19 @@ export interface IProvider {
   // Parses one line / chunk of provider stdout into a renderer-agnostic
   // event. Each provider speaks its own wire format — claude does
   // stream-json with discriminated `type` fields, Aider does plain
-  // text with markers, OpenAI Responses API does SSE, etc.
+  // text with markers, Codex does its own line-delimited shape, etc.
   parseLine(line: string): NormalizedEvent | null
 
   // Format a user message for stdin. Claude takes
   // `{type:'user', message:{role:'user', content: string|blocks}}` JSON
-  // lines; Aider takes plain text terminated by Enter; an SDK provider
-  // takes a structured Message object.
+  // lines; Aider takes plain text terminated by Enter; etc.
   formatUserMessage(text: string, attachments: SendAttachment[]): string
 
   // Translate the renderer's high-level intents into provider-specific
   // control commands. `interrupt` is the obvious one (claude:
-  // control_request/interrupt; Aider: ^C; SDK: AbortController.abort()).
-  // `respondPermission` only applies to providers that have a permission
-  // prompt at all.
+  // control_request/interrupt; Aider: ^C). `respondPermission` only
+  // applies to providers that have a permission prompt at all —
+  // returns null when not applicable.
   controlCommand(cmd: ControlCommand): string | null
 }
 
@@ -192,7 +210,6 @@ are before someone asks "but how does Aider do X?".
 | Codex CLI    | `--continue` flag, no explicit id (resumes "the last one") |
 | Aider        | `--continue` per-repo conversation, persists in `.aider.chat.history.md` |
 | Gemini CLI   | No native resume as of writing — fresh session every spawn |
-| Anthropic SDK| Renderer keeps the conversation in memory + tabs.json; no provider call |
 
 The `lastClaudeSessionId` field on `Project` is claude-specific. A
 provider-agnostic version would be `lastSessionRef: string | null` — the
@@ -221,11 +238,10 @@ that don't emit `permission-request` events.
 ### Usage / billing
 
 `/usage` is a claude-CLI-specific TUI panel. Other providers either don't
-have it (Aider — local, no API in their CLI) or expose it differently
-(OpenAI / Anthropic SDKs — REST endpoints with quota info). Settings →
-Environments → Usage modal would need an `IProvider.fetchUsage()` that
-returns `null` for providers without a usage notion, and the modal hides
-itself for those rows.
+have it (Aider — local, no API in their CLI) or expose it differently.
+Settings → Environments → Usage modal would need an
+`IProvider.fetchUsage()` that returns `null` for providers without a usage
+notion, and the modal hides itself for those rows.
 
 ### Model picking
 
@@ -237,11 +253,10 @@ claude-shaped values. Each provider would expose a
 
 ### Stop / interrupt
 
-Claude: `control_request/interrupt` JSON line on stdin. Most CLIs: SIGINT.
-SDK: `AbortController.abort()`. The `IProvider.controlCommand` returns
-either a stdin line (provider writes it via session-manager.writeStdin)
-or null — null means "the session-manager should send SIGINT to the
-child" (or for SDK, abort).
+Claude: `control_request/interrupt` JSON line on stdin. Most CLIs: SIGINT
+to the child process. The `IProvider.controlCommand` returns either a
+stdin line (provider writes it via `session-manager.writeStdin`) or null —
+null means "the session-manager should send SIGINT to the child instead."
 
 ---
 
@@ -286,6 +301,10 @@ needs to be.
 
 ## What's NOT planned here
 
+- **No embedded SDKs / in-process agent runtimes.** See the constraint
+  at the top of this doc — every provider is a CLI we spawn. The Agent
+  SDK route was considered for local-only sessions and rejected because
+  it doesn't generalise to WSL / SSH and forks the architecture.
 - **No support for "claude on Vertex AI" / "claude on Bedrock".** Those
   are claude with a different auth surface, not different providers.
   They'd be Environment config (extra env vars), not an `IProvider`
@@ -317,18 +336,20 @@ These would have to be answered when we actually do this, not now:
    side-by-side feature would need multi-tab-per-project plus a sync'd
    input bar. Out of scope for `IProvider` introduction — that's a
    separate feature on top.
-3. **Auth.** Claude Code stores its OAuth token in `~/.claude/`, on the
-   environment side. Codex authenticates via OPENAI\_API\_KEY env var.
-   Aider via OPENAI\_API\_KEY too (or anthropic, or whatever model
-   it's using). Gemini via GEMINI\_API\_KEY. Today we silently strip
-   `CLAUDE_CODE_OAUTH_TOKEN` from the spawned env (so the remote uses
-   its own creds) — generalising that filter to "strip the host's
-   credentials for whatever provider's about to spawn" is a per-provider
-   list of env vars.
-4. **Streaming consistency.** Claude streams events line-by-line. SSE
-   providers stream events as `data: {...}\n\n`. The session-manager's
-   line buffer assumes newline-delimited. Per-provider would need to
-   carry its own framing.
+3. **Auth.** Each CLI manages its own credentials on the environment side
+   — claude in `~/.claude/`, Codex via `OPENAI_API_KEY` env var, Aider
+   via `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / etc. depending on model,
+   Gemini via `GEMINI_API_KEY`. The user has these set up wherever the
+   CLI is installed; we don't manage them. Today we silently strip
+   `CLAUDE_CODE_OAUTH_TOKEN` from the spawned env (so a remote uses its
+   own creds, not the host's) — generalising is a per-provider list of
+   env vars to strip from the inherited environment.
+4. **Streaming consistency.** Claude streams events line-by-line.
+   Other CLIs may use the same convention or something else. The
+   session-manager's line buffer assumes newline-delimited; if a
+   provider uses a different framing the per-provider parser handles
+   it (consume the buffer to whatever boundary the format uses, return
+   normalised events). Most CLIs end up newline-delimited in practice.
 
 ---
 
