@@ -3,8 +3,9 @@ import { readdir, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join, resolve, sep } from 'node:path'
 import type { HostType } from '../shared/types'
-import { shQuote } from './transports/path-probe'
+import { shQuote } from './transports/probe'
 import { validateSshHost, validateWslDistro } from './transports/validate-ssh'
+import { sshConnectArgs, sshTarget } from './transports/ssh-args'
 
 export interface DirListing {
   // The absolute directory we ended up listing (after resolving "" / "~").
@@ -91,11 +92,8 @@ function remoteShellCommand(host: HostType, script: string): { bin: string; args
   }
   if (host.kind === 'ssh') {
     validateSshHost(host)
-    const args = ['-T', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=4']
-    if (host.port) args.push('-p', String(host.port))
-    if (host.keyFile) args.push('-i', host.keyFile)
-    // Bare host = ~/.ssh/config alias; user@host overrides config user.
-    args.push(host.user ? `${host.user}@${host.host}` : host.host, `sh -c ${shQuote(script)}`)
+    const args = ['-T', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=4', ...sshConnectArgs(host)]
+    args.push(sshTarget(host), `sh -c ${shQuote(script)}`)
     return { bin: 'ssh', args }
   }
   throw new Error(`Unsupported host kind: ${host.kind}`)

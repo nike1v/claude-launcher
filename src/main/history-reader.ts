@@ -5,6 +5,7 @@ import { join, sep } from 'node:path'
 import type { HostType, StreamJsonEvent } from '../shared/types'
 import { parseStreamJsonLine } from './stream-json-parser'
 import { validateSshHost, validateWslDistro } from './transports/validate-ssh'
+import { sshConnectArgs, sshTarget } from './transports/ssh-args'
 
 // Claude session ids are UUID-shaped strings the CLI writes into the JSONL
 // transcript filename. Anything else is renderer-injected garbage and
@@ -178,10 +179,6 @@ function buildCatCommand(host: HostType, filePath: string): { bin: string; args:
   }
   if (host.kind !== 'ssh') throw new Error(`Unsupported host kind for buildCatCommand: ${host.kind}`)
   validateSshHost(host)
-  const sshArgs = ['-T']
-  if (host.port) sshArgs.push('-p', String(host.port))
-  if (host.keyFile) sshArgs.push('-i', host.keyFile)
-  const target = host.user ? `${host.user}@${host.host}` : host.host
-  sshArgs.push(target, cmd)
+  const sshArgs = ['-T', ...sshConnectArgs(host), sshTarget(host), cmd]
   return { bin: 'ssh', args: sshArgs }
 }

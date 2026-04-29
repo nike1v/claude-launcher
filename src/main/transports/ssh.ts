@@ -2,11 +2,12 @@ import { spawn } from 'node:child_process'
 import type { ChildProcess } from 'node:child_process'
 import type { HostType } from '../../shared/types'
 import type { ITransport, ProbeResult, SpawnOptions } from './types'
-import { runPathProbe, probeScript, shQuote } from './path-probe'
+import { runShellProbe, probeScript, shQuote } from './probe'
 import { getCachedPath, setCachedPath } from './path-cache'
 import { validateSshHost } from './validate-ssh'
 import { validateProjectPath, validateClaudeArg } from './validate-path'
 import { buildClaudeArgs, filteredEnv } from './shared'
+import { sshConnectArgs, sshTarget } from './ssh-args'
 
 export class SshTransport implements ITransport {
   public spawn(options: SpawnOptions): ChildProcess {
@@ -60,7 +61,7 @@ export class SshTransport implements ITransport {
     const args = ['-T', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=8']
     args.push(...sshConnectArgs(host))
     args.push(sshTarget(host), `bash -lc ${shQuote(probeScript())}`)
-    const result = await runPathProbe({ bin: 'ssh', args, timeoutMs: 25_000 })
+    const result = await runShellProbe({ bin: 'ssh', args, timeoutMs: 25_000 })
     if (result.path) setCachedPath(host, result.path)
     return result.ok
       ? { ok: true, version: result.version ?? '' }
@@ -68,15 +69,3 @@ export class SshTransport implements ITransport {
   }
 }
 
-function sshConnectArgs(host: Extract<HostType, { kind: 'ssh' }>): string[] {
-  const args: string[] = []
-  if (host.port) args.push('-p', String(host.port))
-  if (host.keyFile) args.push('-i', host.keyFile)
-  return args
-}
-
-// `ssh user@host` when user is set; bare `ssh host` otherwise so OpenSSH
-// looks up the Host alias in ~/.ssh/config and pulls user/port/key from there.
-function sshTarget(host: Extract<HostType, { kind: 'ssh' }>): string {
-  return host.user ? `${host.user}@${host.host}` : host.host
-}

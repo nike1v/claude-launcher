@@ -10,7 +10,8 @@ import type { HostType, UsageProbeResult } from '../shared/types'
 import { parseUsage } from './usage-parser'
 import { validateSshHost, validateWslDistro } from './transports/validate-ssh'
 import { filteredEnv } from './transports/shared'
-import { shQuote } from './transports/path-probe'
+import { shQuote } from './transports/probe'
+import { sshConnectArgs, sshTarget } from './transports/ssh-args'
 
 // Why a PTY: claude's /usage panel is rendered into the TUI by the CLI
 // itself — there's no machine-readable flag, no `--json` / `--print` mode
@@ -229,14 +230,10 @@ function buildCommand(host: HostType): PtyCommand | null {
 
   if (host.kind === 'ssh') {
     try { validateSshHost(host) } catch { return null }
-    const target = host.user ? `${host.user}@${host.host}` : host.host
-    const sshArgs: string[] = ['-tt']
-    if (host.port) sshArgs.push('-p', String(host.port))
-    if (host.keyFile) sshArgs.push('-i', host.keyFile)
-    sshArgs.push(target)
     // -tt forces a remote TTY (so /usage's TUI renders); bash -lc + an
     // explicit bashrc source covers both PATH-in-profile and PATH-in-bashrc
     // setups.
+    const sshArgs: string[] = ['-tt', ...sshConnectArgs(host), sshTarget(host)]
     const inner = `[ -f ~/.bashrc ] && . ~/.bashrc 2>/dev/null; mkdir -p ~/${PROBE_DIR_NAME} && cd ~/${PROBE_DIR_NAME} && exec claude --permission-mode default`
     sshArgs.push(`bash -lc ${shQuote(inner)}`)
     return {
