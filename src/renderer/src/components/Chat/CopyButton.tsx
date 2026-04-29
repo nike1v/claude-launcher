@@ -27,15 +27,17 @@ export function CopyButton({ text, className = '' }: Props) {
     }
   }, [])
 
-  const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(text)
-      setCopied(true)
-      if (timerRef.current) clearTimeout(timerRef.current)
-      timerRef.current = setTimeout(() => setCopied(false), FEEDBACK_MS)
-    } catch {
-      // clipboard unavailable — silently no-op
-    }
+  const handleCopy = () => {
+    // electron.clipboard via preload, NOT navigator.clipboard. The browser
+    // API goes through Chromium's permission gate, which our deny-all
+    // permission handler from v0.4.4 refuses for `clipboard-sanitized-write`
+    // — so clicks on this button were a no-op in production despite the
+    // (now-fixed) visual feedback. The native module is sync and never
+    // fails for our use case.
+    window.electronAPI.copyText(text)
+    setCopied(true)
+    if (timerRef.current) clearTimeout(timerRef.current)
+    timerRef.current = setTimeout(() => setCopied(false), FEEDBACK_MS)
   }
 
   return (
