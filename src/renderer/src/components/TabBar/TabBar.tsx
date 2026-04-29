@@ -14,13 +14,17 @@ export function TabBar() {
     clearSession(sessionId)
   }
 
-  // Keyboard shortcuts
+  // Keyboard shortcuts. Both ctrlKey (Win/Linux) and metaKey (Mac) count —
+  // a Mac user pressing Cmd+W expects the active tab to close just like a
+  // Windows user pressing Ctrl+W.
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (e.ctrlKey && e.key === 'w' && activeSessionId) {
+      const mod = e.ctrlKey || e.metaKey
+      if (!mod) return
+      if (e.key === 'w' && activeSessionId) {
         handleClose(activeSessionId)
       }
-      if (e.ctrlKey && /^[1-9]$/.test(e.key)) {
+      if (/^[1-9]$/.test(e.key)) {
         const index = Number(e.key) - 1
         const targetId = tabOrder[index]
         if (targetId) setActiveSession(targetId)

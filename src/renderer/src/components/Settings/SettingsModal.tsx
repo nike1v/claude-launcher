@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { X, Plus, Pencil, Trash2, GripVertical, BarChart3, Monitor, Sun, Moon } from 'lucide-react'
+import { X, Plus, Pencil, Trash2, GripVertical, BarChart3, Monitor, Sun, Moon, Contrast, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react'
 import type { Environment } from '../../../../shared/types'
 import { describeHost } from '../../../../shared/host-utils'
 import { useEnvironmentsStore } from '../../store/environments'
@@ -185,12 +185,14 @@ function SectionHeader({ children }: { children: React.ReactNode }) {
 }
 
 // "system" defers to the OS color scheme; the explicit options force a
-// theme regardless of OS pref. Stored only in localStorage — no IPC needed
-// for a renderer-only setting.
+// theme regardless of OS pref. high-contrast is the accessibility variant —
+// pure black/white extremes, much stronger borders, all text readable.
+// Stored only in localStorage — no IPC needed for a renderer-only setting.
 const THEME_OPTIONS: ReadonlyArray<{ value: Theme; label: string; icon: typeof Monitor; hint: string }> = [
   { value: 'system', label: 'System', icon: Monitor, hint: 'Match OS preference' },
   { value: 'light', label: 'Light', icon: Sun, hint: 'Light background' },
-  { value: 'dark', label: 'Dark', icon: Moon, hint: 'Dark background' }
+  { value: 'dark', label: 'Dark', icon: Moon, hint: 'Dark background' },
+  { value: 'high-contrast', label: 'Contrast', icon: Contrast, hint: 'High contrast (accessibility)' }
 ]
 
 // Palette = accent colour family. Independent of theme: Blue + Dark and
@@ -213,10 +215,17 @@ function AppearanceSection() {
   const setTheme = useThemeStore(s => s.setTheme)
   const palette = useThemeStore(s => s.palette)
   const setPalette = useThemeStore(s => s.setPalette)
+  const zoom = useThemeStore(s => s.zoom)
+  const zoomIn = useThemeStore(s => s.zoomIn)
+  const zoomOut = useThemeStore(s => s.zoomOut)
+  const zoomReset = useThemeStore(s => s.zoomReset)
+  // Approximate the visual zoom % the way Chromium does: each integer
+  // step of webFrame.zoomLevel is a 1.2× factor.
+  const zoomPercent = Math.round(Math.pow(1.2, zoom) * 100)
   return (
     <section className="space-y-3">
       <SectionHeader>Appearance</SectionHeader>
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-4 gap-2">
         {THEME_OPTIONS.map(opt => {
           const Icon = opt.icon
           const active = theme === opt.value
@@ -238,6 +247,44 @@ function AppearanceSection() {
             </button>
           )
         })}
+      </div>
+
+      {/* Zoom controls — also wired to Ctrl/Cmd + / − / 0 globally. */}
+      <div>
+        <p className="text-[11px] text-fg-faint mb-1.5">
+          Zoom <span className="text-fg-muted ml-1">({zoomPercent}%)</span>
+          <span className="ml-2 text-fg-faint">
+            {window.electronAPI.platform === 'darwin' ? '⌘' : 'Ctrl'} + /
+            {window.electronAPI.platform === 'darwin' ? ' ⌘' : ' Ctrl'} − /
+            {window.electronAPI.platform === 'darwin' ? ' ⌘' : ' Ctrl'} 0
+          </span>
+        </p>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={zoomOut}
+            title="Zoom out"
+            className="p-1.5 rounded border border-divider text-fg-muted hover:text-fg hover:border-divider-strong transition-colors"
+          >
+            <ZoomOut size={14} />
+          </button>
+          <button
+            type="button"
+            onClick={zoomReset}
+            title="Reset zoom"
+            className="p-1.5 rounded border border-divider text-fg-muted hover:text-fg hover:border-divider-strong transition-colors"
+          >
+            <RotateCcw size={14} />
+          </button>
+          <button
+            type="button"
+            onClick={zoomIn}
+            title="Zoom in"
+            className="p-1.5 rounded border border-divider text-fg-muted hover:text-fg hover:border-divider-strong transition-colors"
+          >
+            <ZoomIn size={14} />
+          </button>
+        </div>
       </div>
 
       {/* Accent palette — orthogonal to theme. Sets only the accent + user
