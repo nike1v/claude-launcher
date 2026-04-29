@@ -38,6 +38,22 @@
   --color-success: var(--cl-success);
   --color-warn: var(--cl-warn);
   --color-danger: var(--cl-danger);
+  /* `overlay` is the scrim used over media (modal backdrop dimming the
+     page, hover button on top of an image attachment). It's NOT tied to
+     the surface palette — it's about contrast against arbitrary content
+     under it, so it stays a constant near-black-with-alpha across both
+     themes. Tokenised so a future "high contrast" pass can dial it up. */
+  --color-overlay: var(--cl-overlay);
+  /* Foreground on top of `bg-overlay`. Always near-white because the
+     scrim itself is always near-black — even in light theme, where the
+     scrim sits over arbitrary media that we can't theme. */
+  --color-overlay-fg: var(--cl-overlay-fg);
+  /* Bubble colour for the user's own messages — slightly accent-tinted
+     so user vs assistant turns are distinguishable at a glance instead
+     of looking like one wall of text. The /N alpha modifiers
+     (`bg-bubble-user/40` etc.) compose on top in the components so we
+     never pick the wrong opacity per surface. */
+  --color-bubble-user: var(--cl-bubble-user);
 }
 
 :root,
@@ -67,6 +83,12 @@
   --cl-success: #4ade80;
   --cl-warn: #fbbf24;
   --cl-danger: #f87171;
+  --cl-overlay: rgba(0, 0, 0, 0.60);
+  --cl-overlay-fg: rgba(255, 255, 255, 0.92);
+  /* User-bubble: accent-tinted lift over the chat surface. On dark, a
+     desaturated indigo-grey reads as "your message" without screaming
+     "I am the accent colour". Composed at /35 in UserMessage. */
+  --cl-bubble-user: #2a3358;
 }
 
 :root[data-theme="light"] {
@@ -88,6 +110,9 @@
   --cl-success: #15803d;
   --cl-warn: #b45309;
   --cl-danger: #b91c1c;
+  --cl-overlay: rgba(0, 0, 0, 0.45);
+  --cl-overlay-fg: rgba(255, 255, 255, 0.92);
+  --cl-bubble-user: #dbe6ff;
 }
 
 /* "system" defers to the OS color scheme. Defaults to dark; only flips
@@ -110,6 +135,9 @@
     --cl-success: #15803d;
     --cl-warn: #b45309;
     --cl-danger: #b91c1c;
+    --cl-overlay: rgba(0, 0, 0, 0.45);
+    --cl-overlay-fg: rgba(255, 255, 255, 0.92);
+    --cl-bubble-user: #dbe6ff;
   }
 }
 
