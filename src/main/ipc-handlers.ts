@@ -1,4 +1,4 @@
-import { ipcMain, BrowserWindow, dialog } from 'electron'
+import { ipcMain, BrowserWindow, clipboard, dialog } from 'electron'
 import { writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { extname, join } from 'node:path'
@@ -161,6 +161,13 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): () => Promise<vo
 
   handle('tabs:load', () => tabStore.load())
   handle('tabs:save', (state) => { tabStore.save(state) })
+
+  // Clipboard write goes through main because (a) the renderer's
+  // navigator.clipboard.writeText is blocked by our deny-all permission
+  // handler from v0.4.4, and (b) the `clipboard` electron module isn't
+  // in the sandboxed-preload allow-list. Main has full electron API
+  // access — write directly here.
+  handle('clipboard:write', (text) => { clipboard.writeText(text) })
 
   return async () => {
     stopped = true

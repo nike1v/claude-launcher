@@ -217,6 +217,10 @@ export interface IpcChannels {
   'tabs:save': PersistedTabs
   'updater:check': Record<string, never>
   'updater:install': Record<string, never>
+  // Native clipboard write — bypasses the browser permission gate that our
+  // deny-all setPermissionRequestHandler blocks for clipboard-sanitized-write.
+  // Main calls electron's clipboard.writeText() directly.
+  'clipboard:write': string
 
   // Main → Renderer (events)
   'session:event': { sessionId: string; event: StreamJsonEvent }
@@ -235,6 +239,7 @@ export type IpcInvokeChannel = Extract<
   | 'tabs:load' | 'tabs:save'
   | 'updater:check' | 'updater:install'
   | 'dialog:saveFile'
+  | 'clipboard:write'
 >
 
 export type IpcEventChannel = Extract<
