@@ -91,7 +91,7 @@ export function EnvironmentForm({ initial, onCancel, onSave }: Props) {
     })
   }
 
-  const inputCls = 'w-full bg-elevated border border-divider rounded px-2 py-1.5 text-sm text-fg placeholder-fg-faint focus:outline-none focus:border-divider-strong'
+  const inputCls = 'w-full bg-elevated border border-divider rounded px-2 py-1.5 text-sm text-fg placeholder-fg-faint focus:outline-none focus:border-accent'
   const labelCls = 'block text-xs text-fg-faint mb-1'
 
   return (
