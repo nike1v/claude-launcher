@@ -147,6 +147,32 @@
   --cl-overlay-fg: rgba(255, 255, 255, 0.92);
 }
 
+/* High-contrast: an accessibility variant on top of the dark theme.
+   Pure black/white extremes, much stronger borders, no faint text — the
+   `text-fg-faint` utility resolves to a fully-readable colour instead
+   of the 45 % wash dark theme uses. Status colours get pumped to their
+   most saturated values so they read at AA+ on every surface. */
+:root[data-theme="high-contrast"] {
+  color-scheme: dark;
+  --cl-app: #000000;
+  --cl-card: #0a0a0a;
+  --cl-elevated: rgba(255, 255, 255, 0.14);
+  --cl-input: rgba(255, 255, 255, 0.10);
+  --cl-divider: rgba(255, 255, 255, 0.50);
+  --cl-divider-strong: rgba(255, 255, 255, 0.75);
+  --cl-fg: #ffffff;
+  --cl-fg-muted: rgba(255, 255, 255, 0.95);
+  --cl-fg-faint: rgba(255, 255, 255, 0.80);
+  --cl-accent: var(--pl-accent-d);
+  --cl-accent-fg: #000000;
+  --cl-bubble-user: var(--pl-bubble-d);
+  --cl-success: #6ee7b7;
+  --cl-warn: #fde68a;
+  --cl-danger: #fca5a5;
+  --cl-overlay: rgba(0, 0, 0, 0.80);
+  --cl-overlay-fg: #ffffff;
+}
+
 /* "system" defers to the OS color scheme. Defaults to dark; only flips
    to light if the OS reports a light preference, so dark stays the
    unsurprising default for users who never touch the picker. */

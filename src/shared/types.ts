@@ -256,6 +256,11 @@ export interface ElectronApi {
     channel: K,
     handler: (payload: IpcChannels[K]) => void
   ): () => void
+  // Renderer zoom controls. Levels are Chromium webFrame integers — 0
+  // is 100 %, each step ≈ ±20 %. The preload layer routes these to
+  // electron's webFrame so the renderer never imports electron directly.
+  getZoomLevel(): number
+  setZoomLevel(level: number): void
 }
 
 declare global {

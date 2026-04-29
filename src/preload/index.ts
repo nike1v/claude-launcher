@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, webFrame } from 'electron'
 import type { ElectronApi, IpcChannels, IpcEventChannel } from '../shared/types'
 
 const api: ElectronApi = {
@@ -17,7 +17,14 @@ const api: ElectronApi = {
       handler(payload)
     ipcRenderer.on(channel as string, listener)
     return () => ipcRenderer.removeListener(channel as string, listener)
-  }
+  },
+
+  // Zoom controls via webFrame (lives in the renderer, but contextIsolation
+  // + sandbox keeps the renderer itself away from electron APIs — preload
+  // is the only place we can call it). Levels follow Chromium convention:
+  // 0 = 100 %, +1 ≈ 120 %, -1 ≈ 83 %, etc.
+  getZoomLevel: () => webFrame.getZoomLevel(),
+  setZoomLevel: (level: number) => webFrame.setZoomLevel(level)
 }
 
 contextBridge.exposeInMainWorld('electronAPI', api)
