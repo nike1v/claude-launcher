@@ -83,66 +83,74 @@ async function restoreTabs(knownProjectIds: string[]): Promise<void> {
   const { prependEvents } = useMessagesStore.getState()
   const { setActiveProjectId } = useProjectsStore.getState()
 
-  // Fan out per-tab IPC calls in parallel — sequential restore meant N tabs
-  // each blocked on a cold SSH probe (up to 25 s) before the UI showed
-  // anything. Parallel cuts that to one probe-RTT for the whole restore.
-  // Order is preserved by keeping the original index on each result and
-  // calling addSession in that order at the end (zustand's tabOrder is
-  // append-only).
-  const restored = await Promise.all(
-    restorable.map(async (tab, idx) => {
-      console.log(`[restoreTabs] restoring tab #${idx} project=${tab.projectId} sess=${tab.claudeSessionId}`)
-      let sessionId: string
-      let initialStatus: import('../../../shared/types').Session['status'] = 'starting'
-      let errorMessage: string | undefined
-      try {
-        sessionId = await startSession(tab.projectId, tab.claudeSessionId)
-      } catch (err) {
-        // startSession rejects when the IPC layer itself errors (project /
-        // env disappeared between save and restore). Fabricating a UUID lets
-        // us preserve the tab in tabs.json (so it survives the next persist
-        // write), but we tag it 'error' so ChatPanel surfaces "close and
-        // reopen" — the renderer-side id is unknown to main, so any
-        // sendMessage to it would silently no-op without this flag.
-        console.error('[restoreTabs] startSession failed for', tab.projectId, err)
-        sessionId = crypto.randomUUID()
-        initialStatus = 'error'
-        errorMessage = err instanceof Error ? err.message : 'Could not start session'
+  // session-manager.startSession returns the sessionId synchronously
+  // (probe + spawn run in background and emit status events as they
+  // settle). So we just `for`-loop, addSession after each fast IPC
+  // call resolves, and the TabBar paints all N tabs in 'starting'
+  // state within milliseconds — instead of waiting for every cold
+  // SSH probe to complete first.
+  //
+  // History load is fire-and-forget: events flow into the messages
+  // store via prependEvents whenever the IPC resolves, which is fine
+  // because the session entry is already in the sessions store and
+  // MessageList just shows whatever's in messagesBySession[id].
+  let firstRestoredId: string | null = null
+  let activeRestoredId: string | null = null
+  for (let i = 0; i < restorable.length; i++) {
+    const tab = restorable[i]
+    console.log(`[restoreTabs] restoring tab #${i} project=${tab.projectId} sess=${tab.claudeSessionId}`)
+    let sessionId: string
+    try {
+      sessionId = await startSession(tab.projectId, tab.claudeSessionId)
+    } catch (err) {
+      // The IPC layer rejects only when the project / env disappeared
+      // between save and restore. Fabricate a UUID + flag the tab as
+      // error so ChatPanel surfaces "close and reopen"; the renderer-
+      // side id is unknown to main, so any sendMessage would silently
+      // no-op without this flag.
+      console.error('[restoreTabs] startSession failed for', tab.projectId, err)
+      sessionId = crypto.randomUUID()
+      addSession({
+        id: sessionId,
+        projectId: tab.projectId,
+        claudeSessionId: tab.claudeSessionId,
+        status: 'error',
+        errorMessage: err instanceof Error ? err.message : 'Could not start session',
+        hasUnread: false,
+        lastModel: tab.lastModel,
+        lastContextWindow: tab.lastContextWindow
+      })
+      if (firstRestoredId === null) firstRestoredId = sessionId
+      if (saved.activeIndex !== null && saved.tabs[saved.activeIndex] === tab) {
+        activeRestoredId = sessionId
       }
-      let events: import('../../../shared/types').StreamJsonEvent[] = []
-      try {
-        const result = await loadSessionHistory(tab.projectId, tab.claudeSessionId)
-        events = result.events
+      continue
+    }
+    addSession({
+      id: sessionId,
+      projectId: tab.projectId,
+      claudeSessionId: tab.claudeSessionId,
+      status: 'starting',
+      hasUnread: false,
+      lastModel: tab.lastModel,
+      lastContextWindow: tab.lastContextWindow
+    })
+    if (firstRestoredId === null) firstRestoredId = sessionId
+    if (saved.activeIndex !== null && saved.tabs[saved.activeIndex] === tab) {
+      activeRestoredId = sessionId
+    }
+    // Fire-and-forget: history flows in when ready, no point blocking
+    // the next tab's startSession on it.
+    void loadSessionHistory(tab.projectId, tab.claudeSessionId)
+      .then(result => {
+        if (result.events.length) prependEvents(sessionId, result.events)
         if (result.diagnostic) {
           console.warn(`[history] ${tab.claudeSessionId}: ${result.diagnostic}`)
         } else {
-          console.log(`[history] ${tab.claudeSessionId}: loaded ${events.length} events`)
+          console.log(`[history] ${tab.claudeSessionId}: loaded ${result.events.length} events`)
         }
-      } catch (err) {
-        console.warn('[restoreTabs] loadSessionHistory failed for', tab.claudeSessionId, err)
-      }
-      return { idx, tab, sessionId, initialStatus, errorMessage, events }
-    })
-  )
-
-  let firstRestoredId: string | null = null
-  let activeRestoredId: string | null = null
-  for (const r of restored) {
-    addSession({
-      id: r.sessionId,
-      projectId: r.tab.projectId,
-      claudeSessionId: r.tab.claudeSessionId,
-      status: r.initialStatus,
-      errorMessage: r.errorMessage,
-      hasUnread: false,
-      lastModel: r.tab.lastModel,
-      lastContextWindow: r.tab.lastContextWindow
-    })
-    if (r.events.length) prependEvents(r.sessionId, r.events)
-    if (firstRestoredId === null) firstRestoredId = r.sessionId
-    if (saved.activeIndex !== null && saved.tabs[saved.activeIndex] === r.tab) {
-      activeRestoredId = r.sessionId
-    }
+      })
+      .catch(err => console.warn('[restoreTabs] loadSessionHistory failed for', tab.claudeSessionId, err))
   }
 
   const finalActive = activeRestoredId ?? firstRestoredId

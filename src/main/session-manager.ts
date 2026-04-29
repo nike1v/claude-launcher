@@ -49,8 +49,29 @@ export class SessionManager {
     private readonly onEvent: EventCallback = () => {}
   ) {}
 
-  public async startSession(env: Environment, project: Project, resumeSessionId?: string): Promise<string> {
+  // Returns the renderer-visible sessionId immediately so the IPC promise
+  // resolves before the SSH probe even starts. The slow stuff — probe and
+  // spawn — runs in background via _runSession; status events flow over
+  // the IPC channel as the work progresses, so the renderer can paint a
+  // 'starting' tab the moment the user clicks (or the moment restoreTabs
+  // calls addSession), instead of staring at an empty TabBar through a
+  // 5–10 s cold SSH probe.
+  public startSession(env: Environment, project: Project, resumeSessionId?: string): string {
     const sessionId = randomUUID()
+    this.onEvent('session:status', { sessionId, status: 'starting' })
+    void this._runSession(sessionId, env, project, resumeSessionId).catch(err => {
+      const reason = err instanceof Error ? err.message : 'session start failed'
+      this.onEvent('session:status', { sessionId, status: 'error', errorMessage: reason })
+    })
+    return sessionId
+  }
+
+  private async _runSession(
+    sessionId: string,
+    env: Environment,
+    project: Project,
+    resumeSessionId?: string
+  ): Promise<void> {
     const transport = this.resolveTransport(env.config)
     const spawnOptions: SpawnOptions = {
       host: env.config,
@@ -60,22 +81,20 @@ export class SessionManager {
       resumeSessionId
     }
 
-    this.onEvent('session:status', { sessionId, status: 'starting' })
-
-    // Async pre-flight: refuse to start a session if `claude --version` doesn't
-    // print the Claude Code CLI banner over this transport. Without this we'd
-    // just spawn whatever and watch the user sit through the 5s ready
-    // fallback into a forever-thinking state with no response.
+    // Pre-flight: refuse to start a session if `claude --version` doesn't
+    // print the Claude Code CLI banner over this transport. Without this
+    // we'd just spawn whatever and watch the user sit through the 5 s
+    // ready fallback into a forever-thinking state with no response.
     try {
       const probe = await transport.probe(env.config)
       if (!probe.ok) {
         this.onEvent('session:status', { sessionId, status: 'error', errorMessage: probe.reason })
-        return sessionId
+        return
       }
     } catch (err) {
       const reason = err instanceof Error ? err.message : 'probe failed'
       this.onEvent('session:status', { sessionId, status: 'error', errorMessage: reason })
-      return sessionId
+      return
     }
 
     const process = transport.spawn(spawnOptions)
@@ -162,8 +181,6 @@ export class SessionManager {
         errorMessage
       })
     })
-
-    return sessionId
   }
 
   public sendMessage(sessionId: string, text: string, attachments: SendAttachment[] = []): void {

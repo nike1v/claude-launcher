@@ -8,12 +8,15 @@ interface Props {
 
 const FEEDBACK_MS = 1500
 
-// Confirmation that survives mouse-leave: callers wrap the button in a
-// `opacity-0 group-hover:opacity-100` container so the button appears only
-// while the message is hovered. After a click the user often moves their
-// mouse — without `!opacity-100` here the success icon would vanish before
-// they could see it. The `!` (Tailwind important) wins over the parent's
-// opacity-0 for the FEEDBACK_MS window.
+// Confirmation that survives mouse-leave. Callers wrap the button in
+// `opacity-0 group-hover:opacity-100`, so the button is hidden until the
+// message is hovered. After a click we want it to stay visible for the
+// FEEDBACK_MS window even if the cursor leaves — but Tailwind 4 changed
+// the important syntax (was `!opacity-100`, is now `opacity-100!`) and an
+// older `!opacity-100` prefix emits no CSS, leaving the parent's
+// opacity-0 in charge. Use an inline style for the override: always wins
+// regardless of Tailwind version drift, and CSS specificity is moot since
+// inline styles trump class-level rules.
 export function CopyButton({ text, className = '' }: Props) {
   const [copied, setCopied] = useState(false)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -40,9 +43,10 @@ export function CopyButton({ text, className = '' }: Props) {
       type="button"
       onClick={handleCopy}
       title={copied ? 'Copied' : 'Copy'}
+      style={copied ? { opacity: 1 } : undefined}
       className={`inline-flex items-center gap-1 p-1 rounded transition-colors ${
         copied
-          ? '!opacity-100 text-success'
+          ? 'text-success'
           : 'text-fg-faint hover:text-fg hover:bg-elevated'
       } ${className}`}
     >
