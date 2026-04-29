@@ -4,7 +4,7 @@ import type { Environment } from '../../../../shared/types'
 import { describeHost } from '../../../../shared/host-utils'
 import { useEnvironmentsStore } from '../../store/environments'
 import { useProjectsStore } from '../../store/projects'
-import { useThemeStore, type Theme } from '../../store/theme'
+import { useThemeStore, type Theme, type Palette } from '../../store/theme'
 import { useDragReorder } from '../../hooks/useDragReorder'
 import { Modal } from '../Modal'
 import { EnvironmentForm } from './EnvironmentForm'
@@ -193,11 +193,28 @@ const THEME_OPTIONS: ReadonlyArray<{ value: Theme; label: string; icon: typeof M
   { value: 'dark', label: 'Dark', icon: Moon, hint: 'Dark background' }
 ]
 
+// Palette = accent colour family. Independent of theme: Blue + Dark and
+// Blue + Light share the same hue, just at different lightness levels
+// the index.css's --pl-accent-d / --pl-accent-l swatches handle. Each
+// preview swatch shows the dark variant since most users start there;
+// in light theme the active accent will be a bit darker than what the
+// swatch shows (still the same hue family).
+const PALETTE_OPTIONS: ReadonlyArray<{ value: Palette; label: string; swatch: string }> = [
+  { value: 'blue', label: 'Blue', swatch: '#4f8cff' },
+  { value: 'violet', label: 'Violet', swatch: '#a78bfa' },
+  { value: 'rose', label: 'Rose', swatch: '#fb7185' },
+  { value: 'emerald', label: 'Emerald', swatch: '#34d399' },
+  { value: 'amber', label: 'Amber', swatch: '#fbbf24' },
+  { value: 'slate', label: 'Slate', swatch: '#94a3b8' }
+]
+
 function AppearanceSection() {
   const theme = useThemeStore(s => s.theme)
   const setTheme = useThemeStore(s => s.setTheme)
+  const palette = useThemeStore(s => s.palette)
+  const setPalette = useThemeStore(s => s.setPalette)
   return (
-    <section>
+    <section className="space-y-3">
       <SectionHeader>Appearance</SectionHeader>
       <div className="grid grid-cols-3 gap-2">
         {THEME_OPTIONS.map(opt => {
@@ -221,6 +238,40 @@ function AppearanceSection() {
             </button>
           )
         })}
+      </div>
+
+      {/* Accent palette — orthogonal to theme. Sets only the accent + user
+          bubble colours; surface tones (panels, text) stay theme-driven. */}
+      <div>
+        <p className="text-[11px] text-fg-faint mb-1.5">Accent</p>
+        <div className="flex items-center gap-2 flex-wrap">
+          {PALETTE_OPTIONS.map(opt => {
+            const active = palette === opt.value
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => setPalette(opt.value)}
+                title={opt.label}
+                aria-label={`${opt.label} accent`}
+                aria-pressed={active}
+                className={`group relative w-7 h-7 rounded-full transition-transform ${
+                  active ? 'scale-110' : 'hover:scale-105'
+                }`}
+              >
+                <span
+                  className={`absolute inset-0 rounded-full border-2 ${
+                    active ? 'border-fg/80' : 'border-transparent group-hover:border-fg-faint'
+                  }`}
+                />
+                <span
+                  className="absolute inset-1 rounded-full"
+                  style={{ background: opt.swatch }}
+                />
+              </button>
+            )
+          })}
+        </div>
       </div>
     </section>
   )

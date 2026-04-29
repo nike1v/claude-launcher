@@ -1,26 +1,28 @@
 @import "tailwindcss";
 
-/* Design tokens (system / dark / light). Tailwind 4 picks up `--color-*`
-   tokens declared in @theme and generates utilities — bg-app, text-fg,
-   border-divider, etc. — that resolve through CSS variables, so theme
-   switching is just `data-theme="…"` on <html>.
+/* ── Theme + palette layering ─────────────────────────────────────────────
 
-   Surface hierarchy (t3code-inspired): the chat area sits on `--app`
-   (deepest), the sidebar + modals on `--card` (a hair lighter), and
-   subtle hover/active states wash with `--elevated` (alpha overlay). The
-   distance between app and card is small on purpose — too much delta
-   reads as "different colour" rather than "different panel". A 1px
-   border-divider hairline does most of the panel separation.
+   We split appearance into two orthogonal axes:
 
-   Status colours (success / warn / danger / accent) ship with two values
-   each: the strong saturated value (used as icon / text foreground) and
-   a "fg" variant tuned per theme so reds, ambers etc. read at AA
-   contrast on both light and dark. Backgrounds for status surfaces are
-   mixed at runtime via /4 /8 /12 /32 alpha modifiers in the components.
+   1. THEME (data-theme="dark|light|system") — controls the SURFACE colours
+      (app/card backgrounds, foreground text, dividers). One value per
+      theme per token.
 
-   The DARK base values match what we were hardcoding before (#0d0d0d
-   app bg etc.), so anything we missed in the migration still looks
-   right in dark mode. */
+   2. PALETTE (data-palette="blue|violet|rose|emerald|amber|slate") —
+      controls the ACCENT family (accent itself + the user-message
+      bubble). Each palette ships two values per token: a `-d` for dark
+      surfaces and a `-l` for light surfaces.
+
+   The theme block pulls accent values out of palette tokens, so the two
+   axes compose: any of 6 palettes × any of 3 themes = 18 looks without
+   hand-writing 18 selector blocks.
+
+   Surface hierarchy: app (deepest) → card (sidebar/modal, +2% lighter
+   on dark / pure white on light) → elevated (alpha overlays for hover
+   etc.). Borders sit at 8% / 18% alpha-on-foreground; the dual-tier
+   surface contrast does most of the panel separation.
+
+   ─────────────────────────────────────────────────────────────────────── */
 
 @theme {
   --color-app: var(--cl-app);
@@ -38,57 +40,90 @@
   --color-success: var(--cl-success);
   --color-warn: var(--cl-warn);
   --color-danger: var(--cl-danger);
-  /* `overlay` is the scrim used over media (modal backdrop dimming the
-     page, hover button on top of an image attachment). It's NOT tied to
-     the surface palette — it's about contrast against arbitrary content
-     under it, so it stays a constant near-black-with-alpha across both
-     themes. Tokenised so a future "high contrast" pass can dial it up. */
+  /* Scrim over arbitrary media (modal backdrop, image-overlay button).
+     Stays near-black + near-white in both themes — contrast is against
+     the media beneath, not against our app surface. */
   --color-overlay: var(--cl-overlay);
-  /* Foreground on top of `bg-overlay`. Always near-white because the
-     scrim itself is always near-black — even in light theme, where the
-     scrim sits over arbitrary media that we can't theme. */
   --color-overlay-fg: var(--cl-overlay-fg);
-  /* Bubble colour for the user's own messages — slightly accent-tinted
-     so user vs assistant turns are distinguishable at a glance instead
-     of looking like one wall of text. The /N alpha modifiers
-     (`bg-bubble-user/40` etc.) compose on top in the components so we
-     never pick the wrong opacity per surface. */
+  /* User-message bubble fill — accent-tinted, palette-aware. */
   --color-bubble-user: var(--cl-bubble-user);
 }
+
+/* ── Palettes ─────────────────────────────────────────────────────────────
+   Each palette declares 4 swatches: accent + bubble fill, with -d / -l
+   variants for dark and light surfaces. Theme blocks below consume
+   these via var(). Default palette (Blue) is on :root so installs that
+   never touched the picker get the historical look. */
+
+:root,
+:root[data-palette="blue"] {
+  --pl-accent-d: #4f8cff;
+  --pl-accent-l: #2563eb;
+  --pl-bubble-d: #2a3358;
+  --pl-bubble-l: #dbe6ff;
+}
+
+:root[data-palette="violet"] {
+  --pl-accent-d: #a78bfa;
+  --pl-accent-l: #7c3aed;
+  --pl-bubble-d: #2d2552;
+  --pl-bubble-l: #ede4ff;
+}
+
+:root[data-palette="rose"] {
+  --pl-accent-d: #fb7185;
+  --pl-accent-l: #e11d48;
+  --pl-bubble-d: #4a2330;
+  --pl-bubble-l: #ffe0e6;
+}
+
+:root[data-palette="emerald"] {
+  --pl-accent-d: #34d399;
+  --pl-accent-l: #059669;
+  --pl-bubble-d: #1f3a35;
+  --pl-bubble-l: #d6f5e8;
+}
+
+:root[data-palette="amber"] {
+  --pl-accent-d: #fbbf24;
+  --pl-accent-l: #b45309;
+  --pl-bubble-d: #3d3018;
+  --pl-bubble-l: #ffedc7;
+}
+
+:root[data-palette="slate"] {
+  /* The "off" palette — desaturated grey accent. Useful for users who
+     find any colour distracting. */
+  --pl-accent-d: #94a3b8;
+  --pl-accent-l: #475569;
+  --pl-bubble-d: #2a2e36;
+  --pl-bubble-l: #e3e6ec;
+}
+
+/* ── Themes ─────────────────────────────────────────────────────────────
+   Each theme block sets all surface tokens AND pulls the accent / bubble
+   values out of the active palette via the -d / -l selector below. */
 
 :root,
 :root[data-theme="dark"] {
   color-scheme: dark;
-  /* Two-tier base. App is the deepest tone (chat area, root window).
-     Card is +2% white mixed in — barely-different brightness, makes
-     sidebar/modal panels read as distinct surfaces. */
   --cl-app: #0d0d0d;
   --cl-card: #161616;
   --cl-elevated: rgba(255, 255, 255, 0.06);
   --cl-input: rgba(255, 255, 255, 0.04);
-  /* Borders: 8% / 18% — visible enough to define panel edges, quiet
-     enough not to compete with content. */
   --cl-divider: rgba(255, 255, 255, 0.08);
   --cl-divider-strong: rgba(255, 255, 255, 0.18);
   --cl-fg: #e5e5e5;
   --cl-fg-muted: rgba(255, 255, 255, 0.70);
   --cl-fg-faint: rgba(255, 255, 255, 0.45);
-  /* Accent: a slightly lighter blue on dark for contrast against the
-     near-black surfaces; same hue as light theme's accent. */
-  --cl-accent: #4f8cff;
+  --cl-accent: var(--pl-accent-d);
   --cl-accent-fg: #ffffff;
-  /* Status icon / text colours — tuned to hit ≥ 4.5:1 against
-     bg-app on dark. Each component composes them with /4-/12 alpha
-     for the surface (alert recipe). */
+  --cl-bubble-user: var(--pl-bubble-d);
   --cl-success: #4ade80;
   --cl-warn: #fbbf24;
   --cl-danger: #f87171;
   --cl-overlay: rgba(0, 0, 0, 0.60);
   --cl-overlay-fg: rgba(255, 255, 255, 0.92);
-  /* User-bubble: accent-tinted lift over the chat surface. On dark, a
-     desaturated indigo-grey reads as "your message" without screaming
-     "I am the accent colour". Composed at /35 in UserMessage. */
-  --cl-bubble-user: #2a3358;
 }
 
 :root[data-theme="light"] {
@@ -102,17 +137,14 @@
   --cl-fg: #1a1a1a;
   --cl-fg-muted: rgba(0, 0, 0, 0.65);
   --cl-fg-faint: rgba(0, 0, 0, 0.42);
-  --cl-accent: #2563eb;
+  --cl-accent: var(--pl-accent-l);
   --cl-accent-fg: #ffffff;
-  /* Darker variants of the status hues so AA contrast holds against the
-     pale app-bg. Same palette family (success → emerald, warn → amber,
-     danger → red) just at a lower lightness. */
+  --cl-bubble-user: var(--pl-bubble-l);
   --cl-success: #15803d;
   --cl-warn: #b45309;
   --cl-danger: #b91c1c;
   --cl-overlay: rgba(0, 0, 0, 0.45);
   --cl-overlay-fg: rgba(255, 255, 255, 0.92);
-  --cl-bubble-user: #dbe6ff;
 }
 
 /* "system" defers to the OS color scheme. Defaults to dark; only flips
@@ -130,14 +162,14 @@
     --cl-fg: #1a1a1a;
     --cl-fg-muted: rgba(0, 0, 0, 0.65);
     --cl-fg-faint: rgba(0, 0, 0, 0.42);
-    --cl-accent: #2563eb;
+    --cl-accent: var(--pl-accent-l);
     --cl-accent-fg: #ffffff;
+    --cl-bubble-user: var(--pl-bubble-l);
     --cl-success: #15803d;
     --cl-warn: #b45309;
     --cl-danger: #b91c1c;
     --cl-overlay: rgba(0, 0, 0, 0.45);
     --cl-overlay-fg: rgba(255, 255, 255, 0.92);
-    --cl-bubble-user: #dbe6ff;
   }
 }
 
@@ -150,7 +182,7 @@ body {
 
 /* Subtle SVG noise overlay (t3code trick): kills banding on flat dark
    surfaces and adds a hint of texture in light too. fixed-positioned at
-   3.5% opacity, pointer-events: none so it never intercepts clicks. The
+   3% opacity, pointer-events: none so it never intercepts clicks. The
    data URI is a 200×200 fractalNoise tile — small enough that it doesn't
    bloat the bundle. */
 body::before {

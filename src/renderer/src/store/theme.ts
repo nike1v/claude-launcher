@@ -1,42 +1,59 @@
 import { create } from 'zustand'
 
 export type Theme = 'system' | 'dark' | 'light'
+export type Palette = 'blue' | 'violet' | 'rose' | 'emerald' | 'amber' | 'slate'
 
-const STORAGE_KEY = 'claude-launcher.theme'
+const THEME_KEY = 'claude-launcher.theme'
+const PALETTE_KEY = 'claude-launcher.palette'
 
-function loadInitial(): Theme {
+const THEMES: ReadonlySet<Theme> = new Set(['system', 'dark', 'light'])
+const PALETTES: ReadonlySet<Palette> = new Set([
+  'blue', 'violet', 'rose', 'emerald', 'amber', 'slate'
+])
+
+function loadInitial<T extends string>(key: string, allowed: ReadonlySet<T>, fallback: T): T {
   // Renderer-only setting — no IPC round-trip needed. localStorage is
-  // synchronous so we can apply data-theme before first paint via
-  // applyTheme() in the bootstrapper, avoiding a flash-of-unstyled-content
-  // when switching from default dark to a saved light preference.
+  // synchronous so we can apply data-* before first paint via
+  // bootstrapTheme(), avoiding a flash-of-wrong-look when switching
+  // from default to a saved preference.
   try {
-    const v = localStorage.getItem(STORAGE_KEY)
-    if (v === 'system' || v === 'dark' || v === 'light') return v
+    const v = localStorage.getItem(key)
+    if (v && allowed.has(v as T)) return v as T
   } catch { /* localStorage may be disabled — fall through to default */ }
-  return 'system'
+  return fallback
 }
 
-function persist(theme: Theme): void {
-  try { localStorage.setItem(STORAGE_KEY, theme) } catch { /* ignore */ }
+function persist(key: string, value: string): void {
+  try { localStorage.setItem(key, value) } catch { /* ignore */ }
 }
 
 interface ThemeStore {
   theme: Theme
+  palette: Palette
   setTheme: (theme: Theme) => void
+  setPalette: (palette: Palette) => void
 }
 
 export const useThemeStore = create<ThemeStore>((set) => ({
-  theme: loadInitial(),
+  theme: loadInitial<Theme>(THEME_KEY, THEMES, 'system'),
+  palette: loadInitial<Palette>(PALETTE_KEY, PALETTES, 'blue'),
   setTheme: (theme) => {
-    persist(theme)
+    persist(THEME_KEY, theme)
     document.documentElement.setAttribute('data-theme', theme)
     set({ theme })
+  },
+  setPalette: (palette) => {
+    persist(PALETTE_KEY, palette)
+    document.documentElement.setAttribute('data-palette', palette)
+    set({ palette })
   }
 }))
 
-// Apply once on module load so the very first paint already has the right
-// theme. Called from main.tsx's import side-effect chain.
+// Apply both attributes once on module load so the very first paint
+// already has the right look. Called from main.tsx's import side-effect
+// chain, before React renders.
 export function bootstrapTheme(): void {
-  const theme = useThemeStore.getState().theme
+  const { theme, palette } = useThemeStore.getState()
   document.documentElement.setAttribute('data-theme', theme)
+  document.documentElement.setAttribute('data-palette', palette)
 }
