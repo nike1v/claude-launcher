@@ -229,7 +229,7 @@ function AppearanceSection() {
               aria-pressed={active}
               className={`flex flex-col items-center gap-1.5 px-3 py-3 rounded border text-xs transition-colors
                 ${active
-                  ? 'bg-elevated border-divider-strong text-fg'
+                  ? 'bg-accent/10 border-accent/60 text-fg'
                   : 'border-divider text-fg-muted hover:border-divider-strong hover:text-fg'}
               `}
             >
@@ -261,7 +261,7 @@ function AppearanceSection() {
               >
                 <span
                   className={`absolute inset-0 rounded-full border-2 ${
-                    active ? 'border-fg/80' : 'border-transparent group-hover:border-fg-faint'
+                    active ? 'border-accent' : 'border-transparent group-hover:border-fg-faint'
                   }`}
                 />
                 <span

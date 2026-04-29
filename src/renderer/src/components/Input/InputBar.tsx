@@ -171,7 +171,7 @@ function SendButton({
       onClick={() => submit()}
       disabled={disabled}
       title="Send"
-      className="p-2 text-fg-faint hover:text-fg disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+      className="p-2 text-fg-muted hover:text-accent disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
     >
       <Send size={16} />
     </button>

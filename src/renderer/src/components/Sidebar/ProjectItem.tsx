@@ -102,14 +102,21 @@ export function ProjectItem({ project, isActive, onEdit }: Props) {
   }
 
   return (
+    // Active-project visual: accent-tinted background + a 2px accent
+    // strip on the left edge. The strip is the always-on cue (works
+    // even with the desaturated Slate palette where the bg tint is
+    // barely visible).
     <div
       onClick={handleClick}
       className={`group relative flex items-center w-full px-3 py-1.5 rounded text-sm cursor-pointer transition-colors
         ${isActive
-          ? 'bg-elevated text-fg'
+          ? 'bg-accent/12 text-fg'
           : 'text-fg-muted hover:bg-elevated hover:text-fg'
         }`}
     >
+      {isActive && (
+        <span className="absolute left-0 top-1 bottom-1 w-0.5 bg-accent rounded-r pointer-events-none" />
+      )}
       <StatusDot status={sessionStatus} className="mr-2" />
       <span className="flex-1 truncate pr-12">{project.name}</span>
       <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">

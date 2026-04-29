@@ -41,7 +41,7 @@ export function ModelCombobox({ value, onChange, placeholder, className = '' }: 
   return (
     <div ref={wrapperRef} className={`relative ${className}`}>
       <input
-        className="w-full bg-elevated border border-divider rounded px-2 py-1.5 text-sm text-fg placeholder-fg-faint focus:outline-none focus:border-divider-strong"
+        className="w-full bg-elevated border border-divider rounded px-2 py-1.5 text-sm text-fg placeholder-fg-faint focus:outline-none focus:border-accent"
         value={value}
         placeholder={placeholder}
         onFocus={() => setOpen(true)}

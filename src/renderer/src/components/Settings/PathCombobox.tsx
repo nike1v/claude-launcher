@@ -61,7 +61,7 @@ export function PathCombobox({ value, onChange, config, placeholder }: Props) {
   return (
     <div ref={wrapperRef} className="relative">
       <input
-        className="w-full bg-elevated border border-divider rounded px-2 py-1.5 text-sm text-fg placeholder-fg-faint focus:outline-none focus:border-divider-strong"
+        className="w-full bg-elevated border border-divider rounded px-2 py-1.5 text-sm text-fg placeholder-fg-faint focus:outline-none focus:border-accent"
         value={value}
         placeholder={placeholder}
         onFocus={() => setOpen(true)}
