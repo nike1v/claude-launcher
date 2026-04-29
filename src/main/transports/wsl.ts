@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process'
 import type { ChildProcess } from 'node:child_process'
 import type { HostType } from '../../shared/types'
 import type { ITransport, ProbeResult, SpawnOptions } from './types'
-import { runPathProbe, probeScript } from './path-probe'
+import { runShellProbe, probeScript } from './probe'
 import { getCachedPath, setCachedPath } from './path-cache'
 import { validateWslDistro } from './validate-ssh'
 import { validateProjectPath, validateClaudeArg } from './validate-path'
@@ -43,7 +43,7 @@ export class WslTransport implements ITransport {
     } catch (err) {
       return { ok: false, reason: err instanceof Error ? err.message : 'invalid wsl config' }
     }
-    const result = await runPathProbe({
+    const result = await runShellProbe({
       bin: 'wsl.exe',
       args: ['-d', host.distro, '--', 'bash', '-lc', probeScript()],
       // wsl.exe cold start + login shell sourcing can both be slow.
