@@ -22,7 +22,7 @@ export function UserMessage({ text, attachments }: Props) {
           // bg-bubble-user is an accent-tinted token (indigo-grey on dark,
           // pale blue on light) so user messages read distinctly from
           // assistant turns instead of "two greys talking to each other".
-          <div className="bg-bubble-user/40 border border-divider rounded-lg px-3 py-2 text-sm text-fg whitespace-pre-wrap">
+          <div className="bg-bubble-user/40 border border-divider rounded-lg px-3 py-2 text-sm text-fg whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
             {text}
           </div>
         )}
