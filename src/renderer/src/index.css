@@ -232,4 +232,44 @@ body::before {
 .status-dot-pulse {
   animation: statusDotPulse 1.4s ease-in-out infinite;
 }
+
+/* ── Chat message overflow plumbing ────────────────────────────────────
+   Default markdown rendering (no Tailwind Typography plugin installed —
+   `prose-*` classes are inert) leaves <pre> blocks at their natural
+   width and lets long unbreakable strings (URLs, base64, etc.) inside
+   <p> push the message wider than its column. That cascades up: the
+   chat container needs to scroll horizontally to show the message,
+   which is the bug "one long line in claude's reply gives the whole
+   chat a horizontal scrollbar."
+
+   Two-part fix:
+   1. Long unbreakable strings inside any text element wrap. The
+      `overflow-wrap: anywhere` rule breaks at any character — strict,
+      but visible-and-readable beats invisible-because-clipped.
+   2. <pre> blocks (and <table> from remark-gfm) get their own
+      horizontal scrollbar inside the message instead of growing the
+      whole chat width.
+   The .prose class is the marker we already attach in
+   AssistantMessage; if Typography ever ships, these rules layer on
+   top of its own styling without conflict. */
+.prose {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.prose pre {
+  overflow-x: auto;
+  max-width: 100%;
+  /* Inside a code block we want to PRESERVE formatting (indentation),
+     not break-anywhere. Override the wrapper's break rule. */
+  overflow-wrap: normal;
+  word-break: normal;
+  white-space: pre;
+}
+
+.prose table {
+  display: block;
+  overflow-x: auto;
+  max-width: 100%;
+}
 </content>

@@ -144,7 +144,11 @@ export function MessageList({ sessionId }: Props) {
     <div
       ref={containerRef}
       onScroll={handleScroll}
-      className="flex-1 overflow-y-auto px-4 py-4"
+      // overflow-x-hidden is the belt to the CSS suspenders (.prose
+      // overflow rules in index.css). Even if some future markdown
+      // element forgets to constrain itself, this caps it here so the
+      // chat as a whole never grows wider than the viewport.
+      className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-4"
     >
       {/* space-y-5 (20 px) puts visible breathing room between turns —
           the previous space-y-3 ran consecutive messages too close
