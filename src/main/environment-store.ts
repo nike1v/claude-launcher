@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto'
 import type { Environment, HostType, Project } from '../shared/types'
 import { validateSshHost, validateWslDistro } from './transports/validate-ssh'
 import { isSameHostTarget, describeHost } from '../shared/host-utils'
+import { validateEnvironment } from './validate-persisted'
 
 // True iff this HostType passes the same validation we apply at spawn time.
 // Used by the migration path so a corrupted projects.json can't smuggle a
@@ -23,14 +24,26 @@ export class EnvironmentStore {
   public constructor(private readonly filePath: string) {}
 
   public load(): Environment[] {
+    let parsed: unknown
     try {
-      const raw = readFileSync(this.filePath, 'utf-8')
-      const parsed = JSON.parse(raw)
-      if (!Array.isArray(parsed)) return []
-      return parsed as Environment[]
+      parsed = JSON.parse(readFileSync(this.filePath, 'utf-8'))
     } catch {
       return []
     }
+    if (!Array.isArray(parsed)) {
+      console.warn('[EnvironmentStore] environments.json is not an array; ignoring file')
+      return []
+    }
+    const valid: Environment[] = []
+    for (const entry of parsed) {
+      try {
+        validateEnvironment(entry)
+        valid.push(entry)
+      } catch (err) {
+        console.warn('[EnvironmentStore] dropped invalid environment entry:', err instanceof Error ? err.message : err)
+      }
+    }
+    return valid
   }
 
   public save(envs: Environment[]): void {
