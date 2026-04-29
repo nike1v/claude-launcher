@@ -1,4 +1,4 @@
-import { Pencil, Trash2 } from 'lucide-react'
+import { MessageSquarePlus, Pencil, Trash2 } from 'lucide-react'
 import type { Project } from '../../../../shared/types'
 import { useSessionsStore } from '../../store/sessions'
 import { useProjectsStore } from '../../store/projects'
@@ -22,7 +22,7 @@ const startingProjects = new Set<string>()
 
 export function ProjectItem({ project, isActive, onEdit }: Props) {
   const { addSession, setActiveSession } = useSessionsStore()
-  const { setActiveProjectId, removeProject } = useProjectsStore()
+  const { setActiveProjectId, removeProject, updateProject } = useProjectsStore()
   // Mirror the tab's status dot in the sidebar so the user can see which
   // projects are working / errored / closed without flipping tabs. We pick
   // the most recently added session for the project — there's at most one
@@ -101,6 +101,27 @@ export function ProjectItem({ project, isActive, onEdit }: Props) {
     }
   }
 
+  // Forget the pinned claudeSessionId so the next click on this project
+  // starts a fresh conversation instead of resuming. The transcript on
+  // disk is untouched — only the renderer-side resume reference is
+  // cleared. listeners.ts re-pins the field on the first system:init of
+  // the new session, so we're back to the write-once steady state with
+  // a different conversation.
+  const handleResetConversation = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (!project.lastClaudeSessionId) return
+    if (!window.confirm(`Start a fresh conversation in "${project.name}" next time you open it?\n\nThe existing transcript stays on disk; this just unpins the resume reference.`)) return
+    updateProject({
+      ...project,
+      lastClaudeSessionId: undefined,
+      // Drop the cached model + context too — they were measured
+      // against the now-forgotten conversation. The next session's
+      // first init will repopulate them.
+      lastModel: undefined,
+      lastContextWindow: undefined
+    })
+  }
+
   return (
     // Active-project visual: accent-tinted background + a 2px accent
     // strip on the left edge. The strip is the always-on cue (works
@@ -118,8 +139,21 @@ export function ProjectItem({ project, isActive, onEdit }: Props) {
         <span className="absolute left-0 top-1 bottom-1 w-0.5 bg-accent rounded-r pointer-events-none" />
       )}
       <StatusDot status={sessionStatus} className="mr-2" />
-      <span className="flex-1 truncate pr-12">{project.name}</span>
+      {/* pr-16 (4rem) reserves room for up to 3 hover icons; the reset
+          button only renders when there's actually a pinned conversation
+          to reset, so the gap shrinks back for never-opened projects. */}
+      <span className="flex-1 truncate pr-16">{project.name}</span>
       <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+        {project.lastClaudeSessionId && (
+          <button
+            type="button"
+            onClick={handleResetConversation}
+            className="p-1 rounded hover:bg-elevated text-fg-faint hover:text-fg"
+            title="Start fresh conversation next time"
+          >
+            <MessageSquarePlus size={12} />
+          </button>
+        )}
         <button
           type="button"
           onClick={handleEdit}
