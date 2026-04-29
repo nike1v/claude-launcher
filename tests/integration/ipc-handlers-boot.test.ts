@@ -23,6 +23,9 @@ vi.mock('electron', () => ({
   dialog: {
     showSaveDialog: vi.fn()
   },
+  clipboard: {
+    writeText: vi.fn()
+  },
   BrowserWindow: class {}
 }))
 
@@ -67,7 +70,8 @@ describe('registerIpcHandlers boot smoke', () => {
       'environments:probe', 'environments:usage',
       'fs:listDir',
       'tabs:load', 'tabs:save',
-      'dialog:saveFile'
+      'dialog:saveFile',
+      'clipboard:write'
     ]
     for (const channel of required) {
       expect(registered, `missing handler for ${channel}`).toContain(channel)

@@ -1,4 +1,4 @@
-import { clipboard, contextBridge, ipcRenderer, webFrame } from 'electron'
+import { contextBridge, ipcRenderer, webFrame } from 'electron'
 import type { ElectronApi, IpcChannels, IpcEventChannel } from '../shared/types'
 
 const api: ElectronApi = {
@@ -26,16 +26,15 @@ const api: ElectronApi = {
   getZoomLevel: () => webFrame.getZoomLevel(),
   setZoomLevel: (level: number) => webFrame.setZoomLevel(level),
 
-  // Native clipboard write. Routes through electron's clipboard module
-  // instead of `navigator.clipboard.writeText` because the latter goes
-  // through Chromium's permission API, which our `setPermissionRequestHandler`
-  // (deny-all by default since v0.4.4 hardening) refuses for the
-  // `clipboard-sanitized-write` permission. Using electron.clipboard
-  // bypasses that gate — the renderer can't reach electron directly under
-  // contextIsolation + sandbox, so the call lands here in preload where
-  // electron APIs are available, and writes synchronously without a
-  // permission round-trip.
-  copyText: (text: string) => clipboard.writeText(text)
+  // Native clipboard write — routes through main via IPC because:
+  //   1. navigator.clipboard.writeText goes through Chromium's permission
+  //      API, which our deny-all setPermissionRequestHandler (v0.4.4) blocks.
+  //   2. The `clipboard` electron module is NOT in the sandboxed preload's
+  //      allow-list (only contextBridge / ipcRenderer / webFrame /
+  //      crashReporter / nativeImage / webUtils are available there).
+  // So we hop to main via IPC, where the full electron API is reachable,
+  // and main calls clipboard.writeText() from there.
+  copyText: (text: string) => { ipcRenderer.invoke('clipboard:write', text) }
 }
 
 contextBridge.exposeInMainWorld('electronAPI', api)
