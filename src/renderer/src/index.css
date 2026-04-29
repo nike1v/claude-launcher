@@ -233,43 +233,119 @@ body::before {
   animation: statusDotPulse 1.4s ease-in-out infinite;
 }
 
-/* ── Chat message overflow plumbing ────────────────────────────────────
-   Default markdown rendering (no Tailwind Typography plugin installed —
-   `prose-*` classes are inert) leaves <pre> blocks at their natural
-   width and lets long unbreakable strings (URLs, base64, etc.) inside
-   <p> push the message wider than its column. That cascades up: the
-   chat container needs to scroll horizontally to show the message,
-   which is the bug "one long line in claude's reply gives the whole
-   chat a horizontal scrollbar."
+/* ── Chat markdown rendering ────────────────────────────────────────────
+   We don't ship `@tailwindcss/typography`, so `prose-*` Tailwind
+   utilities are inert. These rules give the markdown wrapper its real
+   styling — code-block chrome, inline-code chrome, overflow plumbing —
+   so AssistantMessage doesn't render as a wall of text with naked
+   <pre> elements that scroll the entire chat sideways. */
 
-   Two-part fix:
-   1. Long unbreakable strings inside any text element wrap. The
-      `overflow-wrap: anywhere` rule breaks at any character — strict,
-      but visible-and-readable beats invisible-because-clipped.
-   2. <pre> blocks (and <table> from remark-gfm) get their own
-      horizontal scrollbar inside the message instead of growing the
-      whole chat width.
-   The .prose class is the marker we already attach in
-   AssistantMessage; if Typography ever ships, these rules layer on
-   top of its own styling without conflict. */
 .prose {
+  /* Long unbreakable strings inside any text element wrap. Strict, but
+     visible-and-readable beats invisible-because-clipped. */
   overflow-wrap: anywhere;
   word-break: break-word;
 }
 
+/* Block-level code: distinct surface, hairline border, rounded chrome,
+   monospace stack, scrollable when content overflows. The bg-app token
+   sits one tier deeper than the chat surface (which is bg-app already,
+   but the subtle border + padding clearly demarcates the block). */
 .prose pre {
+  background: var(--cl-elevated);
+  border: 1px solid var(--cl-divider);
+  border-radius: 0.5rem;
+  padding: 0.75rem 1rem;
+  margin: 0.75rem 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--cl-fg);
   overflow-x: auto;
   max-width: 100%;
-  /* Inside a code block we want to PRESERVE formatting (indentation),
-     not break-anywhere. Override the wrapper's break rule. */
+  /* Inside a code block we PRESERVE formatting (indentation), not
+     break-anywhere — override the wrapper's break rule. */
   overflow-wrap: normal;
   word-break: normal;
   white-space: pre;
+}
+
+.prose pre code {
+  /* Reset inline-code styling for code that's already wrapped in <pre>;
+     the <pre> already has bg/padding/font. */
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+  font-size: inherit;
+  color: inherit;
+}
+
+/* Inline code: subtle pill, slightly smaller font, monospace. The
+   :not(pre) > code selector keeps this scoped to inline only. */
+.prose :not(pre) > code {
+  background: var(--cl-elevated);
+  border: 1px solid var(--cl-divider);
+  padding: 0.1em 0.35em;
+  border-radius: 0.25rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 0.875em;
+  color: var(--cl-fg);
 }
 
 .prose table {
   display: block;
   overflow-x: auto;
   max-width: 100%;
+  border-collapse: collapse;
+  margin: 0.75rem 0;
+}
+
+.prose th,
+.prose td {
+  border: 1px solid var(--cl-divider);
+  padding: 0.4em 0.75em;
+}
+
+.prose th {
+  background: var(--cl-elevated);
+  font-weight: 600;
+}
+
+/* ── Scrollbar styling ──────────────────────────────────────────────────
+   Default Chromium scrollbars are an opaque slab of grey. Replace with a
+   thin token-driven thumb on a transparent track so the chat / sidebar /
+   modal scrollbars feel consistent with the rest of the chrome and stay
+   out of the way until you reach for them. */
+
+/* Firefox + standards-track */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--cl-divider-strong) transparent;
+}
+
+/* Chromium (Electron) */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--cl-divider-strong);
+  border-radius: 999px;
+  /* 2px transparent border + background-clip: padding-box gives the
+     thumb a visual gap from the edge of its track without nesting any
+     extra markup. */
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--cl-fg-faint);
+  background-clip: padding-box;
+  border: 2px solid transparent;
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
 }
 </content>
