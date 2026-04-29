@@ -146,7 +146,10 @@ export function MessageList({ sessionId }: Props) {
       onScroll={handleScroll}
       className="flex-1 overflow-y-auto px-4 py-4"
     >
-      <div ref={contentRef} className="space-y-3">
+      {/* space-y-5 (20 px) puts visible breathing room between turns —
+          the previous space-y-3 ran consecutive messages too close
+          together to read as discrete turns. */}
+      <div ref={contentRef} className="space-y-5">
         {groups.map((group, i) => {
           if (group.kind === 'message') return renderMessage(group.message)
           return (

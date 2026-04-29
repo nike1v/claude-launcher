@@ -29,7 +29,7 @@ export function Modal({ onClose, children, panelClassName = '' }: Props) {
   return (
     <div
       onMouseDown={handleBackdrop}
-      className="fixed inset-0 bg-black/60 flex items-center justify-center z-50"
+      className="fixed inset-0 bg-overlay flex items-center justify-center z-50"
     >
       <div className={panelClassName}>
         {children}

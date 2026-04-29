@@ -19,7 +19,10 @@ export function UserMessage({ text, attachments }: Props) {
       )}
       <div className="max-w-xl flex flex-col items-end gap-2">
         {text.trim() && (
-          <div className="bg-elevated rounded-lg px-3 py-2 text-sm text-fg whitespace-pre-wrap">
+          // bg-bubble-user is an accent-tinted token (indigo-grey on dark,
+          // pale blue on light) so user messages read distinctly from
+          // assistant turns instead of "two greys talking to each other".
+          <div className="bg-bubble-user/40 border border-divider rounded-lg px-3 py-2 text-sm text-fg whitespace-pre-wrap">
             {text}
           </div>
         )}

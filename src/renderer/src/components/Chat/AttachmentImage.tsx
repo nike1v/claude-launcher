@@ -26,7 +26,12 @@ export function AttachmentImage({ mediaType, data, name }: Props) {
         type="button"
         onClick={handleSave}
         title={`Save ${defaultName}`}
-        className="absolute top-1 right-1 p-1 rounded bg-black/60 text-fg-muted hover:text-fg hover:bg-black/80 opacity-0 group-hover:opacity-100 transition-opacity"
+        // The button sits on top of an arbitrary image — it needs constant
+        // dark contrast against unknown media, not against our app surface.
+        // bg-overlay (theme-stable near-black scrim) + text-overlay-fg
+        // (theme-stable near-white) keeps the icon legible whether the
+        // image behind it is bright sky or a dark code shot.
+        className="absolute top-1 right-1 p-1 rounded bg-overlay text-overlay-fg hover:opacity-90 opacity-0 group-hover:opacity-100 transition-opacity"
       >
         <Download size={14} />
       </button>
