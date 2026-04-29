@@ -28,6 +28,15 @@ export function stopSession(sessionId: string): void {
   window.electronAPI.invoke('session:stop', { sessionId })
 }
 
+// Routes through main because (a) navigator.clipboard.writeText is blocked
+// by our deny-all setPermissionRequestHandler (v0.4.4) on the
+// `clipboard-sanitized-write` permission, and (b) the `clipboard` electron
+// module is NOT in the sandboxed preload's allow-list. Main has the full
+// electron API and calls clipboard.writeText() from there.
+export function copyText(text: string): void {
+  window.electronAPI.invoke('clipboard:write', text)
+}
+
 export function interruptSession(sessionId: string): void {
   window.electronAPI.invoke('session:interrupt', { sessionId })
 }

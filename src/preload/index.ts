@@ -24,17 +24,7 @@ const api: ElectronApi = {
   // is the only place we can call it). Levels follow Chromium convention:
   // 0 = 100 %, +1 ≈ 120 %, -1 ≈ 83 %, etc.
   getZoomLevel: () => webFrame.getZoomLevel(),
-  setZoomLevel: (level: number) => webFrame.setZoomLevel(level),
-
-  // Native clipboard write — routes through main via IPC because:
-  //   1. navigator.clipboard.writeText goes through Chromium's permission
-  //      API, which our deny-all setPermissionRequestHandler (v0.4.4) blocks.
-  //   2. The `clipboard` electron module is NOT in the sandboxed preload's
-  //      allow-list (only contextBridge / ipcRenderer / webFrame /
-  //      crashReporter / nativeImage / webUtils are available there).
-  // So we hop to main via IPC, where the full electron API is reachable,
-  // and main calls clipboard.writeText() from there.
-  copyText: (text: string) => { ipcRenderer.invoke('clipboard:write', text) }
+  setZoomLevel: (level: number) => webFrame.setZoomLevel(level)
 }
 
 contextBridge.exposeInMainWorld('electronAPI', api)
