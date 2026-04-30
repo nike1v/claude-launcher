@@ -1,5 +1,7 @@
 // ── Environment / Project ───────────────────────────────────────────────────
 
+import type { ProviderKind } from './events'
+
 // HostType is the transport-level shape used by spawn commands. It used to
 // live on every Project; we now factor it out into Environments so multiple
 // projects can share one connection (one local CLI, one WSL distro, one SSH
@@ -20,6 +22,9 @@ export interface Environment {
   // unless they override via Project.model. Stored alongside the connection
   // because users typically pick a tier per machine, not per project.
   defaultModel?: string
+  // Default provider kind for projects under this env. Absent = 'claude'
+  // (v0.4 default). Project.providerKind overrides if set.
+  providerKind?: ProviderKind
 }
 
 export interface Project {
@@ -28,9 +33,13 @@ export interface Project {
   environmentId: string
   path: string
   model?: string
+  // Provider this project uses. Absent = inherit from Environment, which
+  // itself defaults to 'claude'. Resolved at session-start time.
+  providerKind?: ProviderKind
   // Pinned on the first system:init for this project and never auto-updated.
   // Lets the sidebar resume the same Claude conversation after the tab is
   // closed — we pass it as --resume and reload its JSONL transcript.
+  // (Renamed to `lastSessionRef` in PR 3 once the renderer is provider-agnostic.)
   lastClaudeSessionId?: string
   // Latest model claude reported for this project, and the latest context
   // window it told us about. Updated whenever new info arrives. Used by the

@@ -29,38 +29,38 @@ it — same wire format as a normal user message, the CLI distinguishes.
   settles, or parse the assistant's confirmation event.
 
 ### Multi-provider via CLI abstraction
-**What:** abstract the claude-CLI-shaped pieces of the codebase
-(argv builder, stream-json parser, control protocol, transcript
-layout, `/usage` scrape) behind an `IProvider` interface, so adding
-a second CLI (Codex, Aider, Gemini) becomes "implement `IProvider`"
-instead of "rewrite session-manager".
+**What:** abstract the claude-CLI-shaped pieces of the codebase behind
+two interfaces — `IProvider` (lifecycle: spawn args, send message,
+interrupt, capabilities) and `IProviderAdapter` (wire-format translation:
+provider stdout → `NormalizedEvent`) — so adding Codex, opencode, or
+Cursor becomes "implement two interfaces" instead of "rewrite
+session-manager".
 
-Detailed plan in `docs/providers.md`. Migration steps:
-1. Define `IProvider` + a normalised event shape.
-2. Refactor claude-specific code into `ClaudeProvider` — pure
-   internal refactor, no user-visible change.
-3. Renderer chat components consume normalised events instead of
-   claude's native stream-json shapes — pure internal refactor.
-4. Implement the second CLI as another `IProvider`. Add provider
-   selection to the project / environment UI.
+Detailed plan in `docs/providers.md`. 4-PR rollout:
+1. **PR 1** — types skeleton: `IProvider`, `IProviderAdapter`,
+   `ProviderCapabilities`, `NormalizedEvent` union, registry.
+   `Project.providerKind?: ProviderKind` optional, defaults to claude.
+2. **PR 2** — refactor claude into `ClaudeProvider` + `ClaudeAdapter`.
+   Pure internal refactor, no user-visible change.
+3. **PR 3** — renderer consumes `NormalizedEvent` (item / content /
+   request taxonomy) instead of claude's native stream-json. Field
+   rename `lastClaudeSessionId` → `lastSessionRef`.
+4. **PR 4** — first non-claude provider: **Codex via `codex app-server`**
+   (stdio JSON-RPC). Provider picker in project UI.
 
-Steps 1–3 are the gate. Without them, every new provider is a
-half-rewrite.
+Steps 1–3 are the gate. Without them, every new provider is a half-rewrite.
 
-**Explicit non-goal — no embedded SDKs.** Claude Agent SDK was
-considered as an alternative for local-only sessions (skips the
-~1–2 s CLI cold-start, direct API for caching / batching / citations).
-Rejected because:
-- Doesn't help WSL / SSH — Agent SDK runs in our local process,
-  its tools (Bash / Read / Write / Edit) execute on the local
-  filesystem only. To run it on a remote we'd have to spawn it
-  there, which is functionally identical to spawning the CLI.
-- Splits the architecture into "in-process for local, child process
-  for remote" — two ways to do everything, more surface area.
-- Loses the user's existing claude setup (credentials, MCP servers,
-  hooks, plugins) — we'd need to read / mirror `~/.claude/` ourselves.
+**Design borrows from t3code** (`pingdotgg/t3code`): provider/adapter
+split, capability flags, four-state approval decisions
+(`accept | acceptForSession | decline | cancel`), richer event taxonomy
+with `item.*` / `content.delta` / `request.*` / `turn.*`. Their
+SDK-based code paths (`@anthropic-ai/claude-agent-sdk`,
+`@opencode-ai/sdk`) don't transfer — those don't reach WSL / SSH.
 
-Spawn-the-binary stays the universal pattern for every provider.
+**Explicit non-goal — no embedded SDKs.** Spawn-the-binary stays the
+universal pattern. Modern AI CLIs are converging on stdio JSON-RPC
+subcommands (codex `app-server`, cursor `agent acp`) for exactly this
+host-to-agent integration use case, so the spawn pattern fits cleanly.
 
 ## Deferred / nice-to-have (no urgency)
 

@@ -59,6 +59,20 @@ describe('validateProject', () => {
       lastContextWindow: NaN
     })).toThrow(/Project\.lastContextWindow/)
   })
+
+  it('accepts a known providerKind', () => {
+    expect(() => validateProject({
+      id: 'p1', name: 'a', environmentId: 'e', path: '/x',
+      providerKind: 'codex'
+    })).not.toThrow()
+  })
+
+  it('rejects an unknown providerKind', () => {
+    expect(() => validateProject({
+      id: 'p1', name: 'a', environmentId: 'e', path: '/x',
+      providerKind: 'aider'
+    })).toThrow(/Project\.providerKind/)
+  })
 })
 
 describe('validateEnvironment', () => {
@@ -109,6 +123,24 @@ describe('validateEnvironment', () => {
     expect(() =>
       validateEnvironment({ id: 'e1', name: 'X', config: { kind: 'docker' } })
     ).toThrow(/config\.kind/)
+  })
+
+  it('accepts a known providerKind', () => {
+    expect(() =>
+      validateEnvironment({
+        id: 'e1', name: 'X', config: { kind: 'local' },
+        providerKind: 'opencode'
+      })
+    ).not.toThrow()
+  })
+
+  it('rejects an unknown providerKind', () => {
+    expect(() =>
+      validateEnvironment({
+        id: 'e1', name: 'X', config: { kind: 'local' },
+        providerKind: 'gemini'
+      })
+    ).toThrow(/Environment\.providerKind/)
   })
 })
 

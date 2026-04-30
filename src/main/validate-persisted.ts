@@ -1,4 +1,5 @@
 import type { Environment, HostType, PersistedTab, PersistedTabs, Project } from '../shared/types'
+import { isProviderKind } from '../shared/events'
 
 // Shape validators for the JSON files we read off disk on every boot:
 // projects.json, environments.json, tabs.json. Until v0.4.37 the loaders
@@ -38,6 +39,13 @@ function requireOptionalNumber(v: unknown, label: string): asserts v is number |
   }
 }
 
+function requireOptionalProviderKind(v: unknown, label: string): void {
+  if (v === undefined) return
+  if (!isProviderKind(v)) {
+    throw new Error(`${label} must be a known provider kind when present (got ${JSON.stringify(v)})`)
+  }
+}
+
 // ── HostType (config field on Environment) ─────────────────────────────
 
 function validateHostConfig(raw: unknown): asserts raw is HostType {
@@ -71,6 +79,7 @@ export function validateProject(raw: unknown): asserts raw is Project {
   requireNonEmptyString(raw.environmentId, 'Project.environmentId')
   requireNonEmptyString(raw.path, 'Project.path')
   requireOptionalString(raw.model, 'Project.model')
+  requireOptionalProviderKind(raw.providerKind, 'Project.providerKind')
   requireOptionalString(raw.lastClaudeSessionId, 'Project.lastClaudeSessionId')
   requireOptionalString(raw.lastModel, 'Project.lastModel')
   requireOptionalNumber(raw.lastContextWindow, 'Project.lastContextWindow')
@@ -84,6 +93,7 @@ export function validateEnvironment(raw: unknown): asserts raw is Environment {
   requireNonEmptyString(raw.name, 'Environment.name')
   validateHostConfig(raw.config)
   requireOptionalString(raw.defaultModel, 'Environment.defaultModel')
+  requireOptionalProviderKind(raw.providerKind, 'Environment.providerKind')
 }
 
 // ── PersistedTab(s) ──────────────────────────────────────────────────────
