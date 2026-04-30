@@ -60,7 +60,7 @@ async function restoreTabs(knownProjectIds: string[]): Promise<void> {
 
   const known = new Set(knownProjectIds)
   const restorable = saved.tabs.filter(
-    t => t.claudeSessionId && known.has(t.projectId)
+    t => t.sessionRef && known.has(t.projectId)
   )
   // Log every dropped tab with the reason — this is the most common cause
   // of "history doesn't load": the tab persisted before claude returned a
@@ -69,10 +69,10 @@ async function restoreTabs(knownProjectIds: string[]): Promise<void> {
   // these branches mean the user will see fewer tabs than they had at
   // app close, and the warning explains why if they go looking.
   for (const t of saved.tabs) {
-    if (!t.claudeSessionId) {
-      console.warn(`[restoreTabs] dropping tab project=${t.projectId} — no claudeSessionId saved (session never reached system:init before app close)`)
+    if (!t.sessionRef) {
+      console.warn(`[restoreTabs] dropping tab project=${t.projectId} — no sessionRef saved (session never reached system:init before app close)`)
     } else if (!known.has(t.projectId)) {
-      console.warn(`[restoreTabs] dropping tab project=${t.projectId} sess=${t.claudeSessionId} — project no longer in projects.json`)
+      console.warn(`[restoreTabs] dropping tab project=${t.projectId} sess=${t.sessionRef} — project no longer in projects.json`)
     }
   }
   if (!restorable.length) return
@@ -98,7 +98,7 @@ async function restoreTabs(knownProjectIds: string[]): Promise<void> {
     const tab = restorable[i]
     let sessionId: string
     try {
-      sessionId = await startSession(tab.projectId, tab.claudeSessionId)
+      sessionId = await startSession(tab.projectId, tab.sessionRef)
     } catch (err) {
       // The IPC layer rejects only when the project / env disappeared
       // between save and restore. Fabricate a UUID + flag the tab as
@@ -110,7 +110,7 @@ async function restoreTabs(knownProjectIds: string[]): Promise<void> {
       addSession({
         id: sessionId,
         projectId: tab.projectId,
-        claudeSessionId: tab.claudeSessionId,
+        sessionRef: tab.sessionRef,
         status: 'error',
         errorMessage: err instanceof Error ? err.message : 'Could not start session',
         hasUnread: false,
@@ -126,7 +126,7 @@ async function restoreTabs(knownProjectIds: string[]): Promise<void> {
     addSession({
       id: sessionId,
       projectId: tab.projectId,
-      claudeSessionId: tab.claudeSessionId,
+      sessionRef: tab.sessionRef,
       status: 'starting',
       hasUnread: false,
       lastModel: tab.lastModel,
@@ -138,7 +138,7 @@ async function restoreTabs(knownProjectIds: string[]): Promise<void> {
     }
     // Fire-and-forget: history flows in when ready, no point blocking
     // the next tab's startSession on it.
-    void loadSessionHistory(tab.projectId, tab.claudeSessionId)
+    void loadSessionHistory(tab.projectId, tab.sessionRef)
       .then(result => {
         if (result.events.length) prependEvents(sessionId, result.events)
         // Only surface a diagnostic when there is one — it means main
@@ -147,10 +147,10 @@ async function restoreTabs(knownProjectIds: string[]): Promise<void> {
         // empty history. The success-path used to log here too; that
         // was useful while debugging the SSH history bug, noise now.
         if (result.diagnostic) {
-          console.warn(`[history] ${tab.claudeSessionId}: ${result.diagnostic}`)
+          console.warn(`[history] ${tab.sessionRef}: ${result.diagnostic}`)
         }
       })
-      .catch(err => console.warn('[restoreTabs] loadSessionHistory failed for', tab.claudeSessionId, err))
+      .catch(err => console.warn('[restoreTabs] loadSessionHistory failed for', tab.sessionRef, err))
   }
 
   const finalActive = activeRestoredId ?? firstRestoredId
@@ -168,18 +168,18 @@ function serializeTabs(
 ): PersistedTabs {
   const tabs = tabOrder
     .map(id => sessions[id])
-    .filter((s): s is Session => !!s && !!s.claudeSessionId)
+    .filter((s): s is Session => !!s && !!s.sessionRef)
     .map(s => ({
       projectId: s.projectId,
-      claudeSessionId: s.claudeSessionId!,
+      sessionRef: s.sessionRef!,
       lastModel: s.lastModel,
       lastContextWindow: s.lastContextWindow
     }))
 
   let activeIndex: number | null = null
-  const activeClaudeId = activeSessionId ? sessions[activeSessionId]?.claudeSessionId : undefined
-  if (activeClaudeId) {
-    const idx = tabs.findIndex(t => t.claudeSessionId === activeClaudeId)
+  const activeSessionRef = activeSessionId ? sessions[activeSessionId]?.sessionRef : undefined
+  if (activeSessionRef) {
+    const idx = tabs.findIndex(t => t.sessionRef === activeSessionRef)
     activeIndex = idx === -1 ? null : idx
   }
 

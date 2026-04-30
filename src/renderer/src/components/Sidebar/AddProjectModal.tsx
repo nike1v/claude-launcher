@@ -60,15 +60,15 @@ export function AddProjectModal({ onClose, editProject, presetEnvironmentId }: P
   const [sshKeyFile, setSshKeyFile] = useState(
     editEnv?.config.kind === 'ssh' ? (editEnv.config.keyFile ?? '') : ''
   )
-  // Edit-only field: the claudeSessionId we pass as `--resume` next time
-  // this project is opened. Auto-pinned by listeners.ts on the first
-  // system:init, but exposed here so the user can paste a different one
-  // from the on-disk transcript directory.
-  const [claudeSessionId, setClaudeSessionId] = useState(editProject?.lastClaudeSessionId ?? '')
+  // Edit-only field: the provider session id we pass as the resume
+  // reference next time this project is opened. Auto-pinned by
+  // listeners.ts on the first session.started, but exposed here so the
+  // user can paste a different one from the on-disk transcript directory.
+  const [claudeSessionId, setClaudeSessionId] = useState(editProject?.lastSessionRef ?? '')
   // Tracked so the save guard below can tell "user cleared a previously-
   // pinned id" apart from "no id was pinned at form open". Snapshot at
   // construction so subsequent edits don't move the goalposts.
-  const hadInitialSessionId = !!editProject?.lastClaudeSessionId
+  const hadInitialSessionId = !!editProject?.lastSessionRef
   const clearedSessionId = hadInitialSessionId && !claudeSessionId.trim()
   // Available session ids for autocomplete + soft validation. null while
   // we haven't asked yet (so we don't flag a typed id as "missing"
@@ -134,7 +134,7 @@ export function AddProjectModal({ onClose, editProject, presetEnvironmentId }: P
       // next session start. lastModel / lastContextWindow are
       // intentionally NOT touched here — they're auto-managed and
       // would be confusing to expose for direct editing.
-      lastClaudeSessionId: claudeSessionId.trim() || undefined,
+      lastSessionRef: claudeSessionId.trim() || undefined,
       lastModel: editProject?.lastModel,
       lastContextWindow: editProject?.lastContextWindow
     }

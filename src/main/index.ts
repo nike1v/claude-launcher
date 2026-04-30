@@ -2,6 +2,7 @@ import { app, BrowserWindow, session, shell } from 'electron'
 import { join } from 'node:path'
 import { registerIpcHandlers } from './ipc-handlers'
 import { initAutoUpdater } from './updater'
+import { initProviders } from './providers/init'
 
 // Only http(s) gets handed to the OS browser. file://, javascript:, data:,
 // and unknown schemes from a compromised renderer would otherwise call
@@ -53,6 +54,19 @@ function createWindow(): BrowserWindow {
     if (isSafeExternalUrl(url)) shell.openExternal(url)
   })
 
+  // Linux / Windows: there's no application menu by default, so the OS
+  // never sees an accelerator for Ctrl+Q. macOS gets Cmd+Q from
+  // electron's auto-built menu so we skip there.
+  if (process.platform !== 'darwin') {
+    win.webContents.on('before-input-event', (_event, input) => {
+      if (input.type !== 'keyDown') return
+      const ctrlOrMeta = input.control || input.meta
+      if (ctrlOrMeta && !input.alt && !input.shift && input.key.toLowerCase() === 'q') {
+        app.quit()
+      }
+    })
+  }
+
   return win
 }
 
@@ -61,6 +75,11 @@ app.whenReady().then(() => {
   // camera, mic, geolocation, notifications, etc., so a compromised renderer
   // shouldn't be able to opt itself in.
   session.defaultSession.setPermissionRequestHandler((_wc, _permission, callback) => callback(false))
+
+  // Register IProvider + IProviderAdapter implementations before any IPC
+  // handler runs. session-manager looks up providers from the registry on
+  // session start; an unregistered kind throws.
+  initProviders()
 
   const win = createWindow()
   const cleanup = registerIpcHandlers(win)

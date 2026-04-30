@@ -1,62 +1,51 @@
 import { create } from 'zustand'
-import type { StreamJsonEvent } from '../../../shared/types'
+import type { NormalizedEvent } from '../../../shared/events'
 
-export interface ChatMessage {
-  id: string
-  event: StreamJsonEvent
-  timestamp: number
-}
+// Flat event stream per session. The renderer derives RenderedItem rows
+// from this stream via `deriveItems` (lib/derive-items.ts) — items
+// aren't stored directly because individual events are the unit of
+// reactivity (one zustand publish per event vs. recompiling items).
 
 interface MessagesStore {
-  messagesBySession: Record<string, ChatMessage[]>
-  appendEvent: (sessionId: string, event: StreamJsonEvent) => void
-  prependEvents: (sessionId: string, events: StreamJsonEvent[]) => void
+  eventsBySession: Record<string, NormalizedEvent[]>
+  // Append a batch of events for a session in one zustand publish.
+  // Adapter chunks expand to ~5 events each — applying one mutation
+  // per chunk avoids a render-storm on long histories.
+  appendEvents: (sessionId: string, events: readonly NormalizedEvent[]) => void
+  prependEvents: (sessionId: string, events: readonly NormalizedEvent[]) => void
   clearSession: (sessionId: string) => void
 }
 
 export const useMessagesStore = create<MessagesStore>((set) => ({
-  messagesBySession: {},
+  eventsBySession: {},
 
-  appendEvent: (sessionId, event) =>
+  appendEvents: (sessionId, events) =>
     set(state => {
-      // Drop the SDK's echo of what we just typed — InputBar already pushed a
-      // local bubble with the __input__ marker. Plain-string echoes always
-      // came from us; array echoes that don't carry __input__ AND aren't pure
-      // tool_result responses (which are our permission replies) are also
-      // echoes of attachment-ful prompts we already rendered locally.
-      if (event.type === 'user') {
-        const c = event.message.content
-        if (typeof c === 'string') return state
-        const hasInputMarker = c.some(b => b.type === 'tool_result' && b.tool_use_id === '__input__')
-        const onlyToolResults = c.every(b => b.type === 'tool_result')
-        if (!hasInputMarker && !onlyToolResults) return state
-      }
-      const existing = state.messagesBySession[sessionId] ?? []
-      const message: ChatMessage = { id: crypto.randomUUID(), event, timestamp: Date.now() }
+      if (events.length === 0) return state
+      const existing = state.eventsBySession[sessionId] ?? []
       return {
-        messagesBySession: {
-          ...state.messagesBySession,
-          [sessionId]: [...existing, message]
+        eventsBySession: {
+          ...state.eventsBySession,
+          [sessionId]: [...existing, ...events]
         }
       }
     }),
 
   prependEvents: (sessionId, events) =>
     set(state => {
-      const existing = state.messagesBySession[sessionId] ?? []
-      const messages: ChatMessage[] = events.map(event => ({ id: crypto.randomUUID(), event, timestamp: Date.now() }))
+      const existing = state.eventsBySession[sessionId] ?? []
       return {
-        messagesBySession: {
-          ...state.messagesBySession,
-          [sessionId]: [...messages, ...existing]
+        eventsBySession: {
+          ...state.eventsBySession,
+          [sessionId]: [...events, ...existing]
         }
       }
     }),
 
   clearSession: (sessionId) =>
     set(state => {
-      const updated = { ...state.messagesBySession }
+      const updated = { ...state.eventsBySession }
       delete updated[sessionId]
-      return { messagesBySession: updated }
+      return { eventsBySession: updated }
     })
 }))

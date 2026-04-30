@@ -34,11 +34,14 @@ export function initAutoUpdater(win: BrowserWindow): void {
 
   autoUpdater.autoDownload = true
   autoUpdater.autoInstallOnAppQuit = false
-  // Stable channel only. electron-updater otherwise auto-flips this to true
-  // whenever app.getVersion() includes a SemVer prerelease tag — a future
-  // build accidentally tagged `0.5.0-rc.1` would silently switch every user
-  // running it onto the prerelease feed for the rest of the install's life.
-  autoUpdater.allowPrerelease = false
+  // Channel follows the installed version's SemVer tag. A user running
+  // 0.4.38 (no `-` in the version) stays on the stable feed and never
+  // auto-flips to a prerelease. A user who explicitly installed
+  // 0.5.0-alpha.N keeps getting successive alphas / betas / rcs until
+  // 0.5.0 stable ships, at which point semver ordering pulls them onto
+  // the stable build (0.5.0-rc.1 < 0.5.0). This matches electron-
+  // updater's own default heuristic.
+  autoUpdater.allowPrerelease = app.getVersion().includes('-')
 
   autoUpdater.on('checking-for-update', () => {
     send(win, { state: 'checking' })

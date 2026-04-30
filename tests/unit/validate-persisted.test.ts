@@ -23,11 +23,21 @@ describe('validateProject', () => {
       validateProject({
         id: 'p1', name: 'A', environmentId: 'env-1', path: '/srv',
         model: 'claude-opus-4-7',
-        lastClaudeSessionId: 'abc-123',
+        lastSessionRef: 'abc-123',
         lastModel: 'claude-opus-4-7',
         lastContextWindow: 200_000
       })
     ).not.toThrow()
+  })
+
+  it('migrates legacy lastClaudeSessionId on read (v0.4 → 0.5)', () => {
+    const raw: Record<string, unknown> = {
+      id: 'p1', name: 'A', environmentId: 'env-1', path: '/srv',
+      lastClaudeSessionId: 'abc-123'
+    }
+    expect(() => validateProject(raw)).not.toThrow()
+    expect(raw.lastSessionRef).toBe('abc-123')
+    expect(raw.lastClaudeSessionId).toBeUndefined()
   })
 
   it('rejects null / non-object inputs', () => {
@@ -58,6 +68,20 @@ describe('validateProject', () => {
       id: 'p1', name: 'a', environmentId: 'e', path: '/x',
       lastContextWindow: NaN
     })).toThrow(/Project\.lastContextWindow/)
+  })
+
+  it('accepts a known providerKind', () => {
+    expect(() => validateProject({
+      id: 'p1', name: 'a', environmentId: 'e', path: '/x',
+      providerKind: 'codex'
+    })).not.toThrow()
+  })
+
+  it('rejects an unknown providerKind', () => {
+    expect(() => validateProject({
+      id: 'p1', name: 'a', environmentId: 'e', path: '/x',
+      providerKind: 'aider'
+    })).toThrow(/Project\.providerKind/)
   })
 })
 
@@ -110,19 +134,37 @@ describe('validateEnvironment', () => {
       validateEnvironment({ id: 'e1', name: 'X', config: { kind: 'docker' } })
     ).toThrow(/config\.kind/)
   })
+
+  it('accepts a known providerKind', () => {
+    expect(() =>
+      validateEnvironment({
+        id: 'e1', name: 'X', config: { kind: 'local' },
+        providerKind: 'opencode'
+      })
+    ).not.toThrow()
+  })
+
+  it('rejects an unknown providerKind', () => {
+    expect(() =>
+      validateEnvironment({
+        id: 'e1', name: 'X', config: { kind: 'local' },
+        providerKind: 'gemini'
+      })
+    ).toThrow(/Environment\.providerKind/)
+  })
 })
 
 describe('validatePersistedTab', () => {
   it('accepts a minimal valid tab', () => {
     expect(() =>
-      validatePersistedTab({ projectId: 'p1', claudeSessionId: 'abc-123' })
+      validatePersistedTab({ projectId: 'p1', sessionRef: 'abc-123' })
     ).not.toThrow()
   })
 
-  it('rejects an empty claudeSessionId', () => {
+  it('rejects an empty sessionRef', () => {
     expect(() =>
-      validatePersistedTab({ projectId: 'p1', claudeSessionId: '' })
-    ).toThrow(/PersistedTab\.claudeSessionId/)
+      validatePersistedTab({ projectId: 'p1', sessionRef: '' })
+    ).toThrow(/PersistedTab\.sessionRef/)
   })
 })
 
@@ -130,8 +172,8 @@ describe('validatePersistedTabs', () => {
   it('returns the snapshot when every entry is valid', () => {
     const result = validatePersistedTabs({
       tabs: [
-        { projectId: 'p1', claudeSessionId: 'a' },
-        { projectId: 'p2', claudeSessionId: 'b' }
+        { projectId: 'p1', sessionRef: 'a' },
+        { projectId: 'p2', sessionRef: 'b' }
       ],
       activeIndex: 1
     })
@@ -142,10 +184,10 @@ describe('validatePersistedTabs', () => {
   it('drops malformed tab entries but keeps valid ones', () => {
     const result = validatePersistedTabs({
       tabs: [
-        { projectId: 'p1', claudeSessionId: 'a' },
-        { projectId: 'p2' },                     // missing claudeSessionId
+        { projectId: 'p1', sessionRef: 'a' },
+        { projectId: 'p2' },                     // missing sessionRef
         null,                                    // not an object
-        { projectId: 'p3', claudeSessionId: 'c' }
+        { projectId: 'p3', sessionRef: 'c' }
       ],
       activeIndex: 0
     })
@@ -156,7 +198,7 @@ describe('validatePersistedTabs', () => {
 
   it('clamps an out-of-range activeIndex back to null', () => {
     const result = validatePersistedTabs({
-      tabs: [{ projectId: 'p1', claudeSessionId: 'a' }],
+      tabs: [{ projectId: 'p1', sessionRef: 'a' }],
       activeIndex: 5
     })
     expect(result.activeIndex).toBeNull()

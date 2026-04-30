@@ -1,11 +1,11 @@
-import { useState } from 'react'
+import { memo, useState } from 'react'
 import { ChevronRight, ChevronDown, Brain } from 'lucide-react'
 
 interface Props {
   text: string
 }
 
-export function Thinking({ text }: Props) {
+export const Thinking = memo(function Thinking({ text }: Props) {
   const [expanded, setExpanded] = useState(false)
   if (!text.trim()) return <></>
 
@@ -26,4 +26,4 @@ export function Thinking({ text }: Props) {
       )}
     </div>
   )
-}
+})

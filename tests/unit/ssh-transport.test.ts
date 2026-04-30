@@ -11,6 +11,13 @@ vi.mock('node:child_process', () => ({
   }))
 }))
 
+const CLAUDE_ARGS = [
+  '--output-format', 'stream-json',
+  '--input-format', 'stream-json',
+  '--verbose',
+  '--permission-prompt-tool', 'stdio'
+] as const
+
 describe('SshTransport.spawn — argv assembly', () => {
   let spawnMock: ReturnType<typeof vi.fn>
 
@@ -24,8 +31,8 @@ describe('SshTransport.spawn — argv assembly', () => {
     new SshTransport().spawn({
       host: { kind: 'ssh', host: 'prod' },
       path: '/srv/app',
-      model: undefined,
-      resumeSessionId: undefined
+      bin: 'claude',
+      args: CLAUDE_ARGS
     })
     const args: string[] = spawnMock.mock.calls[0][1]
     expect(args[0]).toBe('-T')
@@ -38,8 +45,8 @@ describe('SshTransport.spawn — argv assembly', () => {
     new SshTransport().spawn({
       host: { kind: 'ssh', user: 'me', host: 'box', port: 2222, keyFile: '/k.pem' },
       path: '/srv/app',
-      model: undefined,
-      resumeSessionId: undefined
+      bin: 'claude',
+      args: CLAUDE_ARGS
     })
     const args: string[] = spawnMock.mock.calls[0][1]
     expect(args).toContain('-p')
@@ -57,8 +64,8 @@ describe('SshTransport.spawn — argv assembly', () => {
     new SshTransport().spawn({
       host: { kind: 'ssh', host: 'box' },
       path: '/srv/$(reboot)/app',
-      model: undefined,
-      resumeSessionId: undefined
+      bin: 'claude',
+      args: CLAUDE_ARGS
     })
     const args: string[] = spawnMock.mock.calls[0][1]
     const remoteCmd = args[args.length - 1]
@@ -73,8 +80,8 @@ describe('SshTransport.spawn — argv assembly', () => {
     expect(() => transport.spawn({
       host: { kind: 'ssh', host: '-oProxyCommand=evil' },
       path: '/x',
-      model: undefined,
-      resumeSessionId: undefined
+      bin: 'claude',
+      args: CLAUDE_ARGS
     })).toThrow(/Invalid SSH host/)
     expect(spawnMock).not.toHaveBeenCalled()
   })
@@ -84,20 +91,21 @@ describe('SshTransport.spawn — argv assembly', () => {
     expect(() => transport.spawn({
       host: { kind: 'ssh', host: 'box' },
       path: '/srv/\x00bad',
-      model: undefined,
-      resumeSessionId: undefined
+      bin: 'claude',
+      args: CLAUDE_ARGS
     })).toThrow(/control characters/)
     expect(spawnMock).not.toHaveBeenCalled()
   })
 
-  it('strips CLAUDE_CODE_OAUTH_TOKEN from the spawned env', () => {
+  it('strips env vars matching the provided scrub patterns', () => {
     process.env.CLAUDE_CODE_OAUTH_TOKEN = 'secret-from-host'
     try {
       new SshTransport().spawn({
         host: { kind: 'ssh', host: 'box' },
         path: '/x',
-        model: undefined,
-        resumeSessionId: undefined
+        bin: 'claude',
+        args: CLAUDE_ARGS,
+        envScrubKeys: [{ prefix: 'CLAUDE_CODE_' }]
       })
       const env = spawnMock.mock.calls[0][2]?.env
       expect(env?.CLAUDE_CODE_OAUTH_TOKEN).toBeUndefined()

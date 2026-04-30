@@ -1,7 +1,9 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeAll } from 'vitest'
 import { spawn } from 'node:child_process'
 import { SessionManager } from '../../src/main/session-manager'
-import type { Environment, Project, StreamJsonEvent } from '../../src/shared/types'
+import { initProviders } from '../../src/main/providers/init'
+import type { Environment, Project } from '../../src/shared/types'
+import type { NormalizedEvent } from '../../src/shared/events'
 
 const mockEnv: Environment = {
   id: 'env-1',
@@ -16,11 +18,16 @@ const mockProject: Project = {
   path: '/tmp'
 }
 
+beforeAll(() => {
+  // SessionManager.startSession resolves a provider from the registry —
+  // wire claude in once before the suite runs.
+  initProviders()
+})
+
 describe('SessionManager integration (mock transport)', () => {
-  it('emits init, assistant, and result events from mock claude', async () => {
+  it('emits normalized events from mock claude (session.started → turn → completed)', async () => {
     const received: { channel: string; payload: unknown }[] = []
 
-    // Mock transport spawns our bash script directly
     const mockTransport = {
       spawn: () => spawn('bash', ['tests/integration/mock-claude.sh'], {
         stdio: ['pipe', 'pipe', 'pipe']
@@ -35,19 +42,19 @@ describe('SessionManager integration (mock transport)', () => {
 
     const sessionId = await manager.startSession(mockEnv, mockProject)
 
-    // Send a user message to unblock the script's `read`
     await new Promise(resolve => setTimeout(resolve, 200))
     manager.sendMessage(sessionId, 'hello')
 
-    // Wait for the script to finish
     await new Promise(resolve => setTimeout(resolve, 500))
 
-    const eventChannels = received.filter(r => r.channel === 'session:event')
-    const types = eventChannels.map(r => (r.payload as { event: StreamJsonEvent }).event.type)
+    const eventKinds = received
+      .filter(r => r.channel === 'session:event')
+      .flatMap(r => (r.payload as { events: NormalizedEvent[] }).events.map(e => e.kind))
 
-    expect(types).toContain('system')
-    expect(types).toContain('assistant')
-    expect(types).toContain('result')
+    expect(eventKinds).toContain('session.started')
+    expect(eventKinds).toContain('turn.started')
+    expect(eventKinds).toContain('item.started')
+    expect(eventKinds).toContain('turn.completed')
 
     const statusChanges = received
       .filter(r => r.channel === 'session:status')

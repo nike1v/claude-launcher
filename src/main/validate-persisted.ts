@@ -1,4 +1,5 @@
 import type { Environment, HostType, PersistedTab, PersistedTabs, Project } from '../shared/types'
+import { isProviderKind } from '../shared/events'
 
 // Shape validators for the JSON files we read off disk on every boot:
 // projects.json, environments.json, tabs.json. Until v0.4.37 the loaders
@@ -38,6 +39,13 @@ function requireOptionalNumber(v: unknown, label: string): asserts v is number |
   }
 }
 
+function requireOptionalProviderKind(v: unknown, label: string): void {
+  if (v === undefined) return
+  if (!isProviderKind(v)) {
+    throw new Error(`${label} must be a known provider kind when present (got ${JSON.stringify(v)})`)
+  }
+}
+
 // ── HostType (config field on Environment) ─────────────────────────────
 
 function validateHostConfig(raw: unknown): asserts raw is HostType {
@@ -71,7 +79,15 @@ export function validateProject(raw: unknown): asserts raw is Project {
   requireNonEmptyString(raw.environmentId, 'Project.environmentId')
   requireNonEmptyString(raw.path, 'Project.path')
   requireOptionalString(raw.model, 'Project.model')
-  requireOptionalString(raw.lastClaudeSessionId, 'Project.lastClaudeSessionId')
+  requireOptionalProviderKind(raw.providerKind, 'Project.providerKind')
+  // v0.4 → 0.5 migration: lastClaudeSessionId → lastSessionRef. Accept
+  // the legacy field on read so v0.4 projects.json files load unchanged;
+  // the rename is written back on the next save.
+  if (raw.lastSessionRef === undefined && typeof raw.lastClaudeSessionId === 'string') {
+    raw.lastSessionRef = raw.lastClaudeSessionId
+  }
+  delete raw.lastClaudeSessionId
+  requireOptionalString(raw.lastSessionRef, 'Project.lastSessionRef')
   requireOptionalString(raw.lastModel, 'Project.lastModel')
   requireOptionalNumber(raw.lastContextWindow, 'Project.lastContextWindow')
 }
@@ -84,6 +100,7 @@ export function validateEnvironment(raw: unknown): asserts raw is Environment {
   requireNonEmptyString(raw.name, 'Environment.name')
   validateHostConfig(raw.config)
   requireOptionalString(raw.defaultModel, 'Environment.defaultModel')
+  requireOptionalProviderKind(raw.providerKind, 'Environment.providerKind')
 }
 
 // ── PersistedTab(s) ──────────────────────────────────────────────────────
@@ -91,7 +108,12 @@ export function validateEnvironment(raw: unknown): asserts raw is Environment {
 export function validatePersistedTab(raw: unknown): asserts raw is PersistedTab {
   if (!isRecord(raw)) throw new Error('PersistedTab must be an object')
   requireNonEmptyString(raw.projectId, 'PersistedTab.projectId')
-  requireNonEmptyString(raw.claudeSessionId, 'PersistedTab.claudeSessionId')
+  // Same migration as Project: claudeSessionId → sessionRef.
+  if (raw.sessionRef === undefined && typeof raw.claudeSessionId === 'string') {
+    raw.sessionRef = raw.claudeSessionId
+  }
+  delete raw.claudeSessionId
+  requireNonEmptyString(raw.sessionRef, 'PersistedTab.sessionRef')
   requireOptionalString(raw.lastModel, 'PersistedTab.lastModel')
   requireOptionalNumber(raw.lastContextWindow, 'PersistedTab.lastContextWindow')
 }

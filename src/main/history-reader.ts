@@ -2,11 +2,13 @@ import { spawn } from 'node:child_process'
 import { readdir, readFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import type { HostType, StreamJsonEvent } from '../shared/types'
+import type { HostType } from '../shared/types'
+import type { NormalizedEvent } from '../shared/events'
 import { claudeProjectSlug } from '../shared/host-utils'
-import { parseStreamJsonLine } from './stream-json-parser'
 import { validateSshHost, validateWslDistro } from './transports/validate-ssh'
 import { sshConnectArgs, sshTarget } from './transports/ssh-args'
+import { getProvider } from './providers/registry'
+import type { ProviderKind } from '../shared/events'
 
 // Claude session ids are UUID-shaped strings the CLI writes into the JSONL
 // transcript filename. Anything else is renderer-injected garbage and
@@ -81,7 +83,7 @@ function streamCommand(bin: string, args: string[]): Promise<StreamResult> {
 }
 
 export interface HistoryLoadResult {
-  events: StreamJsonEvent[]
+  events: NormalizedEvent[]
   // Populated when we returned [] for a non-trivial reason — slug mismatch,
   // ssh refused, file missing, etc. The renderer logs this to its console
   // so the user sees it in DevTools (main-process console.* doesn't reach
@@ -90,10 +92,16 @@ export interface HistoryLoadResult {
 }
 
 export class HistoryReader {
-  public async loadSessionEvents(host: HostType, projectPath: string, sessionId: string): Promise<HistoryLoadResult> {
+  public async loadSessionEvents(
+    host: HostType,
+    projectPath: string,
+    sessionId: string,
+    providerKind: ProviderKind
+  ): Promise<HistoryLoadResult> {
     if (!SESSION_ID_PATTERN.test(sessionId)) {
       return { events: [], diagnostic: `rejected sessionId ${JSON.stringify(sessionId)} (must match ${SESSION_ID_PATTERN})` }
     }
+    const adapter = getProvider(providerKind).createAdapter()
     if (host.kind === 'local') {
       const filePath = join(localClaudeProjectDir(projectPath), `${sessionId}.jsonl`)
       let content: string
@@ -103,7 +111,7 @@ export class HistoryReader {
         const reason = err instanceof Error ? err.message : String(err)
         return { events: [], diagnostic: `read ${filePath} failed: ${reason}` }
       }
-      return { events: parseJsonl(content) }
+      return { events: adapter.parseTranscript(content) }
     }
 
     const filePath = `${remoteClaudeProjectDir(projectPath)}/${shellEscape(sessionId)}.jsonl`
@@ -116,16 +124,12 @@ export class HistoryReader {
       return { events: [], diagnostic: `${host.kind} cat ${filePath} threw: ${reason}` }
     }
     if (result.exitCode !== 0) {
-      // cat 1 = file missing (likely slug mismatch with what claude on
-      // remote actually wrote); ssh 255 = connection error. Hand the
-      // renderer the exit code + stderr tail so the user can paste it
-      // into a bug report instead of just "history doesn't load".
       return {
-        events: parseJsonl(result.stdout),
+        events: adapter.parseTranscript(result.stdout),
         diagnostic: `${host.kind} \`cat "${filePath}"\` exited ${result.exitCode}; stderr: ${result.stderr.trim().slice(-500) || '(empty)'}`
       }
     }
-    return { events: parseJsonl(result.stdout) }
+    return { events: adapter.parseTranscript(result.stdout) }
   }
 
   // Returns the session ids (jsonl filename minus extension) found in
@@ -184,13 +188,6 @@ export class HistoryReader {
   }
 }
 
-function parseJsonl(content: string): StreamJsonEvent[] {
-  return content.split('\n')
-    .map(line => line.trim())
-    .filter(Boolean)
-    .map(line => parseStreamJsonLine(line))
-    .filter((e): e is StreamJsonEvent => e !== null)
-}
 
 function localClaudeProjectDir(projectPath: string): string {
   return join(homedir(), '.claude', 'projects', claudeProjectSlug(projectPath))

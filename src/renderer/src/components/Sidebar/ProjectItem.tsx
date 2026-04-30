@@ -50,7 +50,7 @@ export function ProjectItem({ project, isActive, onEdit }: Props) {
     if (startingProjects.has(project.id)) return
     startingProjects.add(project.id)
     try {
-      const resume = project.lastClaudeSessionId
+      const resume = project.lastSessionRef
       let sessionId: string
       try {
         sessionId = await startSession(project.id, resume)
@@ -64,7 +64,7 @@ export function ProjectItem({ project, isActive, onEdit }: Props) {
       addSession({
         id: sessionId,
         projectId: project.id,
-        claudeSessionId: resume,
+        sessionRef: resume,
         status: 'starting',
         hasUnread: false,
         // Pull cached values off the project so the StatusBar shows the
@@ -107,14 +107,14 @@ export function ProjectItem({ project, isActive, onEdit }: Props) {
 
   const openResetConfirm = (e: React.MouseEvent) => {
     e.stopPropagation()
-    if (!project.lastClaudeSessionId) return
+    if (!project.lastSessionRef) return
     setConfirmReset(true)
   }
 
-  // Forget the pinned claudeSessionId so the next click on this project
+  // Forget the pinned sessionRef so the next click on this project
   // starts a fresh conversation instead of resuming. Closes any live tab
   // for this project first — without that, the open tab keeps its
-  // claudeSessionId in the sessions store and the user would still be
+  // sessionRef in the sessions store and the user would still be
   // talking to the now-detached conversation.
   //
   // Order matters: stop the live process → drop the renderer session
@@ -133,7 +133,7 @@ export function ProjectItem({ project, isActive, onEdit }: Props) {
     }
     updateProject({
       ...project,
-      lastClaudeSessionId: undefined,
+      lastSessionRef: undefined,
       // Drop the cached model + context too — they were measured
       // against the now-forgotten conversation. The next session's
       // first init will repopulate them.
@@ -172,7 +172,7 @@ export function ProjectItem({ project, isActive, onEdit }: Props) {
           to reset, so the gap shrinks back for never-opened projects. */}
       <span className="flex-1 truncate pr-16">{project.name}</span>
       <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-        {project.lastClaudeSessionId && (
+        {project.lastSessionRef && (
           <button
             type="button"
             onClick={openResetConfirm}

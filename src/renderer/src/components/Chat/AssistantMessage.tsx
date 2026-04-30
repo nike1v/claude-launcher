@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Sparkles } from 'lucide-react'
@@ -7,7 +8,11 @@ interface Props {
   text: string
 }
 
-export function AssistantMessage({ text }: Props) {
+// memo'd: deriveItems hands back a fresh RenderedItem object every
+// render of MessageList, but the leaf `text` value rarely changes.
+// Without memo this component (and its ReactMarkdown subtree, which is
+// expensive) re-renders on every event arrival in the same session.
+export const AssistantMessage = memo(function AssistantMessage({ text }: Props) {
   return (
     // Two-column message grid: a small accent-tinted "claude" badge
     // anchors the left edge, the markdown body sits in the right column.
@@ -33,4 +38,4 @@ export function AssistantMessage({ text }: Props) {
       </div>
     </div>
   )
-}
+})

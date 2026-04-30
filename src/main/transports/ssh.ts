@@ -5,39 +5,36 @@ import type { ITransport, ProbeResult, SpawnOptions } from './types'
 import { runShellProbe, probeScript, shQuote } from './probe'
 import { getCachedPath, setCachedPath } from './path-cache'
 import { validateSshHost } from './validate-ssh'
-import { validateProjectPath, validateClaudeArg } from './validate-path'
-import { buildClaudeArgs, filteredEnv } from './shared'
+import { validateProjectPath } from './validate-path'
+import { filteredEnvFor } from './shared'
 import { sshConnectArgs, sshTarget } from './ssh-args'
 
 export class SshTransport implements ITransport {
   public spawn(options: SpawnOptions): ChildProcess {
-    const { host, path, model, resumeSessionId } = options
+    const { host, path, bin, args, envScrubKeys = [] } = options
     if (host.kind !== 'ssh') throw new Error('SshTransport requires ssh host')
     validateSshHost(host)
     validateProjectPath(path)
-    if (model) validateClaudeArg(model, 'model')
-    if (resumeSessionId) validateClaudeArg(resumeSessionId, 'resumeSessionId')
-
-    const claudeArgs = buildClaudeArgs(model, resumeSessionId)
 
     // OpenSSH runs the remote command as `<user-shell> -c <cmd>` — that's
     // non-interactive non-login on the remote, so ~/.bashrc / ~/.profile
-    // aren't sourced and claude installed via npm-global / ~/.local/bin is
-    // invisible. The probe ran a login bash + bashrc once and cached PATH;
-    // we set it explicitly here and exec claude so stdin/stdout passthrough
-    // stays clean (the previous `bash -lc` wrapper interfered with stdin
-    // in some setups, making stream-json mode bail at the 3s timeout).
+    // aren't sourced and a binary installed via npm-global / ~/.local/bin
+    // is invisible. The probe ran a login bash + bashrc once and cached
+    // PATH; we set it explicitly here and exec the binary so stdin/stdout
+    // passthrough stays clean (the previous `bash -lc` wrapper interfered
+    // with stdin in some setups, making stream-json mode bail at the 3s
+    // timeout).
     //
     // *** Use shQuote(...) — NOT JSON.stringify — for path and each arg. ***
-    // The remote `sh -c` parses our string as a script. JSON.stringify wraps
-    // the value in double quotes, but inside double quotes `$(...)` and
-    // backticks still expand, so a path of `$(reboot)` (from a tampered
-    // projects.json or even a misclick in PathCombobox) would execute on
-    // the remote. Single-quote wrapping is inert.
+    // The remote `sh -c` parses our string as a script. JSON.stringify
+    // wraps the value in double quotes, but inside double quotes `$(...)`
+    // and backticks still expand, so a path of `$(reboot)` (from a
+    // tampered projects.json or even a misclick in PathCombobox) would
+    // execute on the remote. Single-quote wrapping is inert.
     const cachedPath = getCachedPath(host)
-    const quotedArgs = claudeArgs.map(arg => shQuote(arg)).join(' ')
+    const quotedArgs = args.map(arg => shQuote(arg)).join(' ')
     const pathExport = cachedPath ? `export PATH=${shQuote(cachedPath)}; ` : ''
-    const innerScript = `${pathExport}cd ${shQuote(path)} && exec claude ${quotedArgs}`
+    const innerScript = `${pathExport}cd ${shQuote(path)} && exec ${shQuote(bin)} ${quotedArgs}`
     const remoteCommand = `sh -c ${shQuote(innerScript)}`
 
     const sshArgs = ['-T', ...sshConnectArgs(host)]
@@ -45,7 +42,7 @@ export class SshTransport implements ITransport {
 
     return spawn('ssh', sshArgs, {
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: filteredEnv()
+      env: filteredEnvFor(envScrubKeys)
     })
   }
 
@@ -68,4 +65,3 @@ export class SshTransport implements ITransport {
       : { ok: false, reason: result.reason ?? 'probe failed' }
   }
 }
-

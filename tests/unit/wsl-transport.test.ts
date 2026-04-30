@@ -12,6 +12,16 @@ vi.mock('node:child_process', () => ({
   }))
 }))
 
+// Argv that ClaudeProvider.buildSpawnArgs would produce for a vanilla call.
+// Hardcoded here so transport tests don't depend on the provider — they
+// only verify the wsl.exe wrapping.
+const CLAUDE_ARGS = [
+  '--output-format', 'stream-json',
+  '--input-format', 'stream-json',
+  '--verbose',
+  '--permission-prompt-tool', 'stdio'
+] as const
+
 describe('WslTransport', () => {
   let spawnMock: ReturnType<typeof vi.fn>
 
@@ -21,13 +31,13 @@ describe('WslTransport', () => {
     spawnMock.mockClear()
   })
 
-  it('spawns wsl.exe with claude directly when no PATH is cached', () => {
+  it('spawns wsl.exe with the provider binary directly when no PATH is cached', () => {
     const transport = new WslTransport()
     transport.spawn({
       host: {kind: 'wsl', distro: 'NoCachePath'},
       path: '/home/user/project',
-      model: undefined,
-      resumeSessionId: undefined
+      bin: 'claude',
+      args: CLAUDE_ARGS
     })
 
     expect(spawnMock).toHaveBeenCalledWith(
@@ -37,42 +47,39 @@ describe('WslTransport', () => {
         '--cd', '/home/user/project',
         '--',
         'claude',
-        '--output-format', 'stream-json',
-        '--input-format', 'stream-json',
-        '--verbose',
-        '--permission-prompt-tool', 'stdio'
+        ...CLAUDE_ARGS
       ],
       expect.objectContaining({stdio: ['pipe', 'pipe', 'pipe']})
     )
   })
 
-  it('prefixes claude with `env PATH=...` when a probe cached the user PATH', () => {
+  it('prefixes the binary with `env PATH=...` when a probe cached the user PATH', () => {
     const host = {kind: 'wsl' as const, distro: 'WithPath'}
     setCachedPath(host, '/home/user/.local/bin:/usr/bin')
     const transport = new WslTransport()
     transport.spawn({
       host,
       path: '/tmp',
-      model: undefined,
-      resumeSessionId: undefined
+      bin: 'claude',
+      args: CLAUDE_ARGS
     })
 
     const args: string[] = spawnMock.mock.calls[0][1]
-    // env + PATH=... must come before claude so claude sees the user PATH.
+    // env + PATH=... must come before the binary so the child sees the user PATH.
     const envIdx = args.indexOf('env')
-    const claudeIdx = args.indexOf('claude')
+    const binIdx = args.indexOf('claude')
     expect(envIdx).toBeGreaterThan(-1)
-    expect(envIdx).toBeLessThan(claudeIdx)
+    expect(envIdx).toBeLessThan(binIdx)
     expect(args[envIdx + 1]).toBe('PATH=/home/user/.local/bin:/usr/bin')
   })
 
-  it('appends --model flag when model is specified', () => {
+  it('passes provider-built argv straight through after the binary', () => {
     const transport = new WslTransport()
     transport.spawn({
       host: {kind: 'wsl', distro: 'ModelDistro'},
       path: '/tmp',
-      model: 'claude-opus-4-7',
-      resumeSessionId: undefined
+      bin: 'claude',
+      args: [...CLAUDE_ARGS, '--model', 'claude-opus-4-7']
     })
 
     const args: string[] = spawnMock.mock.calls[0][1]
@@ -80,30 +87,23 @@ describe('WslTransport', () => {
     expect(args).toContain('claude-opus-4-7')
   })
 
-  it('appends --resume flag when resumeSessionId is provided', () => {
-    const transport = new WslTransport()
-    transport.spawn({
-      host: {kind: 'wsl', distro: 'ResumeDistro'},
-      path: '/tmp',
-      model: undefined,
-      resumeSessionId: 'sess-abc'
-    })
-
-    const args: string[] = spawnMock.mock.calls[0][1]
-    expect(args).toContain('--resume')
-    expect(args).toContain('sess-abc')
-  })
-
-  it('does not inject CLAUDE_CODE_OAUTH_TOKEN', () => {
+  it('scrubs env vars matching the provided patterns', () => {
+    process.env.CLAUDE_CODE_OAUTH_TOKEN = 'leak-me-not'
+    process.env.UNRELATED_VAR = 'keep-me'
     const transport = new WslTransport()
     transport.spawn({
       host: {kind: 'wsl', distro: 'EnvDistro'},
       path: '/tmp',
-      model: undefined,
-      resumeSessionId: undefined
+      bin: 'claude',
+      args: CLAUDE_ARGS,
+      envScrubKeys: [{ prefix: 'CLAUDE_CODE_' }]
     })
 
     const spawnEnv = spawnMock.mock.calls[0][2]?.env
     expect(spawnEnv?.CLAUDE_CODE_OAUTH_TOKEN).toBeUndefined()
+    expect(spawnEnv?.UNRELATED_VAR).toBe('keep-me')
+
+    delete process.env.CLAUDE_CODE_OAUTH_TOKEN
+    delete process.env.UNRELATED_VAR
   })
 })

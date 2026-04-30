@@ -52,9 +52,9 @@ export function respondPermission(
 export async function loadSessionHistory(
   projectId: string,
   sessionId: string
-): Promise<{ events: import('../../../shared/types').StreamJsonEvent[]; diagnostic?: string }> {
+): Promise<{ events: import('../../../shared/events').NormalizedEvent[]; diagnostic?: string }> {
   return window.electronAPI.invoke('session:history:load', { projectId, sessionId }) as Promise<{
-    events: import('../../../shared/types').StreamJsonEvent[]
+    events: import('../../../shared/events').NormalizedEvent[]
     diagnostic?: string
   }>
 }

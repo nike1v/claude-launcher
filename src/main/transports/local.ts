@@ -3,21 +3,19 @@ import type { ChildProcess } from 'node:child_process'
 import type { HostType } from '../../shared/types'
 import type { ITransport, ProbeResult, SpawnOptions } from './types'
 import { runShellProbe } from './probe'
-import { buildClaudeArgs } from './shared'
-import { validateProjectPath, validateClaudeArg } from './validate-path'
+import { validateProjectPath } from './validate-path'
 
 export class LocalTransport implements ITransport {
   public spawn(options: SpawnOptions): ChildProcess {
-    const { path, model, resumeSessionId } = options
+    const { path, bin, args } = options
     validateProjectPath(path)
-    if (model) validateClaudeArg(model, 'model')
-    if (resumeSessionId) validateClaudeArg(resumeSessionId, 'resumeSessionId')
     // Direct spawn — Electron is normally launched from a shell that has
-    // already sourced the user's profile, so claude is on the inherited PATH.
-    // Routing through `bash -lc 'claude "$@"'` re-sources the user profile on
-    // every turn and, in some setups, closes stdin during sourcing so claude's
-    // stream-json mode bails with "no stdin data received in 3s".
-    return spawn('claude', buildClaudeArgs(model, resumeSessionId), {
+    // already sourced the user's profile, so the provider binary is on
+    // the inherited PATH. Routing through `bash -lc '<bin> "$@"'` re-sources
+    // the user profile on every turn and, in some setups, closes stdin
+    // during sourcing so claude's stream-json mode bails with "no stdin
+    // data received in 3s".
+    return spawn(bin, [...args], {
       cwd: path,
       stdio: ['pipe', 'pipe', 'pipe']
     })

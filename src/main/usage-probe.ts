@@ -9,7 +9,8 @@ import { join } from 'node:path'
 import type { HostType, UsageProbeResult } from '../shared/types'
 import { parseUsage } from './usage-parser'
 import { validateSshHost, validateWslDistro } from './transports/validate-ssh'
-import { filteredEnv } from './transports/shared'
+import { filteredEnvFor } from './transports/shared'
+import { CLAUDE_ENV_SCRUB } from './providers/claude/provider'
 import { shQuote } from './transports/probe'
 import { sshConnectArgs, sshTarget } from './transports/ssh-args'
 
@@ -224,7 +225,7 @@ function buildCommand(host: HostType): PtyCommand | null {
       bin: 'wsl.exe',
       args: ['-d', host.distro, '--', 'bash', '-lc', inner],
       cwd: process.cwd(), // wsl.exe ignores Windows-side cwd for the WSL run
-      env: filteredEnv()
+      env: filteredEnvFor(CLAUDE_ENV_SCRUB)
     }
   }
 
@@ -243,7 +244,7 @@ function buildCommand(host: HostType): PtyCommand | null {
       bin: IS_WINDOWS ? 'ssh.exe' : 'ssh',
       args: sshArgs,
       cwd: process.cwd(),
-      env: filteredEnv()
+      env: filteredEnvFor(CLAUDE_ENV_SCRUB)
     }
   }
 
