@@ -16,12 +16,8 @@ import { Send, Paperclip, X, FileText, Image as ImageIcon, Square } from 'lucide
 import { interruptSession, sendMessage } from '../../ipc/bridge'
 import { useMessagesStore } from '../../store/messages'
 import { useSessionsStore } from '../../store/sessions'
-import type {
-  DocumentBlock,
-  ImageBlock,
-  SendAttachment,
-  UserContentBlock
-} from '../../../../shared/types'
+import type { SendAttachment } from '../../../../shared/types'
+import type { UserAttachment } from '../../../../shared/events'
 
 interface Props {
   sessionId: string
@@ -69,29 +65,31 @@ function useSubmit({
       })
       sendMessage(sessionId, text, sendAtts.length ? sendAtts : undefined)
 
-      // Local echo. Mirror what the SDK will produce so MessageList renders it
-      // the same way as a restored history entry, plus an __input__ marker so
-      // the dedup filter can drop the SDK's stdout echo.
-      const echoBlocks: UserContentBlock[] = []
-      if (text) echoBlocks.push({ type: 'text', text })
+      // Local push: emit a user_message item directly into the renderer
+      // so the bubble appears immediately. ClaudeAdapter drops the wire
+      // echo of this prompt that arrives from the CLI a moment later.
+      const renderAtts: UserAttachment[] = []
       for (const a of attachments) {
         if (a.kind === 'image') {
-          echoBlocks.push({
-            type: 'image',
-            source: { type: 'base64', media_type: a.mediaType, data: a.data ?? '' }
-          } satisfies ImageBlock)
+          renderAtts.push({ kind: 'image', mediaType: a.mediaType, data: a.data ?? '', name: a.name })
         } else if (a.kind === 'document') {
-          echoBlocks.push({
-            type: 'document',
-            source: { type: 'base64', media_type: a.mediaType, data: a.data ?? '' }
-          } satisfies DocumentBlock)
+          renderAtts.push({ kind: 'document', mediaType: a.mediaType, data: a.data ?? '', name: a.name })
         }
       }
-      echoBlocks.push({ type: 'tool_result', tool_use_id: '__input__', content: '' })
-
+      const itemId = `local-user-${crypto.randomUUID()}`
+      const turnId = `local-turn-${crypto.randomUUID()}`
       appendEvent(sessionId, {
-        type: 'user',
-        message: { role: 'user', content: echoBlocks }
+        kind: 'item.started',
+        itemId,
+        turnId,
+        itemType: 'user_message',
+        text,
+        attachments: renderAtts.length ? renderAtts : undefined
+      })
+      appendEvent(sessionId, {
+        kind: 'item.completed',
+        itemId,
+        status: 'completed'
       })
 
       root.clear()

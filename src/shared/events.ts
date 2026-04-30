@@ -98,11 +98,20 @@ export type ItemStatus = 'completed' | 'failed' | 'declined'
 
 export type SessionExitKind = 'graceful' | 'error'
 
+// ── User message attachments ────────────────────────────────────────────
+
+// Inlined into item.started for `user_message` items. Mirrors the
+// shape attachments arrive in over IPC (SendAttachment), trimmed to the
+// fields the renderer actually needs.
+export type UserAttachment =
+  | { kind: 'image'; mediaType: string; data: string; name?: string }
+  | { kind: 'document'; mediaType: string; data: string; name: string }
+
 // ── NormalizedEvent ──────────────────────────────────────────────────────
 
 export type NormalizedEvent =
   // Session lifecycle — the spawn ↔ ready ↔ exited boundary.
-  | { kind: 'session.started'; sessionRef: string; model?: string }
+  | { kind: 'session.started'; sessionRef: string; model?: string; cwd?: string }
   | { kind: 'session.stateChanged'; state: SessionState; reason?: string }
   | { kind: 'session.exited'; reason?: string; exitKind: SessionExitKind }
 
@@ -114,9 +123,25 @@ export type NormalizedEvent =
   // Items inside a turn. `item.started` opens a slot; `content.delta`
   // streams text into it; `item.completed` closes it. Tool uses, file
   // changes, reasoning, plans all flow through the same start/delta/end
-  // pattern.
-  | { kind: 'item.started'; itemId: string; turnId: string; itemType: ItemType }
-  | { kind: 'item.completed'; itemId: string; status: ItemStatus }
+  // pattern. The shape is discriminated by `itemType` so each item
+  // carries the metadata its renderer actually needs.
+  | (
+      | { itemType: 'assistant_message' }
+      | { itemType: 'reasoning' }
+      | { itemType: 'plan' }
+      | { itemType: 'web_search'; query?: string }
+      | { itemType: 'unknown' }
+      | { itemType: 'user_message'; text: string; attachments?: readonly UserAttachment[] }
+      | { itemType: 'tool_use'; name: string; input: unknown }
+      | { itemType: 'command_execution'; command: string; cwd?: string }
+      | { itemType: 'file_change'; path: string; mode?: 'create' | 'edit' | 'delete' }
+    ) & { kind: 'item.started'; itemId: string; turnId: string }
+
+  // item.completed closes an item. For `tool_use` items the adapter
+  // attaches the tool's output (the model's view of what happened) so
+  // the renderer can pair it with the corresponding tool_use without
+  // walking the event log.
+  | { kind: 'item.completed'; itemId: string; status: ItemStatus; output?: string; isError?: boolean }
 
   | { kind: 'content.delta'; itemId: string; streamKind: ContentStreamKind; text: string }
 

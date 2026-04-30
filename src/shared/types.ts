@@ -1,6 +1,6 @@
 // ── Environment / Project ───────────────────────────────────────────────────
 
-import type { ProviderKind } from './events'
+import type { NormalizedEvent, ProviderKind } from './events'
 
 // HostType is the transport-level shape used by spawn commands. It used to
 // live on every Project; we now factor it out into Environments so multiple
@@ -36,18 +36,19 @@ export interface Project {
   // Provider this project uses. Absent = inherit from Environment, which
   // itself defaults to 'claude'. Resolved at session-start time.
   providerKind?: ProviderKind
-  // Pinned on the first system:init for this project and never auto-updated.
-  // Lets the sidebar resume the same Claude conversation after the tab is
-  // closed — we pass it as --resume and reload its JSONL transcript.
-  // (Renamed to `lastSessionRef` in PR 3 once the renderer is provider-agnostic.)
-  lastClaudeSessionId?: string
-  // Latest model claude reported for this project, and the latest context
-  // window it told us about. Updated whenever new info arrives. Used by the
-  // sidebar resume flow so the StatusBar shows real values immediately
-  // instead of "blank model + 200K total" while a cold SSH session-start
-  // (which can take 5–10 s) is in flight. Mirrors PersistedTab's lastModel /
-  // lastContextWindow, but lives on the project record so it survives a tab
-  // close (which strips the entry from tabs.json).
+  // Pinned on the first session.started event for this project and
+  // never auto-updated. Lets the sidebar resume the same conversation
+  // after the tab is closed — we pass it as the provider's resumeRef
+  // and reload its on-disk transcript. Provider-agnostic field name;
+  // for claude this is the JSONL session UUID.
+  lastSessionRef?: string
+  // Latest model the provider reported for this project, and the
+  // latest context window it told us about. Used by the sidebar
+  // resume flow so the StatusBar shows real values immediately
+  // instead of "blank model + 200K total" while a cold SSH
+  // session-start (which can take 5–10 s) is in flight. Mirrors
+  // PersistedTab's lastModel / lastContextWindow, but lives on the
+  // project record so it survives a tab close.
   lastModel?: string
   lastContextWindow?: number
 }
@@ -55,25 +56,28 @@ export interface Project {
 export interface Session {
   id: string
   projectId: string
-  // Claude CLI session id (stable across --resume); used for restoring
-  // tabs across app restarts and loading history from the JSONL transcript.
-  // Undefined until the first init event arrives for a fresh session.
-  claudeSessionId?: string
+  // Provider session ref (stable across resume); used for restoring
+  // tabs across app restarts and loading history from the on-disk
+  // transcript. Undefined until the first session.started event arrives.
+  // For claude this is the JSONL session UUID; for codex / others it
+  // means whatever that provider's resumeRef means.
+  sessionRef?: string
   status: 'starting' | 'ready' | 'busy' | 'error' | 'closed'
   pid?: number
   hasUnread: boolean
   errorMessage?: string
-  // Cached metadata used by the status bar before the current run's init /
-  // result events have arrived. Updated whenever new info comes in and
-  // persisted via tabs.json so a cold-restored tab is informative right
-  // away instead of going through a "blank model + 200K total" flash.
+  // Cached metadata used by the status bar before the current run's
+  // session.started / turn.completed events have arrived. Updated as
+  // new info comes in and persisted via tabs.json so a cold-restored
+  // tab is informative right away instead of going through a "blank
+  // model + 200K total" flash.
   lastModel?: string
   lastContextWindow?: number
 }
 
 export interface PersistedTab {
   projectId: string
-  claudeSessionId: string
+  sessionRef: string
   lastModel?: string
   lastContextWindow?: number
 }
@@ -237,7 +241,7 @@ export interface IpcChannels {
   'clipboard:write': string
 
   // Main → Renderer (events)
-  'session:event': { sessionId: string; event: StreamJsonEvent }
+  'session:event': { sessionId: string; event: NormalizedEvent }
   'session:status': { sessionId: string; status: Session['status']; errorMessage?: string }
   'projects:loaded': { projects: Project[] }
   'environments:loaded': { environments: Environment[] }

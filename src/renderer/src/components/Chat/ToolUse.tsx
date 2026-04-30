@@ -1,20 +1,18 @@
 import { useState } from 'react'
 import { ChevronRight, ChevronDown } from 'lucide-react'
-import type { ToolResultBlock } from '../../../../shared/types'
 
 interface Props {
-  id: string
   name: string
   input: unknown
-  sessionId: string
-  result?: ToolResultBlock
+  status: 'running' | 'completed' | 'failed'
+  output?: string
 }
 
-export function ToolUse({ name, input, result }: Props) {
+export function ToolUse({ name, input, status, output }: Props) {
   const [expanded, setExpanded] = useState(false)
   const summary = summarizeInput(name, input)
-  const resultText = result ? extractResultText(result) : null
-  const isError = result?.is_error === true
+  const isError = status === 'failed'
+  const isRunning = status === 'running'
 
   return (
     <div className={`border rounded-lg overflow-hidden text-xs ${isError ? 'border-danger/32' : 'border-divider'}`}>
@@ -29,7 +27,7 @@ export function ToolUse({ name, input, result }: Props) {
         {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
         <span className="font-mono">{name}</span>
         {summary && <span className="font-mono text-fg-faint truncate">{summary}</span>}
-        {!result && (
+        {isRunning && (
           <span className="ml-auto text-fg-faint italic shrink-0">running…</span>
         )}
       </button>
@@ -44,11 +42,11 @@ export function ToolUse({ name, input, result }: Props) {
               {JSON.stringify(input, null, 2)}
             </pre>
           </div>
-          {resultText !== null && (
+          {output !== undefined && output.length > 0 && (
             <div className="px-3 py-2 border-t border-divider">
               <div className="text-fg-faint mb-1">{isError ? 'error' : 'result'}</div>
               <pre className={`overflow-x-auto whitespace-pre-wrap ${isError ? 'text-danger' : 'text-fg-muted'}`}>
-                {resultText}
+                {output}
               </pre>
             </div>
           )}
@@ -73,14 +71,6 @@ function summarizeInput(name: string, input: unknown): string {
   if (typeof obj.query === 'string') return truncate(obj.query, 120)
   if (typeof obj.description === 'string') return truncate(obj.description, 120)
   return ''
-}
-
-function extractResultText(result: ToolResultBlock): string {
-  if (typeof result.content === 'string') return result.content
-  return result.content
-    .map(b => (b.type === 'text' ? b.text : ''))
-    .filter(Boolean)
-    .join('\n')
 }
 
 function truncate(s: string, n: number): string {

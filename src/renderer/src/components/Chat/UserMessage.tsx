@@ -1,12 +1,12 @@
 import { CopyButton } from './CopyButton'
 import { AttachmentImage } from './AttachmentImage'
-import type { DocumentBlock, ImageBlock } from '../../../../shared/types'
+import type { UserAttachment } from '../../../../shared/events'
 import { FileText, Download } from 'lucide-react'
 import { saveFileAs } from '../../ipc/bridge'
 
 interface Props {
   text: string
-  attachments?: ReadonlyArray<ImageBlock | DocumentBlock>
+  attachments?: ReadonlyArray<UserAttachment>
 }
 
 export function UserMessage({ text, attachments }: Props) {
@@ -29,16 +29,16 @@ export function UserMessage({ text, attachments }: Props) {
         {hasAttachments && (
           <div className="flex flex-col gap-1 items-end">
             {attachments!.map((att, i) => {
-              if (att.type === 'image') {
+              if (att.kind === 'image') {
                 return (
                   <AttachmentImage
                     key={i}
-                    mediaType={att.source.media_type}
-                    data={att.source.data}
+                    mediaType={att.mediaType}
+                    data={att.data}
                   />
                 )
               }
-              return <DocumentChip key={i} block={att} />
+              return <DocumentChip key={i} attachment={att} />
             })}
           </div>
         )}
@@ -47,14 +47,14 @@ export function UserMessage({ text, attachments }: Props) {
   )
 }
 
-function DocumentChip({ block }: { block: DocumentBlock }) {
+function DocumentChip({ attachment }: { attachment: Extract<UserAttachment, { kind: 'document' }> }) {
   const handleSave = async () => {
-    await saveFileAs('document.pdf', block.source.media_type, block.source.data)
+    await saveFileAs(attachment.name || 'document.pdf', attachment.mediaType, attachment.data)
   }
   return (
     <div className="group/doc flex items-center gap-2 bg-elevated rounded px-3 py-2 text-xs text-fg-muted">
       <FileText size={14} />
-      <span>document ({block.source.media_type})</span>
+      <span>{attachment.name || `document (${attachment.mediaType})`}</span>
       <button
         type="button"
         onClick={handleSave}

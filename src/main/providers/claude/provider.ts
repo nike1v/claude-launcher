@@ -10,10 +10,12 @@ import type {
   ControlCommand,
   EnvScrubPattern,
   IProvider,
+  IProviderAdapter,
   ProviderCapabilities,
   SpawnOpts
 } from '../types'
 import { validateClaudeArg } from '../../transports/validate-path'
+import { ClaudeAdapter } from './adapter'
 
 const BASE_CLAUDE_ARGS = [
   '--output-format', 'stream-json',
@@ -108,6 +110,10 @@ export class ClaudeProvider implements IProvider {
 
   public envScrubList(_host: HostType): readonly EnvScrubPattern[] {
     return CLAUDE_ENV_SCRUB
+  }
+
+  public createAdapter(): IProviderAdapter {
+    return new ClaudeAdapter('live')
   }
 }
 

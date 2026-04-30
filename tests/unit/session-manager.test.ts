@@ -111,8 +111,8 @@ describe('SessionManager', () => {
     )
   })
 
-  it('emits parsed stream-json events from stdout', async () => {
-    const sessionId = await manager.startSession(makeEnv(), makeProject())
+  it('emits normalized events from stdout via the provider adapter', async () => {
+    await manager.startSession(makeEnv(), makeProject())
     const proc = mockTransport.spawn.mock.results[0].value
 
     const line = JSON.stringify({
@@ -127,13 +127,15 @@ describe('SessionManager', () => {
 
     proc.stdout.emit('data', Buffer.from(line + '\n'))
 
-    expect(onEvent).toHaveBeenCalledWith(
-      'session:event',
-      expect.objectContaining({
-        sessionId,
-        event: expect.objectContaining({ type: 'assistant' })
-      })
-    )
+    // ClaudeAdapter translates the assistant event into:
+    // turn.started → tokenUsage.updated → item.started(assistant_message)
+    //   → content.delta(assistant_text, "Hi") → item.completed.
+    const eventCalls = onEvent.mock.calls.filter(c => c[0] === 'session:event')
+    const kinds = eventCalls.map(c => (c[1] as { event: { kind: string } }).event.kind)
+    expect(kinds).toContain('turn.started')
+    expect(kinds).toContain('item.started')
+    expect(kinds).toContain('content.delta')
+    expect(kinds).toContain('item.completed')
   })
 
   it('kills the session and emits error when stdout buffers past the cap without a newline', async () => {

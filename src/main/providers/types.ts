@@ -1,14 +1,15 @@
 // Provider abstraction. IProvider captures lifecycle: what binary, what
 // argv, how to format a user message / control command for stdin, what
 // env vars to scrub. Wire-format translation (provider stdout →
-// NormalizedEvent) lives in IProviderAdapter — added when the renderer
-// is migrated off the claude-shaped event union.
+// NormalizedEvent) lives in IProviderAdapter, created per-session via
+// IProvider.createAdapter() so each session has its own translator
+// state (line buffer, current turnId, tool_use ↔ item.id pairings).
 //
 // Resolved at runtime by ProviderKind via the registry. The registry's
 // default kind is 'claude' (DEFAULT_PROVIDER_KIND in shared/events).
 
 import type { HostType, SendAttachment } from '../../shared/types'
-import type { ApprovalDecision, ProviderKind } from '../../shared/events'
+import type { ApprovalDecision, NormalizedEvent, ProviderKind } from '../../shared/events'
 
 // ── Capabilities ─────────────────────────────────────────────────────────
 
@@ -94,4 +95,28 @@ export interface IProvider {
   // typically provider-specific OAuth tokens that must not reach a
   // remote child.
   envScrubList(host: HostType): readonly EnvScrubPattern[]
+
+  // Factory for the wire-format translator. Each session gets its own
+  // adapter so the translator's internal state (line buffer, current
+  // turnId, tool_use ↔ item.id pairings) doesn't leak across sessions.
+  // History-reader also creates an adapter per transcript replay.
+  createAdapter(): IProviderAdapter
+}
+
+// ── IProviderAdapter ────────────────────────────────────────────────────
+
+export interface IProviderAdapter {
+  // Parse a chunk of provider stdout and emit normalized events.
+  // Stateful — adapter tracks line buffer, current turnId, item IDs,
+  // and any open tool_use ↔ item.id pairings across calls. Always
+  // safe to call with a partial chunk; the adapter buffers until a
+  // line/event boundary.
+  parseChunk(chunk: string): NormalizedEvent[]
+
+  // Read a transcript file (full content) and emit normalized events
+  // for backfill. Use a fresh adapter per replay — the call site
+  // discards the adapter when it's done. Distinct from parseChunk in
+  // that it emits user-message items (a live session's user echoes
+  // are dropped because the renderer pushed them locally).
+  parseTranscript(content: string): NormalizedEvent[]
 }

@@ -8,17 +8,16 @@ import { ToolUse } from './ToolUse'
 import { Thinking } from './Thinking'
 import { ToolGroup } from './ToolGroup'
 import { PermissionPrompt } from './PermissionPrompt'
-import type { DocumentBlock, ImageBlock, ToolResultBlock } from '../../../../shared/types'
-import type { ChatMessage } from '../../store/messages'
-import { groupMessages, type RenderGroup } from '../../lib/group-messages'
+import { deriveItems, type RenderedItem } from '../../lib/derive-items'
+import { groupMessages } from '../../lib/group-messages'
 
 interface Props {
   sessionId: string
 }
 
 export function MessageList({ sessionId }: Props) {
-  const { messagesBySession } = useMessagesStore()
-  const messages = messagesBySession[sessionId] ?? []
+  const { eventsBySession } = useMessagesStore()
+  const events = eventsBySession[sessionId] ?? []
   const status = useSessionsStore(s => s.sessions[sessionId]?.status)
   const isBusy = status === 'busy'
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -26,7 +25,7 @@ export function MessageList({ sessionId }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
 
-  // Watch the actual content size — not just messages.length — so the view
+  // Watch the actual content size — not just events.length — so the view
   // stays pinned to the bottom while async work (markdown, images, restored
   // history, tab activation) keeps growing the scroll height after the last
   // state change. The ResizeObserver fires on the initial mount too, which
@@ -50,94 +49,40 @@ export function MessageList({ sessionId }: Props) {
     shouldFollowRef.current = distanceFromBottom < 100
   }
 
-  // Pair tool_use blocks with their tool_result blocks (which arrive in
-  // subsequent user events) so each tool call renders its own output inline.
-  const toolResultsById = useMemo(() => {
-    const map = new Map<string, ToolResultBlock>()
-    for (const { event } of messages) {
-      if (event.type !== 'user') continue
-      const content = event.message.content
-      if (typeof content === 'string') continue
-      for (const block of content) {
-        if (block.type === 'tool_result' && block.tool_use_id !== '__input__') {
-          map.set(block.tool_use_id, block)
-        }
-      }
+  const items = useMemo(() => deriveItems(events), [events])
+  const groups = useMemo(() => groupMessages(items), [items])
+
+  const renderItem = (item: RenderedItem): ReactNode => {
+    switch (item.kind) {
+      case 'user':
+        if (!item.text && !item.attachments?.length) return null
+        return <UserMessage key={item.id} text={item.text} attachments={item.attachments} />
+      case 'assistant':
+        return item.text.trim() ? <AssistantMessage key={item.id} text={item.text} /> : null
+      case 'reasoning':
+        return <Thinking key={item.id} text={item.text} />
+      case 'tool':
+        return (
+          <ToolUse
+            key={item.id}
+            name={item.name}
+            input={item.input}
+            status={item.status}
+            output={item.output}
+          />
+        )
+      case 'permission':
+        return (
+          <PermissionPrompt
+            key={item.id}
+            sessionId={sessionId}
+            toolUseId={item.id}
+            toolName={item.toolName}
+            input={item.input}
+            resolved={item.status === 'resolved'}
+          />
+        )
     }
-    return map
-  }, [messages])
-
-  // Collapse runs of tool-only messages (assistant messages whose only blocks
-  // are tool_use/thinking, plus user messages that are pure tool_result echoes)
-  // into a single ToolGroup so the gap between user prompts and assistant
-  // replies isn't a wall of tool chips.
-  const groups = useMemo(() => groupMessages(messages), [messages])
-
-  const renderMessage = (msg: ChatMessage): ReactNode => {
-    const { id, event } = msg
-    if (event.type === 'assistant') {
-      const blocks = event.message.content
-      if (!blocks.length) return null
-
-      return (
-        <div key={id} className="space-y-2">
-          {blocks.map((block, i) => {
-            if (block.type === 'text') {
-              return block.text.trim() ? <AssistantMessage key={i} text={block.text} /> : null
-            }
-            if (block.type === 'thinking') {
-              return <Thinking key={i} text={block.thinking} />
-            }
-            if (block.type === 'tool_use') {
-              if (block.name.toLowerCase().includes('permission')) {
-                return (
-                  <PermissionPrompt
-                    key={i}
-                    sessionId={sessionId}
-                    toolUseId={block.id}
-                    toolName={block.name}
-                    input={block.input}
-                  />
-                )
-              }
-              return (
-                <ToolUse
-                  key={i}
-                  id={block.id}
-                  name={block.name}
-                  input={block.input}
-                  sessionId={sessionId}
-                  result={toolResultsById.get(block.id)}
-                />
-              )
-            }
-            return null
-          })}
-        </div>
-      )
-    }
-    if (event.type === 'user') {
-      const content = event.message.content
-      if (typeof content === 'string') {
-        return content.trim() ? <UserMessage key={id} text={content} /> : null
-      }
-
-      const attachments: Array<ImageBlock | DocumentBlock> = []
-      const textParts: string[] = []
-      for (const block of content) {
-        if (block.type === 'image' || block.type === 'document') {
-          attachments.push(block)
-        } else if (block.type === 'text') {
-          textParts.push(block.text)
-        } else if (block.type === 'tool_result' && block.tool_use_id === '__input__') {
-          if (typeof block.content === 'string') textParts.push(block.content)
-        }
-      }
-      const text = textParts.join('\n').trim()
-      if (!text && attachments.length === 0) return null
-      return <UserMessage key={id} text={text} attachments={attachments} />
-    }
-    return null
   }
 
   return (
@@ -150,15 +95,12 @@ export function MessageList({ sessionId }: Props) {
       // chat as a whole never grows wider than the viewport.
       className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-4"
     >
-      {/* space-y-5 (20 px) puts visible breathing room between turns —
-          the previous space-y-3 ran consecutive messages too close
-          together to read as discrete turns. */}
       <div ref={contentRef} className="space-y-5">
         {groups.map((group, i) => {
-          if (group.kind === 'message') return renderMessage(group.message)
+          if (group.kind === 'message') return renderItem(group.item)
           return (
             <ToolGroup key={`g-${i}`} toolNames={group.toolNames}>
-              {group.messages.map(renderMessage)}
+              {group.items.map(renderItem)}
             </ToolGroup>
           )
         })}
@@ -173,4 +115,3 @@ export function MessageList({ sessionId }: Props) {
     </div>
   )
 }
-

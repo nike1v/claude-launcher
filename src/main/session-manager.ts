@@ -1,8 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import type { ChildProcess } from 'node:child_process'
 import type { ITransport, SpawnOptions } from './transports/types'
-import type { Environment, HostType, Project, SendAttachment, StreamJsonEvent } from '../shared/types'
-import { parseStreamJsonLine } from './stream-json-parser'
+import type { Environment, HostType, Project, SendAttachment } from '../shared/types'
 import { validateAttachments } from './attachment-limits'
 // Aliased on import so the parameter-property `resolveTransport` doesn't
 // shadow it in its own default expression. The right-hand side of
@@ -12,8 +11,8 @@ import { validateAttachments } from './attachment-limits'
 // blank sidebar.
 import { resolveTransport as defaultResolveTransport } from './transports'
 import { getProvider } from './providers/registry'
-import type { IProvider } from './providers/types'
-import { DEFAULT_PROVIDER_KIND } from '../shared/events'
+import type { IProvider, IProviderAdapter } from './providers/types'
+import { DEFAULT_PROVIDER_KIND, type NormalizedEvent } from '../shared/events'
 
 type EventCallback = (channel: string, payload: unknown) => void
 
@@ -25,11 +24,15 @@ interface ActiveSession {
   // mid-flight providerKind change on the project doesn't confuse
   // sendMessage / interrupt / respondPermission.
   provider: IProvider
+  // Per-session adapter that translates provider stdout into
+  // NormalizedEvent. Stateful (line buffer, current turnId, tool_use
+  // ↔ item.id pairings) so each session has its own.
+  adapter: IProviderAdapter
   lineBuffer: string
   markedReady: boolean
   stopping: boolean
   exited: Promise<void>
-  // Held on the session so handleStdout can clear it from a result/assistant
+  // Held on the session so handleStdout can clear it from a turn-completed
   // event without us having to thread the closure variable through.
   readyTimer: NodeJS.Timeout | null
 }
@@ -123,6 +126,7 @@ export class SessionManager {
       projectId: project.id,
       process,
       provider,
+      adapter: provider.createAdapter(),
       lineBuffer: '',
       markedReady: false,
       stopping: false,
@@ -323,14 +327,14 @@ export class SessionManager {
   private handleStdout(session: ActiveSession, chunk: Buffer, markReady: () => void): void {
     session.lineBuffer += chunk.toString('utf-8')
     // If we're still buffering past the cap, we've almost certainly hit a
-    // corrupted / non-newline-delimited stream. Kill the session rather than
-    // grow forever — the exit handler will surface the failure.
+    // corrupted / non-newline-delimited stream. Kill the session rather
+    // than grow forever — the exit handler will surface the failure.
     if (session.lineBuffer.length > MAX_LINE_BUFFER_BYTES) {
       session.lineBuffer = ''
       this.onEvent('session:status', {
         sessionId: session.sessionId,
         status: 'error',
-        errorMessage: 'claude produced a malformed stream (single line exceeded buffer cap)'
+        errorMessage: `${session.provider.label} produced a malformed stream (single line exceeded buffer cap)`
       })
       try { session.process.kill() } catch { /* already dead */ }
       return
@@ -339,32 +343,42 @@ export class SessionManager {
     session.lineBuffer = lines.pop() ?? ''
 
     for (const line of lines) {
-      const event: StreamJsonEvent | null = parseStreamJsonLine(line)
-      if (!event) continue
-
-      if (event.type === 'system' && event.subtype === 'init') {
-        markReady()
-      } else if (event.type === 'result') {
-        // A turn finished — back to ready so the spinner clears. We bypass
-        // markReady's once-only gate here so 'ready' fires after every
-        // turn, but still drop the fallback timer so it doesn't keep the
-        // event loop alive past the genuine first ready transition.
-        session.markedReady = true
-        if (session.readyTimer) {
-          clearTimeout(session.readyTimer)
-          session.readyTimer = null
-        }
-        this.onEvent('session:status', { sessionId: session.sessionId, status: 'ready' })
-      } else if (event.type === 'assistant') {
-        session.markedReady = true
-        if (session.readyTimer) {
-          clearTimeout(session.readyTimer)
-          session.readyTimer = null
-        }
-        this.onEvent('session:status', { sessionId: session.sessionId, status: 'busy' })
+      // adapter.parseChunk takes a chunk; feeding it one complete line at
+      // a time keeps its own internal buffer empty after every call.
+      const events = session.adapter.parseChunk(line + '\n')
+      for (const event of events) {
+        this.dispatchEvent(session, event, markReady)
       }
-
-      this.onEvent('session:event', { sessionId: session.sessionId, event })
     }
+  }
+
+  private dispatchEvent(
+    session: ActiveSession,
+    event: NormalizedEvent,
+    markReady: () => void
+  ): void {
+    if (event.kind === 'session.started') {
+      markReady()
+    } else if (event.kind === 'turn.started') {
+      // A new turn opened — flip to busy so the renderer shows the
+      // thinking spinner. Bypass markReady's once-only gate so this
+      // fires every turn, but still clear the fallback timer.
+      session.markedReady = true
+      if (session.readyTimer) {
+        clearTimeout(session.readyTimer)
+        session.readyTimer = null
+      }
+      this.onEvent('session:status', { sessionId: session.sessionId, status: 'busy' })
+    } else if (event.kind === 'turn.completed') {
+      // Turn finished — back to ready so the spinner clears.
+      session.markedReady = true
+      if (session.readyTimer) {
+        clearTimeout(session.readyTimer)
+        session.readyTimer = null
+      }
+      this.onEvent('session:status', { sessionId: session.sessionId, status: 'ready' })
+    }
+
+    this.onEvent('session:event', { sessionId: session.sessionId, event })
   }
 }
