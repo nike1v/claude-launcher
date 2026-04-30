@@ -54,6 +54,19 @@ function createWindow(): BrowserWindow {
     if (isSafeExternalUrl(url)) shell.openExternal(url)
   })
 
+  // Linux / Windows: there's no application menu by default, so the OS
+  // never sees an accelerator for Ctrl+Q. macOS gets Cmd+Q from
+  // electron's auto-built menu so we skip there.
+  if (process.platform !== 'darwin') {
+    win.webContents.on('before-input-event', (_event, input) => {
+      if (input.type !== 'keyDown') return
+      const ctrlOrMeta = input.control || input.meta
+      if (ctrlOrMeta && !input.alt && !input.shift && input.key.toLowerCase() === 'q') {
+        app.quit()
+      }
+    })
+  }
+
   return win
 }
 
