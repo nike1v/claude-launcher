@@ -3,15 +3,9 @@ import type { Environment, HostType } from '../../../../shared/types'
 import type { ProviderKind } from '../../../../shared/events'
 import { useEnvironmentsStore } from '../../store/environments'
 import { findDuplicateEnvironment } from '../../lib/environment-dedup'
+import { PROVIDER_OPTIONS } from '../../lib/provider-options'
 import { EnvironmentStatus, type ProbeState } from './EnvironmentStatus'
 import { ModelCombobox } from './ModelCombobox'
-
-const PROVIDER_OPTIONS: ReadonlyArray<{ value: ProviderKind; label: string; bin: string }> = [
-  { value: 'claude', label: 'Claude Code', bin: 'claude' },
-  { value: 'codex', label: 'OpenAI Codex', bin: 'codex' },
-  { value: 'cursor', label: 'Cursor Agent', bin: 'agent' },
-  { value: 'opencode', label: 'opencode', bin: 'opencode' }
-]
 
 interface Props {
   initial: Environment | null

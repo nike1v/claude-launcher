@@ -1,12 +1,15 @@
 import { useEffect, useState } from 'react'
 import { X } from 'lucide-react'
 import type { Environment, HostType, Project } from '../../../../shared/types'
+import type { ProviderKind } from '../../../../shared/events'
 import { useProjectsStore } from '../../store/projects'
 import { useEnvironmentsStore } from '../../store/environments'
 import { Modal } from '../Modal'
 import { ModelCombobox } from '../Settings/ModelCombobox'
 import { PathCombobox } from '../Settings/PathCombobox'
+import { EnvironmentStatus } from '../Settings/EnvironmentStatus'
 import { findDuplicateEnvironment } from '../../lib/environment-dedup'
+import { PROVIDER_OPTIONS, providerLabel } from '../../lib/provider-options'
 import { describeHost, transcriptDirHint } from '../../../../shared/host-utils'
 import { listSessionIds } from '../../ipc/bridge'
 
@@ -60,6 +63,15 @@ export function AddProjectModal({ onClose, editProject, presetEnvironmentId }: P
   const [sshKeyFile, setSshKeyFile] = useState(
     editEnv?.config.kind === 'ssh' ? (editEnv.config.keyFile ?? '') : ''
   )
+  // Per-project provider override. `undefined` means "inherit from the
+  // environment" (falls back to env.providerKind ?? 'claude' in
+  // session-manager via resolveProviderKind). When set, this project
+  // spawns the picked provider's binary instead of whatever the env
+  // defaults to — letting users run claude / codex / cursor / opencode
+  // side-by-side under the same connection.
+  const [providerKind, setProviderKind] = useState<ProviderKind | undefined>(editProject?.providerKind)
+  const inheritedProvider: ProviderKind = editEnv?.providerKind ?? 'claude'
+
   // Edit-only field: the provider session id we pass as the resume
   // reference next time this project is opened. Auto-pinned by
   // listeners.ts on the first session.started, but exposed here so the
@@ -69,7 +81,11 @@ export function AddProjectModal({ onClose, editProject, presetEnvironmentId }: P
   // pinned id" apart from "no id was pinned at form open". Snapshot at
   // construction so subsequent edits don't move the goalposts.
   const hadInitialSessionId = !!editProject?.lastSessionRef
-  const clearedSessionId = hadInitialSessionId && !claudeSessionId.trim()
+  // Provider change resets the session ref automatically (handleSubmit
+  // drops it because cross-provider ids aren't interchangeable), so
+  // the "user manually cleared the id" guard shouldn't trip on it.
+  const providerChanged = !!editProject && editProject.providerKind !== providerKind
+  const clearedSessionId = hadInitialSessionId && !claudeSessionId.trim() && !providerChanged
   // Available session ids for autocomplete + soft validation. null while
   // we haven't asked yet (so we don't flag a typed id as "missing"
   // before the list arrives); empty array means we asked but found
@@ -123,20 +139,23 @@ export function AddProjectModal({ onClose, editProject, presetEnvironmentId }: P
       envId = findOrCreateEnvironment(environments, host, addEnvironment).id
     }
 
+    // Switching provider invalidates the saved session ref — claude
+    // UUIDs, codex `thr_*` ids, and ACP `sess_*` ids are not
+    // interchangeable. When `providerChanged` (from the outer scope),
+    // drop the stale ref + cached metadata so the next session start
+    // doesn't try to resume the wrong shape.
+    const trimmedRef = claudeSessionId.trim() || undefined
+
     const project: Project = {
       id: editProject?.id ?? crypto.randomUUID(),
       name: name.trim(),
       environmentId: envId,
       path: path.trim(),
       model: model.trim() || undefined,
-      // Carry the manually-edited session id through. Empty string maps
-      // to undefined so the listener's write-once pin re-fires on the
-      // next session start. lastModel / lastContextWindow are
-      // intentionally NOT touched here — they're auto-managed and
-      // would be confusing to expose for direct editing.
-      lastSessionRef: claudeSessionId.trim() || undefined,
-      lastModel: editProject?.lastModel,
-      lastContextWindow: editProject?.lastContextWindow
+      providerKind,
+      lastSessionRef: providerChanged ? undefined : trimmedRef,
+      lastModel: providerChanged ? undefined : editProject?.lastModel,
+      lastContextWindow: providerChanged ? undefined : editProject?.lastContextWindow
     }
 
     if (editProject) updateProject(project)
@@ -259,6 +278,73 @@ export function AddProjectModal({ onClose, editProject, presetEnvironmentId }: P
               />
             )}
           </div>
+
+          {editEnv && (
+            <div>
+              <label className={labelCls}>Provider Override (optional)</label>
+              <div className="grid grid-cols-5 gap-1">
+                {/* "Inherit" is the default — undefined providerKind on
+                    the project record. Other slots set an override. */}
+                <button
+                  type="button"
+                  onClick={() => setProviderKind(undefined)}
+                  className={`py-1.5 text-[10px] rounded border transition-colors
+                    ${providerKind === undefined
+                      ? 'bg-elevated border-divider-strong text-fg'
+                      : 'border-divider text-fg-faint hover:border-divider-strong'}
+                  `}
+                  title={`Inherit ${providerLabel(inheritedProvider)} from ${editEnv.name}`}
+                >
+                  Inherit
+                </button>
+                {PROVIDER_OPTIONS.map(opt => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setProviderKind(opt.value)}
+                    className={`py-1.5 text-[10px] rounded border transition-colors truncate
+                      ${providerKind === opt.value
+                        ? 'bg-elevated border-divider-strong text-fg'
+                        : 'border-divider text-fg-faint hover:border-divider-strong'}
+                    `}
+                    title={`${opt.label} (${opt.bin})`}
+                  >
+                    {opt.label.split(' ')[0]}
+                  </button>
+                ))}
+              </div>
+              {providerKind === undefined ? (
+                <p className="mt-1 text-[10px] text-fg-faint">
+                  Inherits {providerLabel(inheritedProvider)} from <span className="text-fg-muted">{editEnv.name}</span>. Override to run a different CLI for this project under the same environment.
+                </p>
+              ) : (
+                <div className="mt-1 flex items-center justify-between gap-2">
+                  <p className="text-[10px] text-fg-faint">
+                    Spawns <span className="font-mono">{PROVIDER_OPTIONS.find(o => o.value === providerKind)?.bin}</span> on this env instead of {providerLabel(inheritedProvider)}.
+                  </p>
+                  {/* Live probe — same component the env-edit form uses,
+                      pointed at the override provider's binary so the
+                      user gets immediate feedback if it isn't installed
+                      on this connection. */}
+                  <EnvironmentStatus
+                    config={editEnv.config}
+                    providerKind={providerKind}
+                    compact
+                  />
+                </div>
+              )}
+              {/* Switching provider invalidates the saved session ref —
+                  ids aren't interchangeable across providers. Warn the
+                  user before they save so they know the resume target
+                  will be reset (handleSubmit drops the ref + cached
+                  metadata when providerKind changed). */}
+              {editProject && editProject.providerKind !== providerKind && (editProject.lastSessionRef || editProject.lastModel) && (
+                <p className="mt-1 text-[10px] text-warn break-words">
+                  Saving will clear the pinned session id and cached model — they belonged to {providerLabel(editProject.providerKind ?? inheritedProvider)}, not the new provider. Next open starts a fresh conversation.
+                </p>
+              )}
+            </div>
+          )}
 
           <div>
             <label className={labelCls}>Model Override (optional)</label>
