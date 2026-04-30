@@ -20,6 +20,16 @@ export function isProviderKind(v: unknown): v is ProviderKind {
   return typeof v === 'string' && (PROVIDER_KINDS as readonly string[]).includes(v)
 }
 
+// Resolution order: project override > environment default > registry
+// default. Used by session-manager (live) and history-reader's IPC
+// caller (transcript replay) so they can't drift on the precedence rule.
+export function resolveProviderKind(opts: {
+  projectKind?: ProviderKind
+  envKind?: ProviderKind
+}): ProviderKind {
+  return opts.projectKind ?? opts.envKind ?? DEFAULT_PROVIDER_KIND
+}
+
 // ── Approval / permission decisions ──────────────────────────────────────
 
 // Four states match what claude actually supports today (the "always

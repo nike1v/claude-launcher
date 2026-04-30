@@ -15,9 +15,14 @@ interface Props {
   sessionId: string
 }
 
+const EMPTY: readonly never[] = []
+
 export function MessageList({ sessionId }: Props) {
-  const { eventsBySession } = useMessagesStore()
-  const events = eventsBySession[sessionId] ?? []
+  // Per-session selector — without this, MessageList re-renders on
+  // every event in *any* session because the default object identity
+  // changes each store update. The stable EMPTY fallback keeps
+  // useMemo's deps reference-equal between renders for empty sessions.
+  const events = useMessagesStore(s => s.eventsBySession[sessionId] ?? EMPTY)
   const status = useSessionsStore(s => s.sessions[sessionId]?.status)
   const isBusy = status === 'busy'
   const bottomRef = useRef<HTMLDivElement>(null)

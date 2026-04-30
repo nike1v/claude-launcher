@@ -5,17 +5,17 @@ import { useMessagesStore } from '../../store/messages'
 import { ContextMeter } from './ContextMeter'
 import type { NormalizedEvent, TokenUsage } from '../../../../shared/events'
 
+const EMPTY: readonly never[] = []
+
 export function StatusBar() {
-  const { sessions, activeSessionId } = useSessionsStore()
-  const { projects } = useProjectsStore()
-  const { environments } = useEnvironmentsStore()
-  const { eventsBySession } = useMessagesStore()
-
-  const session = activeSessionId ? sessions[activeSessionId] : null
-  const project = session ? projects.find(p => p.id === session.projectId) : null
-  const env = project ? environments.find(e => e.id === project.environmentId) : null
-
-  const events = activeSessionId ? (eventsBySession[activeSessionId] ?? []) : []
+  // Selectors keep StatusBar from re-rendering on every unrelated mutation
+  // anywhere in the app (sidebar tab moves, message arrivals on background
+  // sessions, etc.). It only cares about the active session's data.
+  const activeSessionId = useSessionsStore(s => s.activeSessionId)
+  const session = useSessionsStore(s => activeSessionId ? s.sessions[activeSessionId] : null)
+  const project = useProjectsStore(s => session ? s.projects.find(p => p.id === session.projectId) ?? null : null)
+  const env = useEnvironmentsStore(s => project ? s.environments.find(e => e.id === project.environmentId) ?? null : null)
+  const events = useMessagesStore(s => activeSessionId ? (s.eventsBySession[activeSessionId] ?? EMPTY) : EMPTY)
   const sessionStart = events.find(e => e.kind === 'session.started')
   const cwd = sessionStart?.kind === 'session.started' ? sessionStart.cwd : undefined
   const eventModel = sessionStart?.kind === 'session.started' ? sessionStart.model : undefined

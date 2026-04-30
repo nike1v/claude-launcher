@@ -196,16 +196,9 @@ export class ClaudeAdapter implements IProviderAdapter {
     const toolResults: ToolResultBlock[] = []
     const promptText: string[] = []
     const promptAttachments: UserAttachment[] = []
-    let hasInputMarker = false
 
     for (const block of content) {
       if (block.type === 'tool_result') {
-        if (block.tool_use_id === '__input__') {
-          // Sentinel marker the local InputBar adds — never appears on
-          // the wire. Defensive in case a transcript ever contains it.
-          hasInputMarker = true
-          continue
-        }
         toolResults.push(block)
         continue
       }
@@ -238,7 +231,7 @@ export class ClaudeAdapter implements IProviderAdapter {
     // already pushed locally.
     const text = promptText.join('\n').trim()
     const hasPrompt = text.length > 0 || promptAttachments.length > 0
-    if (hasPrompt && this.mode === 'replay' && !hasInputMarker) {
+    if (hasPrompt && this.mode === 'replay') {
       const turnId = this.ensureTurn(out)
       const itemId = `user-${randomUUID()}`
       out.push({

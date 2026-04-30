@@ -30,66 +30,30 @@ export type RenderedItem =
     }
 
 export function deriveItems(events: readonly NormalizedEvent[]): RenderedItem[] {
-  // Two parallel structures so completion / delta events can find the
-  // open item without an O(n) scan of `out`.
   const out: RenderedItem[] = []
-  const byId = new Map<string, RenderedItem>()
+  // idxById lets `replace` do O(1) updates instead of an O(n) findIndex
+  // — matters when content.delta fires per-token in a streaming provider
+  // (PR 4 codex emits deltas) and the item log grows long.
+  const idxById = new Map<string, number>()
 
   const replace = (id: string, next: RenderedItem): void => {
-    byId.set(id, next)
-    const idx = out.findIndex(i => i.id === id)
-    if (idx >= 0) out[idx] = next
+    const idx = idxById.get(id)
+    if (idx !== undefined) out[idx] = next
   }
 
   for (const event of events) {
     if (event.kind === 'item.started') {
-      let item: RenderedItem
-      switch (event.itemType) {
-        case 'user_message':
-          item = { id: event.itemId, kind: 'user', text: event.text, attachments: event.attachments }
-          break
-        case 'assistant_message':
-          item = { id: event.itemId, kind: 'assistant', text: '' }
-          break
-        case 'reasoning':
-          item = { id: event.itemId, kind: 'reasoning', text: '' }
-          break
-        case 'tool_use':
-          // claude's permission-prompt-tool flow shows up as a tool_use
-          // whose name includes "permission". Distinct render path: it's
-          // a blocking gate, not a passive tool record.
-          if (event.name.toLowerCase().includes('permission')) {
-            item = {
-              id: event.itemId,
-              kind: 'permission',
-              toolName: event.name,
-              input: event.input,
-              status: 'pending'
-            }
-          } else {
-            item = {
-              id: event.itemId,
-              kind: 'tool',
-              name: event.name,
-              input: event.input,
-              status: 'running'
-            }
-          }
-          break
-        default:
-          // command_execution / file_change / web_search / plan /
-          // unknown: not rendered as their own card today. Future
-          // codex/cursor work will give them dedicated views.
-          continue
-      }
+      const item = makeItem(event)
+      if (!item) continue
+      idxById.set(item.id, out.length)
       out.push(item)
-      byId.set(item.id, item)
       continue
     }
 
     if (event.kind === 'content.delta') {
-      const item = byId.get(event.itemId)
-      if (!item) continue
+      const idx = idxById.get(event.itemId)
+      if (idx === undefined) continue
+      const item = out[idx]
       if (item.kind === 'assistant' && event.streamKind === 'assistant_text') {
         replace(item.id, { ...item, text: item.text + event.text })
       } else if (item.kind === 'reasoning' && event.streamKind === 'reasoning_text') {
@@ -99,8 +63,9 @@ export function deriveItems(events: readonly NormalizedEvent[]): RenderedItem[] 
     }
 
     if (event.kind === 'item.completed') {
-      const item = byId.get(event.itemId)
-      if (!item) continue
+      const idx = idxById.get(event.itemId)
+      if (idx === undefined) continue
+      const item = out[idx]
       if (item.kind === 'tool') {
         replace(item.id, {
           ...item,
@@ -110,12 +75,53 @@ export function deriveItems(events: readonly NormalizedEvent[]): RenderedItem[] 
       } else if (item.kind === 'permission') {
         replace(item.id, { ...item, status: 'resolved' })
       }
-      // user / assistant / reasoning items don't track a completion
-      // state today — they render the same once their text has streamed
-      // in. (Claude sends them all-at-once anyway.)
       continue
     }
   }
 
   return out
+}
+
+// Maps a typed item.started event to a RenderedItem. Returns null for
+// itemTypes that don't have a dedicated render today (plan,
+// command_execution, file_change, web_search, unknown) — those items
+// are silently skipped from the chat view. The exhaustive switch fails
+// the compile if a new ItemType is added without an explicit branch.
+function makeItem(event: Extract<NormalizedEvent, { kind: 'item.started' }>): RenderedItem | null {
+  switch (event.itemType) {
+    case 'user_message':
+      return { id: event.itemId, kind: 'user', text: event.text, attachments: event.attachments }
+    case 'assistant_message':
+      return { id: event.itemId, kind: 'assistant', text: '' }
+    case 'reasoning':
+      return { id: event.itemId, kind: 'reasoning', text: '' }
+    case 'tool_use':
+      // Claude's permission-prompt-tool flow shows up as a tool_use whose
+      // name includes "permission". Distinct render path: it's a blocking
+      // gate, not a passive tool record. Detection is claude-specific —
+      // when codex / cursor land we'll route their permission requests
+      // via request.opened in the event taxonomy and drop this heuristic.
+      if (event.name.toLowerCase().includes('permission')) {
+        return {
+          id: event.itemId,
+          kind: 'permission',
+          toolName: event.name,
+          input: event.input,
+          status: 'pending'
+        }
+      }
+      return {
+        id: event.itemId,
+        kind: 'tool',
+        name: event.name,
+        input: event.input,
+        status: 'running'
+      }
+    case 'plan':
+    case 'command_execution':
+    case 'file_change':
+    case 'web_search':
+    case 'unknown':
+      return null
+  }
 }

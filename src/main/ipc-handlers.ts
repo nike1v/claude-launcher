@@ -12,6 +12,7 @@ import { probeUsage } from './usage-probe'
 import { resolveTransport } from './transports'
 import { sanitizeDefaultName, validateSaveFilePayload } from './attachment-limits'
 import type { IpcChannels } from '../shared/types'
+import { resolveProviderKind } from '../shared/events'
 
 const CONFIG_DIR = join(homedir(), '.config', 'claude-launcher')
 const PROJECTS_PATH = join(CONFIG_DIR, 'projects.json')
@@ -156,7 +157,10 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): () => Promise<vo
   handle('session:history:load', async ({ projectId, sessionId }) => {
     const ctx = resolveProjectAndEnv(projectStore, environmentStore, projectId)
     if (!ctx) return { events: [], diagnostic: `project ${projectId} or its environment not found` }
-    const providerKind = ctx.project.providerKind ?? ctx.env.providerKind ?? 'claude'
+    const providerKind = resolveProviderKind({
+      projectKind: ctx.project.providerKind,
+      envKind: ctx.env.providerKind
+    })
     return historyReader.loadSessionEvents(ctx.env.config, ctx.project.path, sessionId, providerKind)
   })
 

@@ -12,7 +12,7 @@ import { validateAttachments } from './attachment-limits'
 import { resolveTransport as defaultResolveTransport } from './transports'
 import { getProvider } from './providers/registry'
 import type { IProvider, IProviderAdapter } from './providers/types'
-import { DEFAULT_PROVIDER_KIND, type NormalizedEvent } from '../shared/events'
+import { resolveProviderKind, type NormalizedEvent } from '../shared/events'
 
 type EventCallback = (channel: string, payload: unknown) => void
 
@@ -83,9 +83,10 @@ export class SessionManager {
     resumeSessionId?: string
   ): Promise<void> {
     const transport = this.resolveTransport(env.config)
-    // Project override > Environment default > registry default.
-    const providerKind = project.providerKind ?? env.providerKind ?? DEFAULT_PROVIDER_KIND
-    const provider = getProvider(providerKind)
+    const provider = getProvider(resolveProviderKind({
+      projectKind: project.providerKind,
+      envKind: env.providerKind
+    }))
     const built = provider.buildSpawnArgs({
       cwd: project.path,
       // Project override wins; otherwise inherit the env's default model.
