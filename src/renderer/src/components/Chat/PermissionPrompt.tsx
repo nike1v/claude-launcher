@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import { respondPermission } from '../../ipc/bridge'
 
 interface Props {
@@ -8,7 +9,7 @@ interface Props {
   resolved?: boolean
 }
 
-export function PermissionPrompt({ sessionId, toolUseId, toolName, input, resolved }: Props) {
+export const PermissionPrompt = memo(function PermissionPrompt({ sessionId, toolUseId, toolName, input, resolved }: Props) {
   const handle = (decision: 'allow' | 'deny') =>
     respondPermission(sessionId, decision, toolUseId)
 
@@ -50,4 +51,4 @@ export function PermissionPrompt({ sessionId, toolUseId, toolName, input, resolv
       )}
     </div>
   )
-}
+})

@@ -7,8 +7,12 @@ interface Props {
 }
 
 export function ChatPanel({ sessionId }: Props) {
-  const { sessions } = useSessionsStore()
-  const session = sessions[sessionId]
+  // Per-session selector — without it, ChatPanel for every open tab
+  // re-renders on every sessions-store mutation (status flips,
+  // hasUnread, sessionRef pin, …) and cascades into MessageList,
+  // which is heavy. Now ChatPanel only re-renders when *this* tab's
+  // session record actually changes.
+  const session = useSessionsStore(s => s.sessions[sessionId])
 
   if (!session) return <></>
 

@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import { CopyButton } from './CopyButton'
 import { AttachmentImage } from './AttachmentImage'
 import type { UserAttachment } from '../../../../shared/events'
@@ -9,7 +10,7 @@ interface Props {
   attachments?: ReadonlyArray<UserAttachment>
 }
 
-export function UserMessage({ text, attachments }: Props) {
+export const UserMessage = memo(function UserMessage({ text, attachments }: Props) {
   const hasAttachments = attachments && attachments.length > 0
 
   return (
@@ -45,7 +46,7 @@ export function UserMessage({ text, attachments }: Props) {
       </div>
     </div>
   )
-}
+})
 
 function DocumentChip({ attachment }: { attachment: Extract<UserAttachment, { kind: 'document' }> }) {
   const handleSave = async () => {

@@ -1,4 +1,4 @@
-import { useMemo, useRef, useEffect, type ReactNode } from 'react'
+import { memo, useMemo, useRef, useEffect, type ReactNode } from 'react'
 import { Loader2 } from 'lucide-react'
 import { useMessagesStore } from '../../store/messages'
 import { useSessionsStore } from '../../store/sessions'
@@ -17,7 +17,14 @@ interface Props {
 
 const EMPTY: readonly never[] = []
 
-export function MessageList({ sessionId }: Props) {
+// memo'd: when activeSessionId changes, App re-renders and would
+// otherwise cascade through ChatPanel into MessageList for every tab —
+// each running deriveItems + groupMessages over its full event log
+// even though nothing about the inactive tabs' content changed. The
+// `sessionId` prop is stable per tab so memo skips those re-renders.
+// MessageList still re-runs when its own selectors fire (events on
+// this session, status flips).
+export const MessageList = memo(function MessageList({ sessionId }: Props) {
   // Per-session selector — without this, MessageList re-renders on
   // every event in *any* session because the default object identity
   // changes each store update. The stable EMPTY fallback keeps
@@ -119,4 +126,4 @@ export function MessageList({ sessionId }: Props) {
       </div>
     </div>
   )
-}
+})

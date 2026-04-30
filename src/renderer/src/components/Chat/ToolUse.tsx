@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { memo, useState } from 'react'
 import { ChevronRight, ChevronDown } from 'lucide-react'
 
 interface Props {
@@ -8,7 +8,7 @@ interface Props {
   output?: string
 }
 
-export function ToolUse({ name, input, status, output }: Props) {
+export const ToolUse = memo(function ToolUse({ name, input, status, output }: Props) {
   const [expanded, setExpanded] = useState(false)
   const summary = summarizeInput(name, input)
   const isError = status === 'failed'
@@ -54,7 +54,7 @@ export function ToolUse({ name, input, status, output }: Props) {
       )}
     </div>
   )
-}
+})
 
 function summarizeInput(name: string, input: unknown): string {
   if (!input || typeof input !== 'object') return ''
