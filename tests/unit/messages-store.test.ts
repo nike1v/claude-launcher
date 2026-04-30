@@ -6,7 +6,7 @@ const reset = (): void => {
   useMessagesStore.setState({ eventsBySession: {} })
 }
 
-const assistantItem = (id: string): NormalizedEvent => ({
+const item = (id: string): NormalizedEvent => ({
   kind: 'item.started',
   itemId: id,
   turnId: 't-1',
@@ -22,17 +22,30 @@ const completed = (id: string): NormalizedEvent => ({
 describe('messages store', () => {
   beforeEach(reset)
 
-  it('appends events in order', () => {
+  it('appendEvents adds a batch in one mutation', () => {
     const s = useMessagesStore.getState()
-    s.appendEvent('s1', assistantItem('a'))
-    s.appendEvent('s1', completed('a'))
-    expect(useMessagesStore.getState().eventsBySession['s1']).toHaveLength(2)
+    s.appendEvents('s1', [item('a'), completed('a'), item('b')])
+    expect(useMessagesStore.getState().eventsBySession['s1']).toHaveLength(3)
+  })
+
+  it('appendEvents with an empty array is a no-op', () => {
+    const s = useMessagesStore.getState()
+    s.appendEvents('s1', [])
+    expect(useMessagesStore.getState().eventsBySession['s1']).toBeUndefined()
+  })
+
+  it('appendEvents preserves order across multiple calls', () => {
+    const s = useMessagesStore.getState()
+    s.appendEvents('s1', [item('a')])
+    s.appendEvents('s1', [item('b')])
+    const events = useMessagesStore.getState().eventsBySession['s1']
+    expect(events.map(e => 'itemId' in e ? e.itemId : '')).toEqual(['a', 'b'])
   })
 
   it('prependEvents puts events before existing ones', () => {
     const s = useMessagesStore.getState()
-    s.appendEvent('s1', assistantItem('second'))
-    s.prependEvents('s1', [assistantItem('first')])
+    s.appendEvents('s1', [item('second')])
+    s.prependEvents('s1', [item('first')])
     const events = useMessagesStore.getState().eventsBySession['s1']
     expect(events).toHaveLength(2)
     expect(events[0]).toMatchObject({ itemId: 'first' })
@@ -41,8 +54,8 @@ describe('messages store', () => {
 
   it('clearSession removes only the targeted session', () => {
     const s = useMessagesStore.getState()
-    s.appendEvent('s1', assistantItem('a'))
-    s.appendEvent('s2', assistantItem('b'))
+    s.appendEvents('s1', [item('a')])
+    s.appendEvents('s2', [item('b')])
     s.clearSession('s1')
     expect(useMessagesStore.getState().eventsBySession['s1']).toBeUndefined()
     expect(useMessagesStore.getState().eventsBySession['s2']).toHaveLength(1)

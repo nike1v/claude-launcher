@@ -49,7 +49,7 @@ describe('SessionManager integration (mock transport)', () => {
 
     const eventKinds = received
       .filter(r => r.channel === 'session:event')
-      .map(r => (r.payload as { event: NormalizedEvent }).event.kind)
+      .flatMap(r => (r.payload as { events: NormalizedEvent[] }).events.map(e => e.kind))
 
     expect(eventKinds).toContain('session.started')
     expect(eventKinds).toContain('turn.started')

@@ -240,8 +240,14 @@ export interface IpcChannels {
   // Main calls electron's clipboard.writeText() directly.
   'clipboard:write': string
 
-  // Main → Renderer (events)
-  'session:event': { sessionId: string; event: NormalizedEvent }
+  // Main → Renderer (events). Carries a batch of events from one
+  // provider-stdout chunk so the renderer applies a single store
+  // mutation per chunk (one render) instead of one per emitted
+  // NormalizedEvent — a claude assistant event expands to ~5 events
+  // (turn.started + tokenUsage.updated + item.started + content.delta
+  // + item.completed), so per-event IPC + render thrashed badly on
+  // long histories.
+  'session:event': { sessionId: string; events: NormalizedEvent[] }
   'session:status': { sessionId: string; status: Session['status']; errorMessage?: string }
   'projects:loaded': { projects: Project[] }
   'environments:loaded': { environments: Environment[] }

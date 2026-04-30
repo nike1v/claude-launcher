@@ -49,7 +49,7 @@ function useSubmit({
   clearAttachments: () => void
 }): () => boolean {
   const [editor] = useLexicalComposerContext()
-  const { appendEvent } = useMessagesStore()
+  const { appendEvents } = useMessagesStore()
 
   return useCallback(() => {
     let didSend = false
@@ -78,19 +78,21 @@ function useSubmit({
       }
       const itemId = `local-user-${crypto.randomUUID()}`
       const turnId = `local-turn-${crypto.randomUUID()}`
-      appendEvent(sessionId, {
-        kind: 'item.started',
-        itemId,
-        turnId,
-        itemType: 'user_message',
-        text,
-        attachments: renderAtts.length ? renderAtts : undefined
-      })
-      appendEvent(sessionId, {
-        kind: 'item.completed',
-        itemId,
-        status: 'completed'
-      })
+      appendEvents(sessionId, [
+        {
+          kind: 'item.started',
+          itemId,
+          turnId,
+          itemType: 'user_message',
+          text,
+          attachments: renderAtts.length ? renderAtts : undefined
+        },
+        {
+          kind: 'item.completed',
+          itemId,
+          status: 'completed'
+        }
+      ])
 
       root.clear()
       const fresh = $createParagraphNode()
@@ -104,7 +106,7 @@ function useSubmit({
       didSend = true
     })
     return didSend
-  }, [editor, sessionId, disabled, attachments, clearAttachments, appendEvent])
+  }, [editor, sessionId, disabled, attachments, clearAttachments, appendEvents])
 }
 
 function ComposerInner({

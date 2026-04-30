@@ -8,7 +8,10 @@ import type { NormalizedEvent } from '../../../shared/events'
 
 interface MessagesStore {
   eventsBySession: Record<string, NormalizedEvent[]>
-  appendEvent: (sessionId: string, event: NormalizedEvent) => void
+  // Append a batch of events for a session in one zustand publish.
+  // Adapter chunks expand to ~5 events each — applying one mutation
+  // per chunk avoids a render-storm on long histories.
+  appendEvents: (sessionId: string, events: readonly NormalizedEvent[]) => void
   prependEvents: (sessionId: string, events: readonly NormalizedEvent[]) => void
   clearSession: (sessionId: string) => void
 }
@@ -16,13 +19,14 @@ interface MessagesStore {
 export const useMessagesStore = create<MessagesStore>((set) => ({
   eventsBySession: {},
 
-  appendEvent: (sessionId, event) =>
+  appendEvents: (sessionId, events) =>
     set(state => {
+      if (events.length === 0) return state
       const existing = state.eventsBySession[sessionId] ?? []
       return {
         eventsBySession: {
           ...state.eventsBySession,
-          [sessionId]: [...existing, event]
+          [sessionId]: [...existing, ...events]
         }
       }
     }),

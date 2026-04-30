@@ -344,23 +344,31 @@ export class SessionManager {
     session.lineBuffer = lines.pop() ?? ''
 
     for (const line of lines) {
-      // adapter.parseChunk takes a chunk; feeding it one complete line at
-      // a time keeps its own internal buffer empty after every call.
+      // adapter.parseChunk takes a chunk; feeding it one complete line
+      // at a time keeps its own internal buffer empty after every call.
       const events = session.adapter.parseChunk(line + '\n')
+      if (events.length === 0) continue
+
+      // Status transitions fire individually so the busy/ready timing
+      // matches the actual turn boundary inside the chunk. The bulk of
+      // the events is delivered in a single batched IPC at the end.
       for (const event of events) {
-        this.dispatchEvent(session, event, markReady)
+        this.applyStatusTransition(session, event, markReady)
       }
+      this.onEvent('session:event', { sessionId: session.sessionId, events })
     }
   }
 
-  private dispatchEvent(
+  private applyStatusTransition(
     session: ActiveSession,
     event: NormalizedEvent,
     markReady: () => void
   ): void {
     if (event.kind === 'session.started') {
       markReady()
-    } else if (event.kind === 'turn.started') {
+      return
+    }
+    if (event.kind === 'turn.started') {
       // A new turn opened — flip to busy so the renderer shows the
       // thinking spinner. Bypass markReady's once-only gate so this
       // fires every turn, but still clear the fallback timer.
@@ -370,7 +378,9 @@ export class SessionManager {
         session.readyTimer = null
       }
       this.onEvent('session:status', { sessionId: session.sessionId, status: 'busy' })
-    } else if (event.kind === 'turn.completed') {
+      return
+    }
+    if (event.kind === 'turn.completed') {
       // Turn finished — back to ready so the spinner clears.
       session.markedReady = true
       if (session.readyTimer) {
@@ -379,7 +389,5 @@ export class SessionManager {
       }
       this.onEvent('session:status', { sessionId: session.sessionId, status: 'ready' })
     }
-
-    this.onEvent('session:event', { sessionId: session.sessionId, event })
   }
 }

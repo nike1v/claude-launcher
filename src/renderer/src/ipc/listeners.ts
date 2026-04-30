@@ -8,14 +8,16 @@ import type { NormalizedEvent } from '../../../shared/events'
 
 export function useIpcListeners(): void {
   const { updateSession } = useSessionsStore()
-  const { appendEvent } = useMessagesStore()
+  const { appendEvents } = useMessagesStore()
 
   useEffect(() => {
     const unsubEvent = window.electronAPI.on(
       'session:event',
-      ({ sessionId, event }: IpcChannels['session:event']) => {
-        appendEvent(sessionId, event)
-        applyMetadata(sessionId, event)
+      ({ sessionId, events }: IpcChannels['session:event']) => {
+        // Single store mutation for the whole batch — the renderer
+        // re-renders once per chunk instead of once per emitted event.
+        appendEvents(sessionId, events)
+        for (const event of events) applyMetadata(sessionId, event)
         if (sessionId !== useSessionsStore.getState().activeSessionId) {
           updateSession(sessionId, { hasUnread: true })
         }

@@ -127,11 +127,14 @@ describe('SessionManager', () => {
 
     proc.stdout.emit('data', Buffer.from(line + '\n'))
 
-    // ClaudeAdapter translates the assistant event into:
+    // ClaudeAdapter translates the assistant event into a batch:
     // turn.started → tokenUsage.updated → item.started(assistant_message)
     //   → content.delta(assistant_text, "Hi") → item.completed.
+    // session-manager delivers the whole batch as one IPC message.
     const eventCalls = onEvent.mock.calls.filter(c => c[0] === 'session:event')
-    const kinds = eventCalls.map(c => (c[1] as { event: { kind: string } }).event.kind)
+    expect(eventCalls).toHaveLength(1)
+    const batch = (eventCalls[0][1] as { events: { kind: string }[] }).events
+    const kinds = batch.map(e => e.kind)
     expect(kinds).toContain('turn.started')
     expect(kinds).toContain('item.started')
     expect(kinds).toContain('content.delta')
