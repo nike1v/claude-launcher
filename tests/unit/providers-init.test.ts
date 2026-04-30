@@ -3,7 +3,6 @@ import { initProviders } from '../../src/main/providers/init'
 import {
   hasProvider,
   getProvider,
-  getAdapter,
   unregisterAll
 } from '../../src/main/providers/registry'
 
@@ -12,11 +11,10 @@ beforeEach(() => {
 })
 
 describe('initProviders', () => {
-  it('registers ClaudeProvider + ClaudeAdapter', () => {
+  it('registers ClaudeProvider', () => {
     initProviders()
     expect(hasProvider('claude')).toBe(true)
     expect(getProvider('claude').kind).toBe('claude')
-    expect(getAdapter('claude').kind).toBe('claude')
   })
 
   it('is idempotent — calling twice does not throw', () => {

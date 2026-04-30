@@ -1,13 +1,10 @@
 // One-shot startup wiring — call from main `app.whenReady()` before any
-// IPC handler runs. Idempotent (the registry overwrites prior entries
-// for the same kind).
+// IPC handler runs. Idempotent: register() overwrites the prior entry
+// for the same kind, so calling this twice is harmless.
 
-import { register, hasProvider } from './registry'
+import { register } from './registry'
 import { ClaudeProvider } from './claude/provider'
-import { ClaudeAdapter } from './claude/adapter'
 
 export function initProviders(): void {
-  if (!hasProvider('claude')) {
-    register(new ClaudeProvider(), new ClaudeAdapter())
-  }
+  register(new ClaudeProvider())
 }

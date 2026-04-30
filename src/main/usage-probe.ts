@@ -10,11 +10,7 @@ import type { HostType, UsageProbeResult } from '../shared/types'
 import { parseUsage } from './usage-parser'
 import { validateSshHost, validateWslDistro } from './transports/validate-ssh'
 import { filteredEnvFor } from './transports/shared'
-
-// Usage probe only spawns claude today (it's claude's /usage panel).
-// Hardcoded scrub list mirrors what ClaudeProvider.envScrubList returns
-// so a remote claude doesn't inherit the launcher's local OAuth tokens.
-const CLAUDE_ENV_SCRUB = ['CLAUDE_CODE_*', 'CLAUDE_RPC_TOKEN'] as const
+import { CLAUDE_ENV_SCRUB } from './providers/claude/provider'
 import { shQuote } from './transports/probe'
 import { sshConnectArgs, sshTarget } from './transports/ssh-args'
 

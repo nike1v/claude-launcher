@@ -1,5 +1,6 @@
 import type { ChildProcess } from 'node:child_process'
 import type { HostType } from '../../shared/types'
+import type { EnvScrubPattern } from '../providers/types'
 
 export interface SpawnOptions {
   host: HostType
@@ -11,10 +12,9 @@ export interface SpawnOptions {
   // shell convention.
   bin: string
   args: readonly string[]
-  // Env vars to strip from the inherited environment before spawn.
-  // Patterns ending with '*' match prefix; otherwise exact match.
-  // Transports filter `process.env` against this list.
-  envScrubKeys?: readonly string[]
+  // Env vars to strip from the inherited environment before spawn,
+  // discriminated by `prefix` vs `exact`.
+  envScrubKeys?: readonly EnvScrubPattern[]
 }
 
 export type ProbeResult = { ok: true; version: string } | { ok: false; reason: string }

@@ -131,27 +131,12 @@ describe('ClaudeProvider.formatControl', () => {
   })
 })
 
-describe('ClaudeProvider.transcriptDir', () => {
-  it('returns an absolute path for local hosts', () => {
-    const dir = provider.transcriptDir({ kind: 'local' }, '/Users/me/proj')
-    expect(dir).not.toBeNull()
-    expect(dir!.endsWith('/.claude/projects/-Users-me-proj')).toBe(true)
-  })
-
-  it('returns a $HOME-prefixed path for wsl hosts', () => {
-    const dir = provider.transcriptDir({ kind: 'wsl', distro: 'Ubuntu' }, '/home/x/proj')
-    expect(dir).toBe('$HOME/.claude/projects/-home-x-proj')
-  })
-
-  it('returns a $HOME-prefixed path for ssh hosts', () => {
-    const dir = provider.transcriptDir({ kind: 'ssh', host: 'box' }, '/srv/app')
-    expect(dir).toBe('$HOME/.claude/projects/-srv-app')
-  })
-})
-
 describe('ClaudeProvider.envScrubList', () => {
-  it('lists CLAUDE_CODE_* and CLAUDE_RPC_TOKEN', () => {
+  it('returns the prefix + exact patterns for claude OAuth tokens', () => {
     const keys = provider.envScrubList({ kind: 'local' })
-    expect([...keys]).toEqual(['CLAUDE_CODE_*', 'CLAUDE_RPC_TOKEN'])
+    expect([...keys]).toEqual([
+      { prefix: 'CLAUDE_CODE_' },
+      { exact: 'CLAUDE_RPC_TOKEN' }
+    ])
   })
 })

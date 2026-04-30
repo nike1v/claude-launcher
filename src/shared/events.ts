@@ -1,22 +1,20 @@
-// Provider-agnostic event taxonomy. Every IProviderAdapter translates its
-// native wire format into this shape; the renderer + history reader render
-// only this shape. Sized between claude's stream-json (4 variants) and
-// t3code's runtime events (~45 variants) — small enough to enumerate but
-// rich enough to capture "items inside a turn" + "streaming content
-// deltas" + "approval requests separate from items".
-//
-// Live and backfill flow through the same union: `ClaudeAdapter.parseChunk`
-// (live, parses one stdout chunk) and `parseTranscript` (backfill, parses
-// a JSONL file) both return `NormalizedEvent[]`.
+// Provider-agnostic event taxonomy. Each IProvider's adapter (added in
+// a later PR) translates its native wire format into this shape; the
+// renderer + history reader render only this shape. Sized between
+// claude's stream-json (4 variants) and t3code's runtime events (~45
+// variants) — small enough to enumerate but rich enough to capture
+// "items inside a turn" + "streaming content deltas" + "approval
+// requests separate from items".
 
 // ── Provider identity ────────────────────────────────────────────────────
 
-// Persisted on Project / Environment so we know which provider+adapter to
-// resolve from the registry on session restore. Defaulting an absent field
-// to 'claude' keeps v0.4 projects.json files loading unchanged.
 export type ProviderKind = 'claude' | 'codex' | 'opencode' | 'cursor'
 
 export const PROVIDER_KINDS: readonly ProviderKind[] = ['claude', 'codex', 'opencode', 'cursor']
+
+// Persisted Project / Environment records before this field existed
+// load with `providerKind: undefined`; this is the value to substitute.
+export const DEFAULT_PROVIDER_KIND: ProviderKind = 'claude'
 
 export function isProviderKind(v: unknown): v is ProviderKind {
   return typeof v === 'string' && (PROVIDER_KINDS as readonly string[]).includes(v)
@@ -24,10 +22,11 @@ export function isProviderKind(v: unknown): v is ProviderKind {
 
 // ── Approval / permission decisions ──────────────────────────────────────
 
-// Four states match what claude actually supports today (the "always allow"
-// affordance is `acceptForSession`) and what codex / cursor expose. The
-// renderer's PermissionPrompt still drives only allow/deny today; the wire
-// format is widened now so PR 4 doesn't have to revisit the IPC shape.
+// Four states match what claude actually supports today (the "always
+// allow" affordance is `acceptForSession`) and what codex / cursor
+// expose. The renderer's PermissionPrompt still drives only allow/deny
+// today; the wire format is widened so providers don't have to revisit
+// the IPC shape later.
 export type ApprovalDecision = 'accept' | 'acceptForSession' | 'decline' | 'cancel'
 
 // ── NormalizedEvent supporting types ─────────────────────────────────────

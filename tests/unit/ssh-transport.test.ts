@@ -105,7 +105,7 @@ describe('SshTransport.spawn — argv assembly', () => {
         path: '/x',
         bin: 'claude',
         args: CLAUDE_ARGS,
-        envScrubKeys: ['CLAUDE_CODE_*']
+        envScrubKeys: [{ prefix: 'CLAUDE_CODE_' }]
       })
       const env = spawnMock.mock.calls[0][2]?.env
       expect(env?.CLAUDE_CODE_OAUTH_TOKEN).toBeUndefined()

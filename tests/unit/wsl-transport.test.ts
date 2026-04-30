@@ -96,7 +96,7 @@ describe('WslTransport', () => {
       path: '/tmp',
       bin: 'claude',
       args: CLAUDE_ARGS,
-      envScrubKeys: ['CLAUDE_CODE_*']
+      envScrubKeys: [{ prefix: 'CLAUDE_CODE_' }]
     })
 
     const spawnEnv = spawnMock.mock.calls[0][2]?.env

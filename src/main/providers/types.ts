@@ -1,28 +1,20 @@
-// Provider abstraction. Two interfaces, one per concern:
+// Provider abstraction. IProvider captures lifecycle: what binary, what
+// argv, how to format a user message / control command for stdin, what
+// env vars to scrub. Wire-format translation (provider stdout →
+// NormalizedEvent) lives in IProviderAdapter — added when the renderer
+// is migrated off the claude-shaped event union.
 //
-// - IProvider:      lifecycle. What binary, what argv, how to format a
-//                   user message / control command for stdin, what env
-//                   vars to scrub, where transcripts live.
-//
-// - IProviderAdapter: wire-format translation. Provider stdout (chunk or
-//                     transcript file) → NormalizedEvent[].
-//
-// Splitting these lets us swap parsers without touching spawn logic and
-// vice versa. PR 1 just defines the shapes; PR 2 fills them in for claude.
-//
-// Both are resolved at runtime by ProviderKind via the registry. The
-// registry default is 'claude' — projects without `providerKind` set
-// keep working as they did in v0.4.
+// Resolved at runtime by ProviderKind via the registry. The registry's
+// default kind is 'claude' (DEFAULT_PROVIDER_KIND in shared/events).
 
 import type { HostType, SendAttachment } from '../../shared/types'
-import type { ApprovalDecision, NormalizedEvent, ProviderKind } from '../../shared/events'
+import type { ApprovalDecision, ProviderKind } from '../../shared/events'
 
 // ── Capabilities ─────────────────────────────────────────────────────────
 
 // Declarative per-provider feature flags. The renderer mounts UI surfaces
 // (session-id input, permission prompt, usage modal, model picker)
-// conditionally on these — cleaner than the "method returns null when not
-// applicable" pattern, and easier to lint.
+// conditionally on these.
 
 export interface ProviderCapabilities {
   // 'by-id'      — provider takes a session id and resumes that one
@@ -61,9 +53,8 @@ export interface SpawnOpts {
   // when capabilities.resume === 'none' the provider ignores it.
   resumeRef?: string
   // Provider-specific extras can ride along — each provider knows what to
-  // do with them, others ignore. Keeping this open-ended avoids churning
-  // SpawnOpts every time a provider grows a new flag (codex sandbox
-  // mode, claude permission policy, etc.).
+  // do with them, others ignore. Keeps SpawnOpts stable when a provider
+  // grows a new flag (codex sandbox mode, claude permission policy, etc.).
   extra?: Readonly<Record<string, unknown>>
 }
 
@@ -72,7 +63,9 @@ export type ControlCommand =
   | { kind: 'approval'; requestId: string; decision: ApprovalDecision }
   | { kind: 'user-input-response'; requestId: string; answers: Readonly<Record<string, unknown>> }
 
-export type ProbeResult = { ok: true; version: string } | { ok: false; reason: string }
+// Env-var scrub patterns. Discriminated to avoid a stringly-typed
+// trailing-`*` convention and to keep the matcher in shared.ts simple.
+export type EnvScrubPattern = { exact: string } | { prefix: string }
 
 // ── IProvider ────────────────────────────────────────────────────────────
 
@@ -80,9 +73,6 @@ export interface IProvider {
   readonly kind: ProviderKind
   readonly label: string
   readonly capabilities: ProviderCapabilities
-
-  // Pre-flight check — version probe over the env's transport.
-  probeBinary(host: HostType): Promise<ProbeResult>
 
   // Build the inner argv for `transport.spawn`. The transport handles
   // host wrapping (ssh foo bar — bash -lc, wsl.exe -d distro --, …);
@@ -100,33 +90,8 @@ export interface IProvider {
   // session-manager falls back to SIGINT for interrupt, etc.).
   formatControl(cmd: ControlCommand): string | null
 
-  // Where the provider stores on-disk transcripts on the env, if anywhere.
-  // null means `capabilities.transcripts === 'none'` for this host.
-  transcriptDir(host: HostType, projectPath: string): string | null
-
-  // Env vars to scrub from the inherited environment before spawn. Today
-  // claude needs CLAUDE_CODE_OAUTH_TOKEN stripped on remotes so the
-  // remote uses its own creds, not the launcher's local creds. Generalises
-  // per-provider.
-  envScrubList(host: HostType): readonly string[]
-}
-
-// ── IProviderAdapter ─────────────────────────────────────────────────────
-
-export interface IProviderAdapter {
-  readonly kind: ProviderKind
-
-  // Parse one buffered chunk of provider stdout into zero-or-more
-  // normalized events. Most providers are newline-delimited and emit
-  // 0 or 1 events per line; some (JSON-RPC bidirectional) need to
-  // distinguish notifications from request/responses, hence the array.
-  // Adapters keep their own internal line-buffer state if their wire
-  // format isn't strictly newline-delimited.
-  parseChunk(chunk: string): NormalizedEvent[]
-
-  // Read a transcript file off disk and emit normalized events for
-  // backfill. Symmetrical with parseChunk so live + backfill render
-  // through the same code path. For providers with
-  // `capabilities.transcripts === 'none'` this returns [].
-  parseTranscript(content: string): NormalizedEvent[]
+  // Env vars to scrub from the inherited environment before spawn —
+  // typically provider-specific OAuth tokens that must not reach a
+  // remote child.
+  envScrubList(host: HostType): readonly EnvScrubPattern[]
 }
