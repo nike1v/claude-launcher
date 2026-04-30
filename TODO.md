@@ -64,11 +64,45 @@ host-to-agent integration use case, so the spawn pattern fits cleanly.
 
 ## Deferred / nice-to-have (no urgency)
 
-- **Search across chat history** — browse / grep the JSONL transcripts.
-  Open question: scope per-project, per-environment, or global.
-- **Export current chat to markdown / clipboard** — top-of-chat menu.
-- **Manage / prune saved conversations** — pairs with `lastClaudeSessionId`
-  reset, lets the user list / delete transcripts on the env.
+### MessageList virtualization
+**What:** render only the visible slice of message rows; keep the rest
+as off-DOM placeholders. Today MessageList renders every message
+component for every event in the session's events array — at 200+
+turns the initial mount of a tab is visibly slow (hundreds of
+`<AssistantMessage>` / `<ToolUse>` subtrees, each with its own
+ReactMarkdown / Lexical / lucide tree).
+
+**Why deferred:** the alpha.8 React.memo pass + alpha.9 compact
+replay events brought tab-switching from "noticeable" to "tolerable"
+on multi-hundred-turn chats. Virtualization is the next lever and
+has the right semantics (the user is always at the bottom of a long
+chat anyway), but it's a chunky change — react-window or
+react-virtuoso, sticky scroll-to-bottom, ResizeObserver coordination,
+matching the existing ToolGroup collapsing — and we don't yet have a
+sharp pain point that justifies it. Revisit when somebody complains
+again or when we want to support multi-thousand-turn sessions.
+
+**Sketch when we do it:**
+- One row per RenderGroup (the existing groupMessages output) so
+  ToolGroup remains a single virtual row with its child tools inside
+  rather than getting un-grouped by the virtualizer.
+- Variable row heights — react-virtuoso handles this without
+  upfront measurement.
+- Keep the bottom-pinned scroll behaviour: virtuoso's
+  `followOutput="auto"` does this natively.
+- Adapter / store layer doesn't change — virtualization is purely
+  inside MessageList.
+
+### Search across chat history
+**What:** browse / grep the JSONL transcripts. Open question: scope
+per-project, per-environment, or global.
+
+### Export current chat to markdown / clipboard
+Top-of-chat menu.
+
+### Manage / prune saved conversations
+Pairs with `lastSessionRef` reset, lets the user list / delete
+transcripts on the env.
 
 ## Closed (recent shipped work)
 
