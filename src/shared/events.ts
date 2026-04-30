@@ -136,8 +136,13 @@ export type NormalizedEvent =
   // pattern. The shape is discriminated by `itemType` so each item
   // carries the metadata its renderer actually needs.
   | (
-      | { itemType: 'assistant_message' }
-      | { itemType: 'reasoning' }
+      // assistant_message / reasoning carry optional inline `text` —
+      // populated when the provider hands the block whole (transcript
+      // replay, claude live), absent when the text streams in via
+      // content.delta (codex / future streaming providers). The renderer
+      // treats it as the initial value; subsequent deltas append.
+      | { itemType: 'assistant_message'; text?: string }
+      | { itemType: 'reasoning'; text?: string }
       | { itemType: 'plan' }
       | { itemType: 'web_search'; query?: string }
       | { itemType: 'unknown' }

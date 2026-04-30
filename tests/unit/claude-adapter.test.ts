@@ -209,6 +209,47 @@ describe('ClaudeAdapter — replay mode (parseTranscript)', () => {
     expect(events.find(e => e.kind === 'item.completed' && e.itemId === 'tr-1'))
       .toMatchObject({ output: 'a b c', isError: false })
   })
+
+  it('emits compact events for atomic blocks (text inline on item.started, no delta or completion)', () => {
+    const transcript = JSON.stringify(assistant([
+      { type: 'text', text: 'reply' },
+      { type: 'thinking', thinking: 'pondering' }
+    ]))
+    const events = new ClaudeAdapter().parseTranscript(transcript)
+    // Compact replay shape: one item.started per text/thinking block,
+    // text inlined, no content.delta, no item.completed for them.
+    const textItem = events.find(e => e.kind === 'item.started' && e.itemType === 'assistant_message')
+    expect(textItem).toMatchObject({ itemType: 'assistant_message', text: 'reply' })
+    const reasoningItem = events.find(e => e.kind === 'item.started' && e.itemType === 'reasoning')
+    expect(reasoningItem).toMatchObject({ itemType: 'reasoning', text: 'pondering' })
+    expect(events.some(e => e.kind === 'content.delta')).toBe(false)
+    expect(events.some(e => e.kind === 'item.completed')).toBe(false)
+  })
+
+  it('skips turn / tokenUsage / session.stateChanged events in replay', () => {
+    const lines = [
+      JSON.stringify({
+        type: 'system', subtype: 'init',
+        session_id: 's', model: 'm', cwd: '/x', tools: [], mcp_servers: []
+      }),
+      JSON.stringify(assistant([{ type: 'text', text: 'hi' }])),
+      JSON.stringify({
+        type: 'result',
+        subtype: 'success',
+        session_id: 's',
+        is_error: false,
+        num_turns: 1,
+        modelUsage: { 'claude-opus-4-7': { contextWindow: 200_000 } }
+      })
+    ].join('\n')
+    const events = new ClaudeAdapter().parseTranscript(lines)
+    const kinds = events.map(e => e.kind)
+    expect(kinds).toContain('session.started')
+    expect(kinds).not.toContain('session.stateChanged')
+    expect(kinds).not.toContain('turn.started')
+    expect(kinds).not.toContain('turn.completed')
+    expect(kinds).not.toContain('tokenUsage.updated')
+  })
 })
 
 describe('ClaudeAdapter — result event', () => {

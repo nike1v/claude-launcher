@@ -92,9 +92,13 @@ function makeItem(event: Extract<NormalizedEvent, { kind: 'item.started' }>): Re
     case 'user_message':
       return { id: event.itemId, kind: 'user', text: event.text, attachments: event.attachments }
     case 'assistant_message':
-      return { id: event.itemId, kind: 'assistant', text: '' }
+      // text is inline when the provider sends the block whole
+      // (transcript replay; claude live doesn't actually stream blocks
+      // either but we keep the start/delta/complete shape for codex).
+      // Subsequent content.delta events still append.
+      return { id: event.itemId, kind: 'assistant', text: event.text ?? '' }
     case 'reasoning':
-      return { id: event.itemId, kind: 'reasoning', text: '' }
+      return { id: event.itemId, kind: 'reasoning', text: event.text ?? '' }
     case 'tool_use':
       // Claude's permission-prompt-tool flow shows up as a tool_use whose
       // name includes "permission". Distinct render path: it's a blocking

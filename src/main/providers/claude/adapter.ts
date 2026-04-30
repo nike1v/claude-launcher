@@ -92,7 +92,12 @@ export class ClaudeAdapter implements IProviderAdapter {
         model: event.model,
         cwd: event.cwd
       })
-      out.push({ kind: 'session.stateChanged', state: 'ready' })
+      // Live: session-manager flips status to ready on this. Replay
+      // skips it — the session is already running by the time we replay
+      // its transcript, the live status flow is unaffected.
+      if (this.mode === 'live') {
+        out.push({ kind: 'session.stateChanged', state: 'ready' })
+      }
       return
     }
 
@@ -116,47 +121,70 @@ export class ClaudeAdapter implements IProviderAdapter {
     if (this.openTurnId) return this.openTurnId
     const turnId = `turn-${randomUUID()}`
     this.openTurnId = turnId
-    out.push({ kind: 'turn.started', turnId, model })
+    // Replay skips turn.started — the renderer doesn't group items by
+    // turnId and the StatusBar's busy/ready state is driven by live
+    // status IPC, not transcript playback. Cuts ~60 events from a 30-
+    // turn transcript. Live keeps the event so session-manager can flip
+    // the spinner on each turn.
+    if (this.mode === 'live') {
+      out.push({ kind: 'turn.started', turnId, model })
+    }
     return turnId
   }
 
   private translateAssistant(event: AssistantEvent, out: NormalizedEvent[]): void {
     const turnId = this.ensureTurn(out, event.message.model)
+    const isReplay = this.mode === 'replay'
 
-    // Per-call usage snapshot. StatusBar's context-fill meter reads the
-    // most recent tokenUsage.updated to compute "used" tokens.
-    const u = event.message.usage
-    if (u) {
-      out.push({
-        kind: 'tokenUsage.updated',
-        usage: {
-          inputTokens: u.input_tokens,
-          outputTokens: u.output_tokens,
-          cachedInputTokens: (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0)
-        }
-      })
+    // Per-call usage snapshot — live only. StatusBar reads the most
+    // recent tokenUsage.updated for the context-fill meter; transcripts
+    // don't drive that (the meter falls back to cached lastContextWindow
+    // on the project).
+    if (!isReplay) {
+      const u = event.message.usage
+      if (u) {
+        out.push({
+          kind: 'tokenUsage.updated',
+          usage: {
+            inputTokens: u.input_tokens,
+            outputTokens: u.output_tokens,
+            cachedInputTokens: (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0)
+          }
+        })
+      }
     }
 
     for (const block of event.message.content) {
       if (block.type === 'text') {
         if (!block.text.trim()) continue
         const itemId = `text-${randomUUID()}`
-        out.push({ kind: 'item.started', itemId, turnId, itemType: 'assistant_message' })
-        out.push({ kind: 'content.delta', itemId, streamKind: 'assistant_text', text: block.text })
-        out.push({ kind: 'item.completed', itemId, status: 'completed' })
+        if (isReplay) {
+          // Replay: text is whole already. One event with text inline.
+          out.push({ kind: 'item.started', itemId, turnId, itemType: 'assistant_message', text: block.text })
+        } else {
+          // Live: keep the start/delta/complete shape so streaming
+          // providers (codex) can plug in without us revisiting this.
+          out.push({ kind: 'item.started', itemId, turnId, itemType: 'assistant_message' })
+          out.push({ kind: 'content.delta', itemId, streamKind: 'assistant_text', text: block.text })
+          out.push({ kind: 'item.completed', itemId, status: 'completed' })
+        }
         continue
       }
       if (block.type === 'thinking') {
         const itemId = `think-${randomUUID()}`
-        out.push({ kind: 'item.started', itemId, turnId, itemType: 'reasoning' })
-        out.push({ kind: 'content.delta', itemId, streamKind: 'reasoning_text', text: block.thinking })
-        out.push({ kind: 'item.completed', itemId, status: 'completed' })
+        if (isReplay) {
+          out.push({ kind: 'item.started', itemId, turnId, itemType: 'reasoning', text: block.thinking })
+        } else {
+          out.push({ kind: 'item.started', itemId, turnId, itemType: 'reasoning' })
+          out.push({ kind: 'content.delta', itemId, streamKind: 'reasoning_text', text: block.thinking })
+          out.push({ kind: 'item.completed', itemId, status: 'completed' })
+        }
         continue
       }
       if (block.type === 'tool_use') {
-        // Use claude's tool_use id directly — it's already unique per
-        // call and we need it to pair with the matching tool_result
-        // that arrives in a later user event.
+        // tool_use items keep the item.started → item.completed pattern
+        // in both modes — the result arrives separately in a later
+        // user event and needs to find an open item to attach to.
         const itemId = block.id
         this.pendingToolItems.set(block.id, itemId)
         out.push({
@@ -167,10 +195,6 @@ export class ClaudeAdapter implements IProviderAdapter {
           name: block.name,
           input: block.input
         })
-        // tool_use items don't complete here — they wait for the
-        // matching tool_result in a user event. If the session ends
-        // first (process exit / interrupt) the open item just stays
-        // open in the renderer; that matches v0.4 behaviour.
         continue
       }
     }
@@ -182,12 +206,13 @@ export class ClaudeAdapter implements IProviderAdapter {
     if (typeof content === 'string') {
       // Live: the renderer already pushed a local user_message item via
       // InputBar — drop the wire echo.
-      // Replay: this is the user's prompt from the transcript.
+      // Replay: this is the user's prompt from the transcript. user_message
+      // items don't track completion state in the renderer, so item.started
+      // alone is enough.
       if (this.mode === 'replay' && content.trim()) {
         const turnId = this.ensureTurn(out)
         const itemId = `user-${randomUUID()}`
         out.push({ kind: 'item.started', itemId, turnId, itemType: 'user_message', text: content })
-        out.push({ kind: 'item.completed', itemId, status: 'completed' })
       }
       return
     }
@@ -228,7 +253,8 @@ export class ClaudeAdapter implements IProviderAdapter {
 
     // Prompt blocks (text + attachments). Only emit a user_message
     // item in replay mode — live sees these as echoes of what InputBar
-    // already pushed locally.
+    // already pushed locally. No item.completed: user items don't track
+    // completion in the renderer.
     const text = promptText.join('\n').trim()
     const hasPrompt = text.length > 0 || promptAttachments.length > 0
     if (hasPrompt && this.mode === 'replay') {
@@ -242,28 +268,32 @@ export class ClaudeAdapter implements IProviderAdapter {
         text,
         attachments: promptAttachments.length ? promptAttachments : undefined
       })
-      out.push({ kind: 'item.completed', itemId, status: 'completed' })
     }
   }
 
   private translateResult(event: ResultEvent, out: NormalizedEvent[]): void {
-    // Pull contextWindow off the first modelUsage entry. Claude reports
-    // one entry per model used in the turn — for single-model turns
-    // there's just one to pick.
-    let contextWindow: number | undefined
-    if (event.modelUsage) {
-      for (const v of Object.values(event.modelUsage)) {
-        if (v?.contextWindow) { contextWindow = v.contextWindow; break }
-      }
-    }
+    const isReplay = this.mode === 'replay'
 
-    if (contextWindow !== undefined) {
-      out.push({ kind: 'tokenUsage.updated', usage: { contextWindow } })
+    if (!isReplay) {
+      // Pull contextWindow off the first modelUsage entry. Claude reports
+      // one entry per model used in the turn — for single-model turns
+      // there's just one to pick.
+      let contextWindow: number | undefined
+      if (event.modelUsage) {
+        for (const v of Object.values(event.modelUsage)) {
+          if (v?.contextWindow) { contextWindow = v.contextWindow; break }
+        }
+      }
+      if (contextWindow !== undefined) {
+        out.push({ kind: 'tokenUsage.updated', usage: { contextWindow } })
+      }
     }
 
     if (this.openTurnId) {
       const turnId = this.openTurnId
       this.openTurnId = null
+      // Replay skips turn.completed — see ensureTurn.
+      if (isReplay) return
       out.push({
         kind: 'turn.completed',
         turnId,
