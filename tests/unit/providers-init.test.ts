@@ -11,10 +11,12 @@ beforeEach(() => {
 })
 
 describe('initProviders', () => {
-  it('registers ClaudeProvider', () => {
+  it('registers ClaudeProvider and CodexProvider', () => {
     initProviders()
     expect(hasProvider('claude')).toBe(true)
+    expect(hasProvider('codex')).toBe(true)
     expect(getProvider('claude').kind).toBe('claude')
+    expect(getProvider('codex').kind).toBe('codex')
   })
 
   it('is idempotent — calling twice does not throw', () => {

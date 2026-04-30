@@ -1,9 +1,15 @@
 import { useMemo, useState } from 'react'
 import type { Environment, HostType } from '../../../../shared/types'
+import type { ProviderKind } from '../../../../shared/events'
 import { useEnvironmentsStore } from '../../store/environments'
 import { findDuplicateEnvironment } from '../../lib/environment-dedup'
 import { EnvironmentStatus, type ProbeState } from './EnvironmentStatus'
 import { ModelCombobox } from './ModelCombobox'
+
+const PROVIDER_OPTIONS: ReadonlyArray<{ value: ProviderKind; label: string; bin: string }> = [
+  { value: 'claude', label: 'Claude Code', bin: 'claude' },
+  { value: 'codex', label: 'OpenAI Codex', bin: 'codex' }
+]
 
 interface Props {
   initial: Environment | null
@@ -35,6 +41,7 @@ export function EnvironmentForm({ initial, onCancel, onSave }: Props) {
     initial?.config.kind === 'ssh' ? (initial.config.keyFile ?? '') : ''
   )
   const [defaultModel, setDefaultModel] = useState(initial?.defaultModel ?? '')
+  const [providerKind, setProviderKind] = useState<ProviderKind>(initial?.providerKind ?? 'claude')
   const [probeState, setProbeState] = useState<ProbeState>({ kind: 'idle' })
   const { environments } = useEnvironmentsStore()
 
@@ -87,7 +94,8 @@ export function EnvironmentForm({ initial, onCancel, onSave }: Props) {
       id: initial?.id ?? crypto.randomUUID(),
       name: name.trim(),
       config,
-      defaultModel: defaultModel.trim() || undefined
+      defaultModel: defaultModel.trim() || undefined,
+      providerKind
     })
   }
 
@@ -175,6 +183,31 @@ export function EnvironmentForm({ initial, onCancel, onSave }: Props) {
       )}
 
       <div>
+        <label className={labelCls}>Provider</label>
+        <div className="flex gap-2">
+          {PROVIDER_OPTIONS.map(opt => (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => setProviderKind(opt.value)}
+              className={`flex-1 py-1.5 text-xs rounded border transition-colors
+                ${providerKind === opt.value
+                  ? 'bg-elevated border-divider-strong text-fg'
+                  : 'border-divider text-fg-faint hover:border-divider-strong'}
+              `}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+        <p className="mt-1 text-[10px] text-fg-faint">
+          The CLI to spawn — its binary (<span className="font-mono">
+            {PROVIDER_OPTIONS.find(o => o.value === providerKind)?.bin}
+          </span>) must be on the env's PATH.
+        </p>
+      </div>
+
+      <div>
         <label className={labelCls}>Default Model (optional)</label>
         <ModelCombobox value={defaultModel} onChange={setDefaultModel} placeholder="claude-opus-4-7" />
         <p className="mt-1 text-[10px] text-fg-faint">
@@ -185,7 +218,7 @@ export function EnvironmentForm({ initial, onCancel, onSave }: Props) {
       {probeConfig && (
         <div className="flex items-center justify-between rounded border border-divider bg-elevated px-3 py-2">
           <span className="text-xs text-fg-faint">Connection</span>
-          <EnvironmentStatus config={probeConfig} onResult={setProbeState} />
+          <EnvironmentStatus config={probeConfig} providerKind={providerKind} onResult={setProbeState} />
         </div>
       )}
 
@@ -195,7 +228,7 @@ export function EnvironmentForm({ initial, onCancel, onSave }: Props) {
           ? `Already exists as "${duplicate.name}".`
           : !probeConfig ? 'Fill the connection details to test.'
           : probeState.kind === 'checking' ? 'Checking the connection…'
-          : probeState.kind === 'error' ? 'Claude CLI must be reachable on this connection before it can be saved.'
+          : probeState.kind === 'error' ? 'The selected provider CLI must be reachable on this connection before it can be saved.'
           : ''
         return (
           <div className="flex flex-col gap-2 pt-1">

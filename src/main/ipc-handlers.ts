@@ -13,6 +13,7 @@ import { resolveTransport } from './transports'
 import { sanitizeDefaultName, validateSaveFilePayload } from './attachment-limits'
 import type { IpcChannels } from '../shared/types'
 import { resolveProviderKind } from '../shared/events'
+import { getProvider } from './providers/registry'
 
 const CONFIG_DIR = join(homedir(), '.config', 'claude-launcher')
 const PROJECTS_PATH = join(CONFIG_DIR, 'projects.json')
@@ -121,9 +122,10 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): () => Promise<vo
     safeSend('environments:loaded', { environments })
   })
 
-  handle('environments:probe', async ({ config }) => {
+  handle('environments:probe', async ({ config, providerKind }) => {
     const transport = resolveTransport(config)
-    return transport.probe(config)
+    const provider = getProvider(providerKind ?? 'claude')
+    return transport.probe(config, provider.probeOptions())
   })
 
   handle('environments:usage', async ({ config }) => {

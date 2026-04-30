@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process'
 import type { ChildProcess } from 'node:child_process'
 import type { HostType } from '../../shared/types'
-import type { ITransport, ProbeResult, SpawnOptions } from './types'
+import type { ITransport, ProbeOptions, ProbeResult, SpawnOptions } from './types'
 import { runShellProbe } from './probe'
 import { validateProjectPath } from './validate-path'
 
@@ -21,8 +21,13 @@ export class LocalTransport implements ITransport {
     })
   }
 
-  public async probe(_host: HostType): Promise<ProbeResult> {
-    const r = await runShellProbe({ bin: 'claude', args: ['--version'], timeoutMs: 6000 })
+  public async probe(_host: HostType, opts: ProbeOptions): Promise<ProbeResult> {
+    const r = await runShellProbe({
+      bin: opts.bin,
+      args: ['--version'],
+      versionLine: opts.versionLine,
+      timeoutMs: 6000
+    })
     return r.ok
       ? { ok: true, version: r.version ?? '' }
       : { ok: false, reason: r.reason ?? 'probe failed' }

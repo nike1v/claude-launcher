@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { CheckCircle2, XCircle, Loader2, RefreshCw } from 'lucide-react'
 import type { HostType } from '../../../../shared/types'
+import type { ProviderKind } from '../../../../shared/events'
 import { probeEnvironment } from '../../ipc/bridge'
 
 export type ProbeState =
@@ -11,6 +12,9 @@ export type ProbeState =
 
 interface Props {
   config: HostType
+  // Provider whose binary we're probing on this env. Defaults to claude
+  // for legacy callers that haven't been updated yet.
+  providerKind?: ProviderKind
   // Bumping this re-runs the probe. Used to trigger a recheck after an
   // env edit without unmounting the row.
   rev?: number
@@ -21,7 +25,7 @@ interface Props {
   onResult?: (state: ProbeState) => void
 }
 
-export function EnvironmentStatus({ config, rev = 0, compact = false, onResult }: Props) {
+export function EnvironmentStatus({ config, providerKind, rev = 0, compact = false, onResult }: Props) {
   const [state, setState] = useState<ProbeState>({ kind: 'idle' })
   const [trigger, setTrigger] = useState(0)
 
@@ -30,7 +34,7 @@ export function EnvironmentStatus({ config, rev = 0, compact = false, onResult }
     const next: ProbeState = { kind: 'checking' }
     setState(next)
     onResult?.(next)
-    probeEnvironment(config).then(result => {
+    probeEnvironment(config, providerKind).then(result => {
       if (cancelled) return
       const settled: ProbeState = result.ok
         ? { kind: 'ok', version: result.version }
@@ -39,7 +43,7 @@ export function EnvironmentStatus({ config, rev = 0, compact = false, onResult }
       onResult?.(settled)
     })
     return () => { cancelled = true }
-  }, [JSON.stringify(config), rev, trigger])
+  }, [JSON.stringify(config), providerKind, rev, trigger])
 
   const tooltip =
     state.kind === 'ok' ? state.version
@@ -59,8 +63,8 @@ export function EnvironmentStatus({ config, rev = 0, compact = false, onResult }
           : state.kind === 'error' ? 'text-danger'
           : 'text-fg-faint'
         }>
-          {state.kind === 'ok' ? 'Claude CLI detected'
-            : state.kind === 'error' ? 'No Claude CLI'
+          {state.kind === 'ok' ? 'CLI detected'
+            : state.kind === 'error' ? 'CLI not found'
             : state.kind === 'checking' ? 'Checking…'
             : 'Unknown'}
         </span>
