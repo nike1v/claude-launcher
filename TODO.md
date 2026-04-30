@@ -152,6 +152,36 @@ tokenUsage.updated), and have the StatusBar fall back to it when no
 in-memory event has fired yet — same pattern as the existing
 contextWindow fallback.
 
+### UI stuck on "claude is thinking…" during auto-compact
+Reported 2026-05-01. While typing a long reply, the user's claude
+session crossed its context limit and Claude Code's built-in
+auto-compaction kicked in. From the renderer's perspective the
+session sat on the busy spinner for 30+ minutes with no further
+events arriving. User had to wait it out.
+
+Hypotheses:
+- Claude's stream-json output during auto-compact may emit nothing
+  visible (or events we don't recognise) for an extended period
+  while the CLI summarises the conversation in the background. Our
+  `turn.started → busy` flip never gets a corresponding
+  `turn.completed → ready`, so the spinner stays.
+- Or the session genuinely processes for that long and the UI is
+  honest, but the user has no signal that it's progressing vs hung.
+
+Fix directions:
+- Detect claude's auto-compact signal — there's likely a system
+  event in stream-json that announces "compacting now". Surface it
+  as a distinct status (`compacting`?) in the UI with its own
+  affordance (progress text, optional cancel) so the user knows
+  what's happening.
+- Generic stale-busy timeout: if we've been in `busy` for >N seconds
+  with no content.delta or item.* event arriving, surface a "still
+  thinking — claude may be auto-compacting" hint with a manual reset
+  option. Less precise but cheap.
+- Pair with the related bug "Stale thinking status after Windows
+  hard-restore" above — both point to needing better recovery from
+  any state where `busy` gets stuck.
+
 ## Closed (recent shipped work)
 
 See git log for details. Quick index:

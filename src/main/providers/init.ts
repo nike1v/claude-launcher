@@ -5,8 +5,12 @@
 import { register } from './registry'
 import { ClaudeProvider } from './claude/provider'
 import { CodexProvider } from './codex/provider'
+import { CursorProvider } from './cursor/provider'
+import { OpencodeProvider } from './opencode/provider'
 
 export function initProviders(): void {
   register(new ClaudeProvider())
   register(new CodexProvider())
+  register(new CursorProvider())
+  register(new OpencodeProvider())
 }
