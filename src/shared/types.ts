@@ -218,10 +218,11 @@ export interface IpcChannels {
   'projects:load': Record<string, never>
   'environments:save': Environment[]
   'environments:load': Record<string, never>
-  // Run `claude --version` over the env's transport. Either { ok: true,
-  // version } or { ok: false, reason }. Used to populate health badges in
-  // the Settings modal and to validate before "Add Environment" saves.
-  'environments:probe': { config: HostType }
+  // Run `<provider-binary> --version` over the env's transport. Either
+  // { ok: true, version } or { ok: false, reason }. Used to populate
+  // health badges in the Settings modal and to validate before "Add
+  // Environment" saves.
+  'environments:probe': { config: HostType; providerKind?: ProviderKind }
   // Subscription usage probe — PTY-spawn claude on the env, type /usage,
   // screen-scrape the panel into structured bars. There's no machine-readable
   // /usage in claude itself, so this is the only way to surface those numbers

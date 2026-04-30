@@ -22,18 +22,20 @@
 //                     by the first assistant event of this turn)
 
 import { randomUUID } from 'node:crypto'
+import { extname } from 'node:path'
 import type {
   AssistantEvent,
   ContentBlock,
   DocumentBlock,
   ImageBlock,
   ResultEvent,
+  SendAttachment,
   StreamJsonEvent,
   ToolResultBlock,
   UserContentBlock,
   UserEvent
 } from '../../../shared/types'
-import type { IProviderAdapter } from '../types'
+import type { ControlCommand, IProviderAdapter, SpawnOpts } from '../types'
 import type { ItemStatus, NormalizedEvent, UserAttachment } from '../../../shared/events'
 import { parseStreamJsonLine } from '../../stream-json-parser'
 
@@ -53,6 +55,70 @@ export class ClaudeAdapter implements IProviderAdapter {
 
   public constructor(mode: 'live' | 'replay' = 'live') {
     this.mode = mode
+  }
+
+  // Stateless protocols write nothing on startup. claude is ready for
+  // stream-json input the moment it spawns.
+  public startupBytes(_opts: SpawnOpts): string {
+    return ''
+  }
+
+  // claude's adapter never queues async writes — every message it
+  // sends is driven directly by formatUserMessage / formatControl.
+  public drainPendingWrites(): string {
+    return ''
+  }
+
+  public formatUserMessage(text: string, attachments: readonly SendAttachment[]): string {
+    const content = attachments.length === 0
+      ? text
+      : buildContentBlocks(text, attachments)
+    return JSON.stringify({
+      type: 'user',
+      message: { role: 'user', content }
+    }) + '\n'
+  }
+
+  public formatControl(cmd: ControlCommand): string | null {
+    switch (cmd.kind) {
+      case 'interrupt':
+        // claude's stream-json control protocol: write a control_request
+        // with subtype 'interrupt'. claude responds with control_response
+        // (which we don't track — the next assistant/result event will
+        // confirm the turn ended).
+        return JSON.stringify({
+          type: 'control_request',
+          request_id: `req_${randomUUID()}`,
+          request: { subtype: 'interrupt' }
+        }) + '\n'
+
+      case 'approval': {
+        // Claude's permission-prompt-tool stdio flow: reply with a user
+        // message carrying a tool_result block. Claude itself only
+        // recognises allow/deny today, so acceptForSession collapses to
+        // accept and cancel collapses to decline. When claude grows a
+        // session-scoped "always allow", route via the /permissions
+        // config rather than collapsing here.
+        const allow = cmd.decision === 'accept' || cmd.decision === 'acceptForSession'
+        return JSON.stringify({
+          type: 'user',
+          message: {
+            role: 'user',
+            content: [{
+              type: 'tool_result',
+              tool_use_id: cmd.requestId,
+              content: allow ? 'allow' : 'deny'
+            }]
+          }
+        }) + '\n'
+      }
+
+      case 'user-input-response':
+        // claude has no structured user-input flow today. Returning null
+        // signals session-manager that there's no in-band command to
+        // write — the request silently no-ops on this provider.
+        return null
+    }
   }
 
   public parseChunk(chunk: string): NormalizedEvent[] {
@@ -318,4 +384,29 @@ function extractToolResultText(block: ToolResultBlock): string {
     .map((b: ContentBlock | UserContentBlock) => (b.type === 'text' ? b.text : ''))
     .filter(Boolean)
     .join('\n')
+}
+
+function buildContentBlocks(text: string, attachments: readonly SendAttachment[]): UserContentBlock[] {
+  const blocks: UserContentBlock[] = []
+  // Text-file attachments are inlined as fenced code so the model sees
+  // them as part of the prompt; binary attachments become real
+  // image/document blocks.
+  let prelude = ''
+  for (const att of attachments) {
+    if (att.kind === 'text') {
+      const fence = '```'
+      const lang = extname(att.name).slice(1).toLowerCase()
+      prelude += `${fence}${lang}${att.name ? ` ${att.name}` : ''}\n${att.text}\n${fence}\n\n`
+    }
+  }
+  const fullText = prelude + text
+  if (fullText) blocks.push({ type: 'text', text: fullText })
+  for (const att of attachments) {
+    if (att.kind === 'image') {
+      blocks.push({ type: 'image', source: { type: 'base64', media_type: att.mediaType, data: att.data } })
+    } else if (att.kind === 'document') {
+      blocks.push({ type: 'document', source: { type: 'base64', media_type: att.mediaType, data: att.data } })
+    }
+  }
+  return blocks
 }

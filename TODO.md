@@ -104,6 +104,54 @@ Top-of-chat menu.
 Pairs with `lastSessionRef` reset, lets the user list / delete
 transcripts on the env.
 
+## Bugs to investigate
+
+### Stale "thinking" status after Windows app-restore from a hard crash
+Reported 2026-04-30. User's laptop died (out of battery). Windows
+restored open apps; claude-launcher came back showing the chat as
+still processing (busy spinner visible) on a session that couldn't
+plausibly still be running — the underlying claude process is gone
+along with everything else.
+
+Hypotheses:
+- The renderer state was preserved across hibernate / fast-startup so
+  the in-memory `status === 'busy'` survives the wake without a fresh
+  IPC update. session-manager isn't there to fire a status flip
+  because main was killed too.
+- Or the cold-restored tab is replaying a transcript whose last event
+  is mid-turn (no result event ever flushed) and something downstream
+  reads that as "still streaming".
+
+To reproduce: start a long claude turn, force-kill the launcher /
+machine while the assistant is mid-stream, relaunch, restore tabs.
+Check whether `session.status` ends up `busy` and whether the
+spinner stays.
+
+Fix direction (once confirmed): on cold restore, force every restored
+session's status to a non-busy state (probably `'starting'` until the
+probe + spawn settle, never carrying any prior busy through) and
+ignore any persisted busy flag.
+
+### Context-fill meter shows 0 used after cold tab restore
+Reported 2026-04-30. After the app reloads (cold restore of an
+existing tab), the StatusBar's context meter shows the "used" portion
+as zero until the user sends a new message and the assistant reply
+fires a fresh `tokenUsage.updated`.
+
+Cause: `parseTranscript` skips `tokenUsage.updated` events in replay
+mode (alpha.9 compact-replay optimisation) because we only need the
+contextWindow total — which we already cache on the project record
+as `lastContextWindow`. But `used` (input + cache tokens) was also
+coming from those events; without them in the replay stream, the
+StatusBar's `computeContextFill` finds no `used` value and falls
+back to 0.
+
+Fix direction: persist `lastUsedTokens` alongside `lastContextWindow`
+on the Session / Project record (updated on each live
+tokenUsage.updated), and have the StatusBar fall back to it when no
+in-memory event has fired yet — same pattern as the existing
+contextWindow fallback.
+
 ## Closed (recent shipped work)
 
 See git log for details. Quick index:

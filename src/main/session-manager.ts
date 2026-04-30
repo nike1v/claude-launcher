@@ -106,7 +106,7 @@ export class SessionManager {
     // just spawn whatever and watch the user sit through the 5 s ready
     // fallback into a forever-thinking state with no response.
     try {
-      const probe = await transport.probe(env.config)
+      const probe = await transport.probe(env.config, provider.probeOptions())
       if (!probe.ok) {
         this.onEvent('session:status', { sessionId, status: 'error', errorMessage: probe.reason })
         return
@@ -179,6 +179,17 @@ export class SessionManager {
       }
     })
     process.stdin?.on('error', () => {})
+
+    // Stateful protocols (codex JSON-RPC) need a handshake written
+    // immediately on spawn — initialize request, etc. Stateless
+    // protocols (claude stream-json) return '' and this is a no-op.
+    const startup = session.adapter.startupBytes({
+      cwd: project.path,
+      model: project.model ?? env.defaultModel,
+      resumeRef: resumeSessionId
+    })
+    if (startup) this.writeStdin(sessionId, startup)
+
     process.on('exit', (code) => {
       if (session.readyTimer) {
         clearTimeout(session.readyTimer)
@@ -215,8 +226,9 @@ export class SessionManager {
     // see the failure in DevTools rather than have the chat silently
     // swallow their message.
     validateAttachments(attachments)
-    const payload = session.provider.formatUserMessage(text, attachments)
+    const payload = session.adapter.formatUserMessage(text, attachments)
     if (!this.writeStdin(sessionId, payload)) return
+    this.drainAdapterWrites(session)
     // Flip to busy immediately so the renderer can show a "thinking"
     // indicator while we wait for the first stream-json event back.
     this.onEvent('session:status', { sessionId, status: 'busy' })
@@ -225,13 +237,23 @@ export class SessionManager {
   public respondPermission(sessionId: string, decision: 'allow' | 'deny', toolUseId: string): void {
     const session = this.sessions.get(sessionId)
     if (!session) return
-    const payload = session.provider.formatControl({
+    const payload = session.adapter.formatControl({
       kind: 'approval',
       requestId: toolUseId,
       decision: decision === 'allow' ? 'accept' : 'decline'
     })
     if (payload === null) return
     this.writeStdin(sessionId, payload)
+    this.drainAdapterWrites(session)
+  }
+
+  // Drain bytes the adapter queued asynchronously (e.g. after parsing a
+  // JSON-RPC response, the codex adapter queues the next request in
+  // its bootstrap chain). Called after every adapter call that might
+  // affect its internal queue.
+  private drainAdapterWrites(session: ActiveSession): void {
+    const pending = session.adapter.drainPendingWrites()
+    if (pending) this.writeStdin(session.sessionId, pending)
   }
 
   // Wrap every stdin write so a closed/destroyed pipe (claude exited between
@@ -287,7 +309,7 @@ export class SessionManager {
   public interruptSession(sessionId: string): void {
     const session = this.sessions.get(sessionId)
     if (!session) return
-    const payload = session.provider.formatControl({ kind: 'interrupt' })
+    const payload = session.adapter.formatControl({ kind: 'interrupt' })
     if (payload !== null) {
       // Best-effort write: don't go through writeStdin (which would flip
       // the session to 'error' on a broken pipe). If the pipe is gone the
@@ -297,6 +319,7 @@ export class SessionManager {
       if (stdin && !stdin.destroyed && stdin.writable) {
         try { stdin.write(payload) } catch { /* swallow — session is winding down */ }
       }
+      this.drainAdapterWrites(session)
     } else {
       // Provider has no in-band interrupt — fall back to SIGINT.
       try { session.process.kill('SIGINT') } catch { /* already dead */ }
@@ -347,6 +370,10 @@ export class SessionManager {
       // adapter.parseChunk takes a chunk; feeding it one complete line
       // at a time keeps its own internal buffer empty after every call.
       const events = session.adapter.parseChunk(line + '\n')
+      // Drain any follow-up writes the adapter queued in response to
+      // what it just parsed (codex bootstrap chain queues `initialized`
+      // + `thread/start` after seeing the `initialize` response).
+      this.drainAdapterWrites(session)
       if (events.length === 0) continue
 
       // Status transitions fire individually so the busy/ready timing

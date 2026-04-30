@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process'
 import type { ChildProcess } from 'node:child_process'
 import type { HostType } from '../../shared/types'
-import type { ITransport, ProbeResult, SpawnOptions } from './types'
+import type { ITransport, ProbeOptions, ProbeResult, SpawnOptions } from './types'
 import { runShellProbe, probeScript } from './probe'
 import { getCachedPath, setCachedPath } from './path-cache'
 import { validateWslDistro } from './validate-ssh'
@@ -33,7 +33,7 @@ export class WslTransport implements ITransport {
     })
   }
 
-  public async probe(host: HostType): Promise<ProbeResult> {
+  public async probe(host: HostType, opts: ProbeOptions): Promise<ProbeResult> {
     if (host.kind !== 'wsl') {
       return { ok: false, reason: 'WslTransport requires wsl host' }
     }
@@ -44,7 +44,8 @@ export class WslTransport implements ITransport {
     }
     const result = await runShellProbe({
       bin: 'wsl.exe',
-      args: ['-d', host.distro, '--', 'bash', '-lc', probeScript()],
+      args: ['-d', host.distro, '--', 'bash', '-lc', probeScript(opts.bin)],
+      versionLine: opts.versionLine,
       // wsl.exe cold start + login shell sourcing can both be slow.
       timeoutMs: 15_000
     })

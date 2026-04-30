@@ -23,9 +23,15 @@ function makeStubProvider(kind: ProviderKind): IProvider {
       transcripts: 'none'
     },
     buildSpawnArgs: () => ({ bin: 'true', args: [] }),
-    formatUserMessage: () => '',
-    formatControl: () => null,
-    envScrubList: () => []
+    envScrubList: () => [],
+    createAdapter: () => ({
+      startupBytes: () => '',
+      parseChunk: () => [],
+      drainPendingWrites: () => '',
+      parseTranscript: () => [],
+      formatUserMessage: () => '',
+      formatControl: () => null
+    })
   }
 }
 

@@ -4,7 +4,9 @@
 
 import { register } from './registry'
 import { ClaudeProvider } from './claude/provider'
+import { CodexProvider } from './codex/provider'
 
 export function initProviders(): void {
   register(new ClaudeProvider())
+  register(new CodexProvider())
 }

@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process'
 import type { ChildProcess } from 'node:child_process'
 import type { HostType } from '../../shared/types'
-import type { ITransport, ProbeResult, SpawnOptions } from './types'
+import type { ITransport, ProbeOptions, ProbeResult, SpawnOptions } from './types'
 import { runShellProbe, probeScript, shQuote } from './probe'
 import { getCachedPath, setCachedPath } from './path-cache'
 import { validateSshHost } from './validate-ssh'
@@ -46,7 +46,7 @@ export class SshTransport implements ITransport {
     })
   }
 
-  public async probe(host: HostType): Promise<ProbeResult> {
+  public async probe(host: HostType, opts: ProbeOptions): Promise<ProbeResult> {
     if (host.kind !== 'ssh') {
       return { ok: false, reason: 'SshTransport requires ssh host' }
     }
@@ -57,8 +57,13 @@ export class SshTransport implements ITransport {
     }
     const args = ['-T', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=8']
     args.push(...sshConnectArgs(host))
-    args.push(sshTarget(host), `bash -lc ${shQuote(probeScript())}`)
-    const result = await runShellProbe({ bin: 'ssh', args, timeoutMs: 25_000 })
+    args.push(sshTarget(host), `bash -lc ${shQuote(probeScript(opts.bin))}`)
+    const result = await runShellProbe({
+      bin: 'ssh',
+      args,
+      versionLine: opts.versionLine,
+      timeoutMs: 25_000
+    })
     if (result.path) setCachedPath(host, result.path)
     return result.ok
       ? { ok: true, version: result.version ?? '' }

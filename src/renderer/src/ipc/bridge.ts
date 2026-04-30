@@ -76,9 +76,10 @@ export function checkForUpdates(): void {
 }
 
 export async function probeEnvironment(
-  config: import('../../../shared/types').HostType
+  config: import('../../../shared/types').HostType,
+  providerKind?: import('../../../shared/events').ProviderKind
 ): Promise<{ ok: true; version: string } | { ok: false; reason: string }> {
-  return window.electronAPI.invoke('environments:probe', { config }) as Promise<
+  return window.electronAPI.invoke('environments:probe', { config, providerKind }) as Promise<
     { ok: true; version: string } | { ok: false; reason: string }
   >
 }
