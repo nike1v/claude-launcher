@@ -8,7 +8,9 @@ import { ModelCombobox } from './ModelCombobox'
 
 const PROVIDER_OPTIONS: ReadonlyArray<{ value: ProviderKind; label: string; bin: string }> = [
   { value: 'claude', label: 'Claude Code', bin: 'claude' },
-  { value: 'codex', label: 'OpenAI Codex', bin: 'codex' }
+  { value: 'codex', label: 'OpenAI Codex', bin: 'codex' },
+  { value: 'cursor', label: 'Cursor Agent', bin: 'agent' },
+  { value: 'opencode', label: 'opencode', bin: 'opencode' }
 ]
 
 interface Props {
