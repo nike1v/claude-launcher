@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import type { ChildProcess } from 'node:child_process'
 import type { ITransport, SpawnOptions } from './transports/types'
-import type { Environment, HostType, Project, SendAttachment, StreamJsonEvent, UserContentBlock } from '../shared/types'
+import type { Environment, HostType, Project, SendAttachment, StreamJsonEvent } from '../shared/types'
 import { parseStreamJsonLine } from './stream-json-parser'
 import { validateAttachments } from './attachment-limits'
 // Aliased on import so the parameter-property `resolveTransport` doesn't
@@ -11,6 +11,8 @@ import { validateAttachments } from './attachment-limits'
 // failing to register IPC handlers — which presents to the user as a
 // blank sidebar.
 import { resolveTransport as defaultResolveTransport } from './transports'
+import { getProvider } from './providers/registry'
+import type { IProvider } from './providers/types'
 
 type EventCallback = (channel: string, payload: unknown) => void
 
@@ -18,6 +20,10 @@ interface ActiveSession {
   sessionId: string
   projectId: string
   process: ChildProcess
+  // Provider this session was spawned with — pinned at start so a
+  // mid-flight providerKind change on the project doesn't confuse
+  // sendMessage / interrupt / respondPermission.
+  provider: IProvider
   lineBuffer: string
   markedReady: boolean
   stopping: boolean
@@ -73,18 +79,28 @@ export class SessionManager {
     resumeSessionId?: string
   ): Promise<void> {
     const transport = this.resolveTransport(env.config)
+    // Project override > Environment default > 'claude'. Resolved here so
+    // the rest of the session reads provider from one place.
+    const providerKind = project.providerKind ?? env.providerKind ?? 'claude'
+    const provider = getProvider(providerKind)
+    const built = provider.buildSpawnArgs({
+      cwd: project.path,
+      // Project override wins; otherwise inherit the env's default model.
+      model: project.model ?? env.defaultModel,
+      resumeRef: resumeSessionId
+    })
     const spawnOptions: SpawnOptions = {
       host: env.config,
       path: project.path,
-      // Project override wins; otherwise inherit the env's default model.
-      model: project.model ?? env.defaultModel,
-      resumeSessionId
+      bin: built.bin,
+      args: built.args,
+      envScrubKeys: provider.envScrubList(env.config)
     }
 
-    // Pre-flight: refuse to start a session if `claude --version` doesn't
-    // print the Claude Code CLI banner over this transport. Without this
-    // we'd just spawn whatever and watch the user sit through the 5 s
-    // ready fallback into a forever-thinking state with no response.
+    // Pre-flight: refuse to start a session if the provider's binary
+    // doesn't probe successfully on this transport. Without this we'd
+    // just spawn whatever and watch the user sit through the 5 s ready
+    // fallback into a forever-thinking state with no response.
     try {
       const probe = await transport.probe(env.config)
       if (!probe.ok) {
@@ -106,6 +122,7 @@ export class SessionManager {
       sessionId,
       projectId: project.id,
       process,
+      provider,
       lineBuffer: '',
       markedReady: false,
       stopping: false,
@@ -149,11 +166,11 @@ export class SessionManager {
     // from PATH) so we can surface it as an error status.
     process.on('error', (err: NodeJS.ErrnoException) => {
       if (err.code === 'ENOENT') {
-        spawnError = `Could not start "claude" — is the Claude Code CLI installed and on PATH?`
+        spawnError = `Could not start "${built.bin}" — is the ${provider.label} CLI installed and on PATH?`
       } else if (err.code) {
-        spawnError = `Failed to start claude (${err.code}): ${err.message}`
+        spawnError = `Failed to start ${built.bin} (${err.code}): ${err.message}`
       } else {
-        spawnError = err.message || 'Failed to start claude'
+        spawnError = err.message || `Failed to start ${built.bin}`
       }
     })
     process.stdin?.on('error', () => {})
@@ -186,36 +203,29 @@ export class SessionManager {
   public sendMessage(sessionId: string, text: string, attachments: SendAttachment[] = []): void {
     const session = this.sessions.get(sessionId)
     if (!session) return
-    // Bound the attachment payload before it lands in the JSON line we write
-    // to claude's stdin. Without this, a renderer (or a compromised one) could
-    // OOM the main process via base64 inflation. Throws — the IPC wrapper logs
-    // and rejects the invoke; the user will see the failure in DevTools rather
-    // than have the chat silently swallow their message.
+    // Bound the attachment payload before it lands in the JSON line we
+    // write to the provider's stdin. Without this, a renderer (or a
+    // compromised one) could OOM the main process via base64 inflation.
+    // Throws — the IPC wrapper logs and rejects the invoke; the user will
+    // see the failure in DevTools rather than have the chat silently
+    // swallow their message.
     validateAttachments(attachments)
-    const content = attachments.length === 0
-      ? text
-      : buildContentBlocks(text, attachments)
-    const payload = JSON.stringify({
-      type: 'user',
-      message: { role: 'user', content }
-    }) + '\n'
+    const payload = session.provider.formatUserMessage(text, attachments)
     if (!this.writeStdin(sessionId, payload)) return
-    // Flip to busy immediately so the renderer can show a "thinking" indicator
-    // while we wait for the first stream-json event back from claude.
+    // Flip to busy immediately so the renderer can show a "thinking"
+    // indicator while we wait for the first stream-json event back.
     this.onEvent('session:status', { sessionId, status: 'busy' })
   }
 
   public respondPermission(sessionId: string, decision: 'allow' | 'deny', toolUseId: string): void {
     const session = this.sessions.get(sessionId)
     if (!session) return
-    const content = decision === 'allow' ? 'allow' : 'deny'
-    const payload = JSON.stringify({
-      type: 'user',
-      message: {
-        role: 'user',
-        content: [{ type: 'tool_result', tool_use_id: toolUseId, content }]
-      }
-    }) + '\n'
+    const payload = session.provider.formatControl({
+      kind: 'approval',
+      requestId: toolUseId,
+      decision: decision === 'allow' ? 'accept' : 'decline'
+    })
+    if (payload === null) return
     this.writeStdin(sessionId, payload)
   }
 
@@ -255,36 +265,36 @@ export class SessionManager {
     this.onEvent('session:status', { sessionId, status: 'closed' })
   }
 
-  // Abort the current in-flight turn without killing the process. We send
-  // claude's stream-json control_request/interrupt over stdin instead of
-  // posix-signalling the child:
+  // Abort the current in-flight turn without killing the process. We
+  // delegate to the provider's formatControl({kind: 'interrupt'}) — for
+  // claude that returns a stream-json control_request line; other
+  // providers may return something else (or null, in which case we'd
+  // SIGINT instead — not yet exercised since claude is the only provider).
   //
+  // Why in-band instead of posix-signalling the child:
   //   1. On Windows, Node's kill('SIGINT') is just TerminateProcess under
-  //      the hood — there are no real signals — so the "interrupt" was in
-  //      fact killing claude every time.
+  //      the hood — there are no real signals — so the "interrupt" was
+  //      in fact killing the CLI every time.
   //   2. For WSL / SSH transports the OS child is wsl.exe / ssh.exe, not
-  //      claude itself; signalling those tears down the whole transport
-  //      connection (the symptom the user reported: "Stop closes the chat
-  //      instead of stopping the message").
-  //
-  // The control_request shape comes from the Claude Agent SDK's stream-json
-  // protocol. We don't track the response (control_response) — the renderer
-  // just needs the spinner cleared, and the next assistant/result event will
-  // confirm the turn ended.
+  //      the CLI itself; signalling those tears down the whole transport
+  //      connection (the symptom the user reported: "Stop closes the
+  //      chat instead of stopping the message").
   public interruptSession(sessionId: string): void {
     const session = this.sessions.get(sessionId)
     if (!session) return
-    const payload = JSON.stringify({
-      type: 'control_request',
-      request_id: `req_${randomUUID()}`,
-      request: { subtype: 'interrupt' }
-    }) + '\n'
-    // Best-effort write: don't go through writeStdin (which would flip the
-    // session to 'error' on a broken pipe). If the pipe is gone the next
-    // exit handler will surface that on its own; nothing useful to do here.
-    const stdin = session.process.stdin
-    if (stdin && !stdin.destroyed && stdin.writable) {
-      try { stdin.write(payload) } catch { /* swallow — session is winding down */ }
+    const payload = session.provider.formatControl({ kind: 'interrupt' })
+    if (payload !== null) {
+      // Best-effort write: don't go through writeStdin (which would flip
+      // the session to 'error' on a broken pipe). If the pipe is gone the
+      // next exit handler will surface that on its own; nothing useful to
+      // do here.
+      const stdin = session.process.stdin
+      if (stdin && !stdin.destroyed && stdin.writable) {
+        try { stdin.write(payload) } catch { /* swallow — session is winding down */ }
+      }
+    } else {
+      // Provider has no in-band interrupt — fall back to SIGINT.
+      try { session.process.kill('SIGINT') } catch { /* already dead */ }
     }
     this.onEvent('session:status', { sessionId, status: 'ready' })
   }
@@ -358,34 +368,3 @@ export class SessionManager {
     }
   }
 }
-
-function buildContentBlocks(text: string, attachments: SendAttachment[]): UserContentBlock[] {
-  const blocks: UserContentBlock[] = []
-  // Text-file attachments are inlined as fenced code so the model sees them
-  // as part of the prompt; binary attachments become real image/document blocks.
-  let prelude = ''
-  for (const att of attachments) {
-    if (att.kind === 'text') {
-      const fence = '```'
-      const lang = extensionFromName(att.name)
-      prelude += `${fence}${lang ? lang : ''}${att.name ? ` ${att.name}` : ''}\n${att.text}\n${fence}\n\n`
-    }
-  }
-  const fullText = prelude + text
-  if (fullText) blocks.push({ type: 'text', text: fullText })
-  for (const att of attachments) {
-    if (att.kind === 'image') {
-      blocks.push({ type: 'image', source: { type: 'base64', media_type: att.mediaType, data: att.data } })
-    } else if (att.kind === 'document') {
-      blocks.push({ type: 'document', source: { type: 'base64', media_type: att.mediaType, data: att.data } })
-    }
-  }
-  return blocks
-}
-
-function extensionFromName(name: string): string {
-  const dot = name.lastIndexOf('.')
-  if (dot < 0) return ''
-  return name.slice(dot + 1).toLowerCase()
-}
-

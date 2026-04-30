@@ -1,6 +1,7 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeAll } from 'vitest'
 import { spawn } from 'node:child_process'
 import { SessionManager } from '../../src/main/session-manager'
+import { initProviders } from '../../src/main/providers/init'
 import type { Environment, Project, StreamJsonEvent } from '../../src/shared/types'
 
 const mockEnv: Environment = {
@@ -15,6 +16,12 @@ const mockProject: Project = {
   environmentId: 'env-1',
   path: '/tmp'
 }
+
+beforeAll(() => {
+  // SessionManager.startSession resolves a provider from the registry —
+  // wire claude in once before the suite runs.
+  initProviders()
+})
 
 describe('SessionManager integration (mock transport)', () => {
   it('emits init, assistant, and result events from mock claude', async () => {

@@ -5,32 +5,31 @@ import type { ITransport, ProbeResult, SpawnOptions } from './types'
 import { runShellProbe, probeScript } from './probe'
 import { getCachedPath, setCachedPath } from './path-cache'
 import { validateWslDistro } from './validate-ssh'
-import { validateProjectPath, validateClaudeArg } from './validate-path'
-import { buildClaudeArgs, filteredEnv } from './shared'
+import { validateProjectPath } from './validate-path'
+import { filteredEnvFor } from './shared'
 
 export class WslTransport implements ITransport {
   public spawn(options: SpawnOptions): ChildProcess {
-    const { host, path, model, resumeSessionId } = options
+    const { host, path, bin, args, envScrubKeys = [] } = options
     if (host.kind !== 'wsl') throw new Error('WslTransport requires wsl host')
     validateWslDistro(host.distro)
     validateProjectPath(path)
-    if (model) validateClaudeArg(model, 'model')
-    if (resumeSessionId) validateClaudeArg(resumeSessionId, 'resumeSessionId')
 
     // wsl.exe spawns a non-login non-interactive shell that ignores
-    // ~/.profile etc., so claude installed via npm-global / ~/.local/bin is
-    // invisible to a bare `wsl.exe -- claude`. The probe ran a login bash
+    // ~/.profile etc., so a binary installed via npm-global / ~/.local/bin
+    // is invisible to a bare `wsl.exe -- <bin>`. The probe ran a login bash
     // and cached the resulting PATH; we surface it via `env PATH=...` so
-    // claude sees the right PATH without us having to keep a bash sitting
-    // between Node and claude (that wrapper closed stdin in some setups).
+    // the child sees the right PATH without us having to keep a bash
+    // sitting between Node and the binary (that wrapper closed stdin in
+    // some setups).
     const cachedPath = getCachedPath(host)
     const wslArgs = ['-d', host.distro, '--cd', path, '--']
     if (cachedPath) wslArgs.push('env', `PATH=${cachedPath}`)
-    wslArgs.push('claude', ...buildClaudeArgs(model, resumeSessionId))
+    wslArgs.push(bin, ...args)
 
     return spawn('wsl.exe', wslArgs, {
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: filteredEnv()
+      env: filteredEnvFor(envScrubKeys)
     })
   }
 

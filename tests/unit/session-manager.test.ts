@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { EventEmitter } from 'node:events'
 import { SessionManager } from '../../src/main/session-manager'
+import { initProviders } from '../../src/main/providers/init'
+import { unregisterAll } from '../../src/main/providers/registry'
 import type { Environment, Project } from '../../src/shared/types'
 
 const makeProcess = () => {
@@ -57,6 +59,11 @@ describe('SessionManager', () => {
   let onEvent: ReturnType<typeof vi.fn>
 
   beforeEach(() => {
+    // SessionManager._runSession resolves a provider from the registry —
+    // wire claude in fresh per test so they don't carry state across.
+    unregisterAll()
+    initProviders()
+
     const proc = makeProcess()
     mockTransport = {
       spawn: vi.fn(() => proc),

@@ -2,6 +2,7 @@ import { app, BrowserWindow, session, shell } from 'electron'
 import { join } from 'node:path'
 import { registerIpcHandlers } from './ipc-handlers'
 import { initAutoUpdater } from './updater'
+import { initProviders } from './providers/init'
 
 // Only http(s) gets handed to the OS browser. file://, javascript:, data:,
 // and unknown schemes from a compromised renderer would otherwise call
@@ -61,6 +62,11 @@ app.whenReady().then(() => {
   // camera, mic, geolocation, notifications, etc., so a compromised renderer
   // shouldn't be able to opt itself in.
   session.defaultSession.setPermissionRequestHandler((_wc, _permission, callback) => callback(false))
+
+  // Register IProvider + IProviderAdapter implementations before any IPC
+  // handler runs. session-manager looks up providers from the registry on
+  // session start; an unregistered kind throws.
+  initProviders()
 
   const win = createWindow()
   const cleanup = registerIpcHandlers(win)
