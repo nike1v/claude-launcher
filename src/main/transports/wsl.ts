@@ -3,7 +3,7 @@ import type { ChildProcess } from 'node:child_process'
 import type { HostType } from '../../shared/types'
 import type { ITransport, ProbeOptions, ProbeResult, SpawnOptions } from './types'
 import { runShellProbe, probeScript } from './probe'
-import { getCachedPath, setCachedPath } from './path-cache'
+import { getCachedProbe, setCachedProbe } from './path-cache'
 import { validateWslDistro } from './validate-ssh'
 import { validateProjectPath } from './validate-path'
 import { filteredEnvFor } from './shared'
@@ -18,22 +18,32 @@ export class WslTransport implements ITransport {
     // wsl.exe spawns a non-login non-interactive shell that ignores
     // ~/.profile etc., so a binary installed via npm-global / ~/.local/bin
     // is invisible to a bare `wsl.exe -- <bin>`. The probe ran a login bash
-    // and cached the resulting PATH; we surface it via `env PATH=...` so
-    // the child sees the right PATH without us having to keep a bash
-    // sitting between Node and the binary (that wrapper closed stdin in
-    // some setups, AND a 0.7.1 attempt to use `bash -c '...; exec "$@"'`
-    // for stronger PATH guarantees broke spawn end-to-end on real WSL
-    // for unclear reasons — the env+cached form is what's been
-    // production-tested).
+    // and cached both the resolved PATH and the remote $HOME; we surface
+    // them via `env PATH=...` so the child sees the right PATH without
+    // us having to keep a bash sitting between Node and the binary.
     //
-    // The cached PATH is populated by `transport.probe`, which now
-    // unconditionally prepends installer-default dirs via $HOME inside
-    // the probe script (~/.opencode/bin, ~/.cargo/bin, etc.). So the
-    // cache covers anything an installer puts in those dirs even when
-    // the user's profile didn't add it to PATH. See probe.ts.
-    const cachedPath = getCachedPath(host)
+    // We also defensively prepend a few installer-default dirs as
+    // absolute paths (using the cached HOME, no shell expansion needed
+    // through wsl.exe argv). This covers the case where the cached PATH
+    // somehow didn't include ~/.opencode/bin etc. — happened to a real
+    // user despite the probe script's $HOME prepend, root cause never
+    // fully isolated, so we belt-and-suspenders it here too.
+    const cached = getCachedProbe(host)
+    const cachedPath = cached?.path
+    const home = cached?.home
+    const installerDirs = home
+      ? [
+          `${home}/.opencode/bin`,
+          `${home}/.bun/bin`,
+          `${home}/.cargo/bin`,
+          `${home}/.npm-global/bin`,
+          `${home}/.local/bin`,
+          '/usr/local/bin'
+        ]
+      : []
+    const fullPath = [...installerDirs, ...(cachedPath ? [cachedPath] : [])].join(':')
     const wslArgs = ['-d', host.distro, '--cd', path, '--']
-    if (cachedPath) wslArgs.push('env', `PATH=${cachedPath}`)
+    if (fullPath) wslArgs.push('env', `PATH=${fullPath}`)
     wslArgs.push(bin, ...args)
 
     return spawn('wsl.exe', wslArgs, {
@@ -58,7 +68,7 @@ export class WslTransport implements ITransport {
       // wsl.exe cold start + login shell sourcing can both be slow.
       timeoutMs: 15_000
     })
-    if (result.path) setCachedPath(host, result.path)
+    if (result.path) setCachedProbe(host, result.path, result.home)
     return result.ok
       ? { ok: true, version: result.version ?? '' }
       : { ok: false, reason: result.reason ?? 'probe failed' }

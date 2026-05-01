@@ -1,6 +1,6 @@
 import {describe, it, expect, vi, beforeEach} from 'vitest'
 import {WslTransport} from '../../src/main/transports/wsl'
-import {setCachedPath} from '../../src/main/transports/path-cache'
+import {setCachedPath, setCachedProbe} from '../../src/main/transports/path-cache'
 
 vi.mock('node:child_process', () => ({
   spawn: vi.fn(() => ({
@@ -70,7 +70,34 @@ describe('WslTransport', () => {
     const binIdx = args.indexOf('claude')
     expect(envIdx).toBeGreaterThan(-1)
     expect(envIdx).toBeLessThan(binIdx)
+    // Without a cached HOME, the path is just the cached PATH verbatim.
     expect(args[envIdx + 1]).toBe('PATH=/home/user/.local/bin:/usr/bin')
+  })
+
+  it('prepends absolute installer dirs (built from cached HOME) ahead of the cached PATH', () => {
+    const host = {kind: 'wsl' as const, distro: 'WithHome'}
+    setCachedProbe(host, '/usr/bin', '/home/dolsze')
+    const transport = new WslTransport()
+    transport.spawn({
+      host,
+      path: '/tmp',
+      bin: 'opencode',
+      args: ['acp']
+    })
+
+    const args: string[] = spawnMock.mock.calls[0][1]
+    const envIdx = args.indexOf('env')
+    const pathArg = args[envIdx + 1]
+    // Installer-default dirs (.opencode/bin, .bun/bin, …) must precede
+    // the cached PATH so the spawn finds opencode even when the cached
+    // PATH somehow didn't capture ~/.opencode/bin.
+    expect(pathArg).toMatch(/^PATH=\/home\/dolsze\/\.opencode\/bin:/)
+    expect(pathArg).toContain('/home/dolsze/.bun/bin')
+    expect(pathArg).toContain('/home/dolsze/.cargo/bin')
+    expect(pathArg).toContain('/home/dolsze/.npm-global/bin')
+    expect(pathArg).toContain('/home/dolsze/.local/bin')
+    expect(pathArg).toContain('/usr/local/bin')
+    expect(pathArg).toMatch(/:\/usr\/bin$/)
   })
 
   it('passes provider-built argv straight through after the binary', () => {

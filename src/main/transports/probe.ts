@@ -10,6 +10,7 @@ import { spawn } from 'node:child_process'
 // script just don't get a `path` back.
 
 const PATH_MARKER = '__CL_PATH='
+const HOME_MARKER = '__CL_HOME='
 
 // One-shot bash script: source PATH additions from every common shell
 // init file, then UNCONDITIONALLY prepend a handful of installer-default
@@ -43,7 +44,7 @@ const PROBE_EXTRA_PATH_PREPEND =
   '"$HOME/.opencode/bin:$HOME/.bun/bin:$HOME/.cargo/bin:$HOME/.npm-global/bin:$HOME/.local/bin:/usr/local/bin:$PATH"'
 
 export function probeScript(bin: string): string {
-  return `for rc in ${PROBE_RC_FILES}; do [ -f "$rc" ] && . "$rc" 2>/dev/null; done; PATH=${PROBE_EXTRA_PATH_PREPEND}; printf '${PATH_MARKER}%s\\n' "$PATH"; ${bin} --version`
+  return `for rc in ${PROBE_RC_FILES}; do [ -f "$rc" ] && . "$rc" 2>/dev/null; done; PATH=${PROBE_EXTRA_PATH_PREPEND}; printf '${PATH_MARKER}%s\\n' "$PATH"; printf '${HOME_MARKER}%s\\n' "$HOME"; ${bin} --version`
 }
 
 interface RunOpts {
@@ -69,6 +70,11 @@ export interface ShellProbeResult {
   // i.e. when the caller used probeScript() as the remote payload.
   // Local-side probes (`claude --version` directly) leave this undefined.
   path?: string
+  // Captured remote $HOME, also from probeScript's marker line. Lets
+  // transports compose absolute installer-default paths client-side
+  // (e.g. <home>/.opencode/bin) without needing to thread shell tilde
+  // expansion through wsl.exe / ssh argv.
+  home?: string
   reason?: string
 }
 
@@ -101,16 +107,21 @@ export function runShellProbe(opts: RunOpts): Promise<ShellProbeResult> {
       const lines = (out + '\n' + err).split('\n')
       const pathLine = lines.find(l => l.startsWith(PATH_MARKER))
       const path = pathLine ? pathLine.slice(PATH_MARKER.length).trim() : undefined
+      const homeLine = lines.find(l => l.startsWith(HOME_MARKER))
+      const home = homeLine ? homeLine.slice(HOME_MARKER.length).trim() : undefined
       const versionRe = opts.versionLine ?? /./
-      const versionLine = lines.find(l => versionRe.test(l) && !l.startsWith(PATH_MARKER))
+      const versionLine = lines.find(
+        l => versionRe.test(l) && !l.startsWith(PATH_MARKER) && !l.startsWith(HOME_MARKER)
+      )
       if (code === 0 && versionLine) {
-        finish({ ok: true, version: versionLine.trim(), path })
+        finish({ ok: true, version: versionLine.trim(), path, home })
       } else if (code === 0) {
         const text = (out + err).trim()
         finish({
           ok: false,
           reason: text ? `Got unexpected version output:\n${text}` : 'version probe produced no output',
-          path
+          path,
+          home
         })
       } else {
         const text = err.trim() || out.trim() || `version probe exited with code ${code}`
@@ -122,7 +133,7 @@ export function runShellProbe(opts: RunOpts): Promise<ShellProbeResult> {
         const reason = path
           ? `${text}\n\nPATH was: ${path}`
           : text
-        finish({ ok: false, reason, path })
+        finish({ ok: false, reason, path, home })
       }
     })
   })
