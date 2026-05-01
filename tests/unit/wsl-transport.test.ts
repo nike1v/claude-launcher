@@ -31,7 +31,7 @@ describe('WslTransport', () => {
     spawnMock.mockClear()
   })
 
-  it('wraps the binary in a bash -c PATH-prepend script (no probe cache)', () => {
+  it('spawns wsl.exe with the provider binary directly when no PATH is cached', () => {
     const transport = new WslTransport()
     transport.spawn({
       host: {kind: 'wsl', distro: 'NoCachePath'},
@@ -40,26 +40,20 @@ describe('WslTransport', () => {
       args: CLAUDE_ARGS
     })
 
-    const callArgs: string[] = spawnMock.mock.calls[0][1]
-    // wsl.exe args layout: -d <distro> --cd <path> -- bash -c <script> -- <bin> <bin-args>
-    expect(callArgs.slice(0, 7)).toEqual([
-      '-d', 'NoCachePath',
-      '--cd', '/home/user/project',
-      '--',
-      'bash', '-c'
-    ])
-    // Without a cached path we fall through to $PATH so the spawned shell
-    // still picks up whatever wsl.exe inherited.
-    const script = callArgs[7]
-    expect(script).toContain('$HOME/.opencode/bin')
-    expect(script).toContain('$HOME/.local/bin')
-    expect(script).toContain(':$PATH"')
-    expect(script).toContain('exec "$@"')
-    // Positional argv after the `--`: $0 placeholder, then bin, then args.
-    expect(callArgs.slice(8)).toEqual(['--', 'claude', ...CLAUDE_ARGS])
+    expect(spawnMock).toHaveBeenCalledWith(
+      'wsl.exe',
+      [
+        '-d', 'NoCachePath',
+        '--cd', '/home/user/project',
+        '--',
+        'claude',
+        ...CLAUDE_ARGS
+      ],
+      expect.objectContaining({stdio: ['pipe', 'pipe', 'pipe']})
+    )
   })
 
-  it('embeds the cached PATH into the bash -c script when a probe ran first', () => {
+  it('prefixes the binary with `env PATH=...` when a probe cached the user PATH', () => {
     const host = {kind: 'wsl' as const, distro: 'WithPath'}
     setCachedPath(host, '/home/user/.local/bin:/usr/bin')
     const transport = new WslTransport()
@@ -71,10 +65,12 @@ describe('WslTransport', () => {
     })
 
     const args: string[] = spawnMock.mock.calls[0][1]
-    const scriptIdx = args.indexOf('-c') + 1
-    const script = args[scriptIdx]
-    expect(script).toContain(':/home/user/.local/bin:/usr/bin"')
-    expect(script).toContain('$HOME/.opencode/bin')
+    // env + PATH=... must come before the binary so the child sees the user PATH.
+    const envIdx = args.indexOf('env')
+    const binIdx = args.indexOf('claude')
+    expect(envIdx).toBeGreaterThan(-1)
+    expect(envIdx).toBeLessThan(binIdx)
+    expect(args[envIdx + 1]).toBe('PATH=/home/user/.local/bin:/usr/bin')
   })
 
   it('passes provider-built argv straight through after the binary', () => {

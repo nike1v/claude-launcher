@@ -16,25 +16,25 @@ export class WslTransport implements ITransport {
     validateProjectPath(path)
 
     // wsl.exe spawns a non-login non-interactive shell that ignores
-    // ~/.profile etc., so a binary installed via npm-global /
-    // ~/.local/bin / ~/.opencode/bin is invisible to a bare
-    // `wsl.exe -- <bin>`. We use a `bash -c '<prepend>; exec "$@"'`
-    // wrapper that:
-    //   1. Unconditionally prepends installer-default dirs via $HOME
-    //      (mirrors what probe does, in case the cached PATH doesn't
-    //      cover this provider — opencode lived in ~/.opencode/bin
-    //      that the cache wasn't reliably catching).
-    //   2. Falls back through cachedPath (built by probe with full
-    //      profile sourcing) for everything else.
-    //   3. Uses `exec "$@"` so bash replaces itself with the CLI
-    //      binary — stdin / stdout / stderr pass through cleanly,
-    //      avoiding the "claude stream-json sees EOF" issue that
-    //      bit `bash -lc 'claude "$@"'` in earlier versions.
+    // ~/.profile etc., so a binary installed via npm-global / ~/.local/bin
+    // is invisible to a bare `wsl.exe -- <bin>`. The probe ran a login bash
+    // and cached the resulting PATH; we surface it via `env PATH=...` so
+    // the child sees the right PATH without us having to keep a bash
+    // sitting between Node and the binary (that wrapper closed stdin in
+    // some setups, AND a 0.7.1 attempt to use `bash -c '...; exec "$@"'`
+    // for stronger PATH guarantees broke spawn end-to-end on real WSL
+    // for unclear reasons — the env+cached form is what's been
+    // production-tested).
+    //
+    // The cached PATH is populated by `transport.probe`, which now
+    // unconditionally prepends installer-default dirs via $HOME inside
+    // the probe script (~/.opencode/bin, ~/.cargo/bin, etc.). So the
+    // cache covers anything an installer puts in those dirs even when
+    // the user's profile didn't add it to PATH. See probe.ts.
     const cachedPath = getCachedPath(host)
-    const fallbackPath = cachedPath ?? '$PATH'
-    const homePrepend = '$HOME/.opencode/bin:$HOME/.bun/bin:$HOME/.cargo/bin:$HOME/.npm-global/bin:$HOME/.local/bin:/usr/local/bin'
-    const script = `PATH="${homePrepend}:${fallbackPath}"; exec "$@"`
-    const wslArgs = ['-d', host.distro, '--cd', path, '--', 'bash', '-c', script, '--', bin, ...args]
+    const wslArgs = ['-d', host.distro, '--cd', path, '--']
+    if (cachedPath) wslArgs.push('env', `PATH=${cachedPath}`)
+    wslArgs.push(bin, ...args)
 
     return spawn('wsl.exe', wslArgs, {
       stdio: ['pipe', 'pipe', 'pipe'],
