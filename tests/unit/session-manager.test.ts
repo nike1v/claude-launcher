@@ -176,7 +176,7 @@ describe('SessionManager', () => {
     expect(message.length).toBeLessThan(3 * 1024)
   })
 
-  it('interrupt writes a control_request/interrupt JSON line to stdin and does NOT kill the process', async () => {
+  it('first interrupt writes a control_request/interrupt JSON line to stdin and does NOT kill the process', async () => {
     // Regression for the v0.4.4 bug report: signalling the child on
     // Windows / WSL / SSH tore down the transport (wsl.exe / ssh.exe) and
     // closed the chat, instead of just aborting the in-flight claude turn.
@@ -193,11 +193,110 @@ describe('SessionManager', () => {
     expect(parsed.type).toBe('control_request')
     expect(parsed.request).toEqual({ subtype: 'interrupt' })
     expect(parsed.request_id).toMatch(/^req_/)
+  })
 
-    expect(onEvent).toHaveBeenCalledWith(
-      'session:status',
-      expect.objectContaining({ sessionId, status: 'ready' })
-    )
+  it('second interrupt while soft is in flight escalates straight to SIGTERM', async () => {
+    // The user's "I clicked stop and nothing happened, click it again"
+    // path. Skip the auto-escalation wait and SIGTERM immediately so the
+    // user gets out fast on a wedged session.
+    const sessionId = await manager.startSession(makeEnv(), makeProject())
+    const proc = mockTransport.spawn.mock.results[0].value
+    manager.interruptSession(sessionId)
+    expect(proc.kill).not.toHaveBeenCalled()
+    manager.interruptSession(sessionId)
+    expect(proc.kill).toHaveBeenCalledOnce()
+    // Default kill() — SIGTERM, not SIGKILL yet. Force is reserved for
+    // the third click / second-tier watchdog.
+    expect(proc.kill).toHaveBeenCalledWith()
+  })
+
+  it('third interrupt escalates from SIGTERM to SIGKILL', async () => {
+    const sessionId = await manager.startSession(makeEnv(), makeProject())
+    const proc = mockTransport.spawn.mock.results[0].value
+    manager.interruptSession(sessionId) // soft
+    manager.interruptSession(sessionId) // hard (SIGTERM)
+    manager.interruptSession(sessionId) // force (SIGKILL)
+    expect(proc.kill).toHaveBeenCalledTimes(2)
+    expect(proc.kill).toHaveBeenLastCalledWith('SIGKILL')
+  })
+
+  it('soft watchdog auto-escalates to SIGTERM when no turn.completed lands', async () => {
+    // The wedged-claude case (auto-compact, hung tool call) — the
+    // in-band interrupt is sent but never honoured. After the soft
+    // window the watchdog fires and SIGTERMs the child so the user
+    // isn't stranded.
+    vi.useFakeTimers()
+    try {
+      const sessionId = await manager.startSession(makeEnv(), makeProject())
+      const proc = mockTransport.spawn.mock.results[0].value
+      manager.interruptSession(sessionId)
+      vi.advanceTimersByTime(5000) // SOFT_INTERRUPT_TIMEOUT_MS
+      expect(proc.kill).toHaveBeenCalledOnce()
+      expect(proc.kill).toHaveBeenCalledWith()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('hard watchdog auto-escalates to SIGKILL when SIGTERM doesn\'t land', async () => {
+    vi.useFakeTimers()
+    try {
+      const sessionId = await manager.startSession(makeEnv(), makeProject())
+      const proc = mockTransport.spawn.mock.results[0].value
+      manager.interruptSession(sessionId)
+      vi.advanceTimersByTime(5000) // soft → hard (SIGTERM)
+      vi.advanceTimersByTime(3000) // hard → force (SIGKILL)
+      expect(proc.kill).toHaveBeenCalledTimes(2)
+      expect(proc.kill).toHaveBeenLastCalledWith('SIGKILL')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('turn.completed clears the interrupt phase so the next click starts soft again', async () => {
+    vi.useFakeTimers()
+    try {
+      const sessionId = await manager.startSession(makeEnv(), makeProject())
+      const proc = mockTransport.spawn.mock.results[0].value
+
+      // Open a turn first — claude-adapter only emits turn.completed
+      // when there's an open turn to close.
+      const assistantLine = JSON.stringify({
+        type: 'assistant',
+        message: {
+          id: 'msg-1', type: 'message', role: 'assistant',
+          content: [{ type: 'text', text: 'partial' }],
+          model: 'claude-sonnet-4-5', stop_reason: null,
+          usage: { input_tokens: 5, output_tokens: 1 }
+        }
+      })
+      proc.stdout.emit('data', Buffer.from(assistantLine + '\n'))
+
+      manager.interruptSession(sessionId)
+
+      // Provider honours the interrupt — emit a result event to close
+      // the open turn (claude-adapter produces turn.completed).
+      const resultLine = JSON.stringify({
+        type: 'result',
+        subtype: 'success',
+        session_id: 'sess-1',
+        is_error: false,
+        num_turns: 1
+      })
+      proc.stdout.emit('data', Buffer.from(resultLine + '\n'))
+
+      // Watchdog should be cleared, no kill issued even past timeout.
+      vi.advanceTimersByTime(15000)
+      expect(proc.kill).not.toHaveBeenCalled()
+
+      // Phase is reset — a fresh interrupt starts at 'soft' again, not
+      // jumps to 'hard'. Verify by clicking once more and checking kill
+      // didn't fire (soft phase is in-band only).
+      manager.interruptSession(sessionId)
+      expect(proc.kill).not.toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('skips spawn and emits error when probe rejects', async () => {

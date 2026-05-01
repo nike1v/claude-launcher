@@ -159,52 +159,6 @@ Fix directions:
   rather than the latest tokenUsage event — only update on the
   outermost `turn.completed`.
 
-### STOP button doesn't actually halt an in-flight turn
-Reported 2026-05-01. User pressed STOP after the agent appeared stuck
-mid-response. Subsequent user messages were written into the JSONL
-transcript but got no response for over an hour.
-
-Cause: `interruptSession` (`src/main/session-manager.ts`) writes an
-in-band protocol message to the CLI's stdin (claude stream-json
-`control_request {subtype: "interrupt"}`, codex `turn/interrupt`,
-ACP `session/interrupt`) and immediately flips session status to
-`'ready'` without waiting for the CLI to acknowledge that the turn
-was actually cancelled. If the CLI is wedged (auto-compact, hung
-tool call), the request sits in stdin behind the in-flight work.
-Meanwhile the renderer thinks the session is ready, the user types
-the next message, and it goes straight to the same stdin pipe — the
-CLI buffers it for after the current turn.
-
-**0.5.5 attempt — reverted in 0.5.6.** Tried adding an
-`'interrupting'` transient status with a 5 s watchdog that escalates
-to `process.kill()`. In production:
-- The `'Stopping…'` status never cleared — UI hung in the
-  interrupting state until the user closed the tab.
-- Double-clicking Stop didn't escalate either; the second click
-  appeared not to reach the second-click handler.
-
-Open hypotheses for next attempt:
-- The watchdog timer may not have fired in renderer/main IPC
-  ordering edge cases (the timer is in main, but the renderer's
-  status-change listener is the only thing that would clear the UI;
-  if the kill happened but the exit handler raced…).
-- WSL/SSH transport: `process.kill()` tears down the
-  `wsl.exe`/`ssh.exe` wrapper but the underlying remote claude may
-  keep running — though the wrapper exit should still flip status.
-- The double-click might be racing the first click's debounce or the
-  StopButton might be unmounting transiently during the status flip.
-
-Fix directions:
-- Add main-process logging around `interruptSession` and the
-  watchdog so the next reproducer pinpoints which step is silent.
-- Reproduce locally with the dev tools open and watch the
-  `session:status` IPC stream — does `'interrupting'` arrive? Does
-  the watchdog's escalation kill the process? Does the exit handler
-  fire?
-- Possibly skip the in-band interrupt entirely on a second click and
-  go straight to `stopSession` (which already works) — at the cost
-  of tearing down the chat instead of just the turn.
-
 ### Auto-compact detection (positive signal)
 Same root family as STOP — when claude's auto-compaction kicks in
 the session sits on the busy spinner for 30+ minutes with no events.
@@ -217,6 +171,14 @@ with a fixed STOP so the bail-out path actually works.
 
 See git log for details. Quick index:
 
+- v0.6.0 — STOP modelled after claude CLI's ESC: each click escalates
+  one notch on a soft → hard → force ladder
+  (in-band interrupt → SIGTERM → SIGKILL), with auto-escalation
+  watchdogs (5 s soft, 3 s hard) so a wedged session never strands
+  the UI. Phase resets on `turn.completed` (clean abort) or exit.
+  Status stays `busy` throughout — the 0.5.5 `'interrupting'` state
+  hung in production and is intentionally not reintroduced. Stop
+  button title hints at what the next click does.
 - v0.5.9 — Settings → Appearance now has a 24h/12h clock-format
   toggle that drives the message timestamps and their hover tooltips.
   Persists in localStorage; default 24h.

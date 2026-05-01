@@ -179,18 +179,34 @@ function SendButton({
   )
 }
 
-// Visible only while the active session is busy — clicking sends a
-// stream-json control_request/interrupt over stdin so claude aborts the
-// in-flight turn without us tearing down the wsl.exe / ssh / claude child
-// (which would close the whole chat).
+// Visible while the session is busy. Models claude CLI's ESC: first
+// click sends an in-band interrupt; if the user clicks again because
+// the spinner hasn't cleared, main escalates to SIGTERM, then SIGKILL.
+// We track click count locally so the tooltip can hint at what the
+// next click will do — gives users an out without a separate UI state
+// (the 0.5.5 'interrupting' status hung in production and was reverted).
 function StopButton({ sessionId }: { sessionId: string }) {
   const isBusy = useSessionsStore(s => s.sessions[sessionId]?.status === 'busy')
+  const [clickCount, setClickCount] = useState(0)
+  // Reset the count when the session leaves busy — a fresh turn shouldn't
+  // remember stale escalation state from the previous one.
+  useEffect(() => {
+    if (!isBusy) setClickCount(0)
+  }, [isBusy])
   if (!isBusy) return null
+  const title = clickCount === 0
+    ? 'Stop'
+    : clickCount === 1
+      ? 'Click again to force-kill the session'
+      : 'Force-killing…'
   return (
     <button
       type="button"
-      onClick={() => interruptSession(sessionId)}
-      title="Stop"
+      onClick={() => {
+        interruptSession(sessionId)
+        setClickCount(c => c + 1)
+      }}
+      title={title}
       className="p-2 text-danger/80 hover:text-danger transition-colors"
     >
       <Square size={14} fill="currentColor" />
