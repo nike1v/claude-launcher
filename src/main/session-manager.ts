@@ -13,6 +13,7 @@ import { resolveTransport as defaultResolveTransport } from './transports'
 import { getProvider } from './providers/registry'
 import type { IProvider, IProviderAdapter } from './providers/types'
 import { resolveProviderKind, type NormalizedEvent } from '../shared/events'
+import { acpLog } from './acp-debug-log'
 
 type EventCallback = (channel: string, payload: unknown) => void
 
@@ -275,6 +276,15 @@ export class SessionManager {
     }
     try {
       stdin.write(payload)
+      // Mirror outbound bytes to the ACP debug log for cursor / opencode
+      // sessions. Other providers go through the same code path but the
+      // log is filtered to ACP flavors where remote-protocol debugging
+      // tends to be needed.
+      if (session.provider.kind === 'cursor' || session.provider.kind === 'opencode') {
+        for (const line of payload.split('\n')) {
+          if (line.trim()) acpLog('tx', sessionId, session.provider.kind, line)
+        }
+      }
       return true
     } catch (err) {
       const reason = err instanceof Error ? err.message : 'write to claude stdin failed'
@@ -366,7 +376,11 @@ export class SessionManager {
     const lines = session.lineBuffer.split('\n')
     session.lineBuffer = lines.pop() ?? ''
 
+    const isAcp = session.provider.kind === 'cursor' || session.provider.kind === 'opencode'
     for (const line of lines) {
+      // Mirror inbound bytes for ACP sessions before parsing, so a
+      // parse failure in the adapter still leaves a record on disk.
+      if (isAcp && line.trim()) acpLog('rx', session.sessionId, session.provider.kind, line)
       // adapter.parseChunk takes a chunk; feeding it one complete line
       // at a time keeps its own internal buffer empty after every call.
       const events = session.adapter.parseChunk(line + '\n')
