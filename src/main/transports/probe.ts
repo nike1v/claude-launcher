@@ -39,8 +39,8 @@ const PATH_MARKER = '__CL_PATH='
 // not user input. It's interpolated unquoted so a malicious value
 // would be a shell-injection sink. ProviderRegistry hands these out;
 // no untrusted path reaches here.
-const PROBE_RC_FILES = '~/.profile ~/.bashrc ~/.zshrc ~/.zprofile'
-const PROBE_EXTRA_PATHS = '~/.local/bin ~/.opencode/bin ~/.cargo/bin ~/.npm-global/bin'
+const PROBE_RC_FILES = '~/.profile ~/.bash_profile ~/.bashrc ~/.zprofile ~/.zshrc ~/.path.sh ~/.cargo/env'
+const PROBE_EXTRA_PATHS = '~/.local/bin ~/.opencode/bin ~/.bun/bin ~/.cargo/bin ~/.npm-global/bin /usr/local/bin'
 
 export function probeScript(bin: string): string {
   return `for rc in ${PROBE_RC_FILES}; do [ -f "$rc" ] && . "$rc" 2>/dev/null; done; for p in ${PROBE_EXTRA_PATHS}; do case ":$PATH:" in *":$p:"*) ;; *) [ -d "$p" ] && PATH="$p:$PATH" ;; esac; done; printf '${PATH_MARKER}%s\\n' "$PATH"; ${bin} --version`
@@ -114,7 +114,15 @@ export function runShellProbe(opts: RunOpts): Promise<ShellProbeResult> {
         })
       } else {
         const text = err.trim() || out.trim() || `version probe exited with code ${code}`
-        finish({ ok: false, reason: text, path })
+        // Surface the PATH the probe assembled when it's available.
+        // Without this, "command not found" failures look identical to
+        // "missing binary" — the captured PATH tells us whether our
+        // login-shell sourcing + defensive prepends actually built the
+        // PATH we expected.
+        const reason = path
+          ? `${text}\n\nPATH was: ${path}`
+          : text
+        finish({ ok: false, reason, path })
       }
     })
   })

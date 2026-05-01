@@ -5,7 +5,6 @@ import { useEnvironmentsStore } from '../../store/environments'
 import { findDuplicateEnvironment } from '../../lib/environment-dedup'
 import { PROVIDER_OPTIONS, modelPlaceholderFor, providerLabel } from '../../lib/provider-options'
 import { EnvironmentStatus, type ProbeState } from './EnvironmentStatus'
-import { ModelCombobox } from './ModelCombobox'
 
 interface Props {
   initial: Environment | null
@@ -205,14 +204,15 @@ export function EnvironmentForm({ initial, onCancel, onSave }: Props) {
 
       <div>
         <label className={labelCls}>Default {providerLabel(providerKind)} model (optional)</label>
-        <ModelCombobox
+        <input
+          className={inputCls}
           value={defaultModel}
-          onChange={setDefaultModel}
-          providerKind={providerKind}
+          onChange={e => setDefaultModel(e.target.value)}
           placeholder={modelPlaceholderFor(providerKind)}
         />
         <p className="mt-1 text-[10px] text-fg-faint">
           Projects under this environment use this unless they set their own model.
+          Type whatever id the {providerLabel(providerKind)} CLI accepts.
         </p>
       </div>
 

@@ -1,69 +1,91 @@
-import { useEffect, useRef, useState } from 'react'
-import { ChevronDown } from 'lucide-react'
+import { useState } from 'react'
+import { Search, X } from 'lucide-react'
 import type { HostType } from '../../../../shared/types'
 import type { ProviderKind } from '../../../../shared/events'
 import { EnvironmentStatus } from './EnvironmentStatus'
+import { Modal } from '../Modal'
 import { PROVIDER_OPTIONS, providerLabel, providerBin } from '../../lib/provider-options'
+import { describeHost } from '../../../../shared/host-utils'
 
 interface Props {
   config: HostType
-  // Env's default provider — gets the at-a-glance dot in the collapsed
-  // state. Defaults to claude for envs persisted before per-env provider
+  // Env's default provider — gets the at-a-glance dot on the row.
+  // Defaults to claude for envs persisted before per-env provider
   // selection landed.
   defaultProviderKind?: ProviderKind
+  envName?: string
 }
 
-// Compact entry-point for the env row: shows the default provider's
-// probe state inline + a chevron that, when clicked, opens a floating
-// popover above the row with status for all four providers (each
-// probed in parallel). The popover is absolutely positioned so it
-// doesn't push the row layout — same anchoring pattern used by
-// dropdowns elsewhere in the app.
-//
-// Probes only run when the popover is open, keeping the collapsed
-// state cheap (1 probe per env). SSH cold-start is the slow case;
-// four parallel probes share the wrapper overhead so the wait is
-// dominated by the slowest single probe, not the sum.
-export function ProvidersStatus({ config, defaultProviderKind = 'claude' }: Props) {
+// At-a-glance provider status for an environment row in Settings.
+// The inline chip shows the env's default provider; clicking it opens
+// a modal that probes all four providers in parallel. Modal lives in
+// the page-level overlay so it doesn't push the row layout and works
+// the same regardless of how many envs the user has.
+export function ProvidersStatus({ config, defaultProviderKind = 'claude', envName }: Props) {
   const [open, setOpen] = useState(false)
-  const wrapperRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (!open) return
-    const onDocMouseDown = (e: MouseEvent) => {
-      if (!wrapperRef.current?.contains(e.target as Node)) setOpen(false)
-    }
-    window.addEventListener('mousedown', onDocMouseDown)
-    return () => window.removeEventListener('mousedown', onDocMouseDown)
-  }, [open])
-
   return (
-    <div ref={wrapperRef} className="relative">
+    <>
       <button
         type="button"
-        onClick={() => setOpen(o => !o)}
-        title={open ? 'Hide other providers' : 'Show all providers'}
+        onClick={() => setOpen(true)}
+        title="Check all providers on this env"
         className="flex items-center gap-1 text-xs hover:text-fg transition-colors"
       >
         <EnvironmentStatus config={config} providerKind={defaultProviderKind} compact />
-        <ChevronDown
-          size={11}
-          className={`text-fg-faint transition-transform ${open ? 'rotate-180' : ''}`}
-        />
+        <Search size={11} className="text-fg-faint" />
       </button>
       {open && (
-        <div className="absolute right-0 top-full mt-1 z-20 flex flex-col gap-1.5 px-3 py-2 rounded border border-divider bg-panel shadow-lg min-w-[200px]">
-          {PROVIDER_OPTIONS.map(opt => (
-            <div key={opt.value} className="flex items-center justify-between gap-3 text-[11px]">
-              <span className="flex items-center gap-1.5">
-                <span className="text-fg-muted">{providerLabel(opt.value)}</span>
-                <span className="font-mono text-fg-faint">({providerBin(opt.value)})</span>
-              </span>
-              <EnvironmentStatus config={config} providerKind={opt.value} compact />
-            </div>
-          ))}
-        </div>
+        <ProvidersProbeModal
+          config={config}
+          envName={envName}
+          onClose={() => setOpen(false)}
+        />
       )}
-    </div>
+    </>
+  )
+}
+
+function ProvidersProbeModal({
+  config,
+  envName,
+  onClose
+}: {
+  config: HostType
+  envName?: string
+  onClose: () => void
+}) {
+  return (
+    <Modal onClose={onClose} panelClassName="bg-panel border border-divider rounded-lg p-4 w-[380px] shadow-xl">
+      <div className="flex items-start justify-between gap-3 mb-3">
+        <div className="min-w-0">
+          <h2 className="text-sm font-semibold text-fg">Provider availability</h2>
+          <p className="text-[11px] text-fg-faint truncate">
+            {envName ? `${envName} · ${describeHost(config)}` : describeHost(config)}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="p-1 rounded text-fg-faint hover:text-fg hover:bg-elevated"
+          aria-label="Close"
+        >
+          <X size={14} />
+        </button>
+      </div>
+      <div className="flex flex-col gap-2">
+        {PROVIDER_OPTIONS.map(opt => (
+          <div
+            key={opt.value}
+            className="flex items-center justify-between gap-3 px-3 py-2 rounded border border-divider"
+          >
+            <span className="flex flex-col min-w-0">
+              <span className="text-xs text-fg">{providerLabel(opt.value)}</span>
+              <span className="font-mono text-[10px] text-fg-faint">{providerBin(opt.value)}</span>
+            </span>
+            <EnvironmentStatus config={config} providerKind={opt.value} compact />
+          </div>
+        ))}
+      </div>
+    </Modal>
   )
 }

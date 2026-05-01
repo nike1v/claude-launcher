@@ -5,7 +5,6 @@ import type { ProviderKind } from '../../../../shared/events'
 import { useProjectsStore } from '../../store/projects'
 import { useEnvironmentsStore } from '../../store/environments'
 import { Modal } from '../Modal'
-import { ModelCombobox } from '../Settings/ModelCombobox'
 import { PathCombobox } from '../Settings/PathCombobox'
 import { EnvironmentStatus } from '../Settings/EnvironmentStatus'
 import { findDuplicateEnvironment } from '../../lib/environment-dedup'
@@ -353,10 +352,10 @@ export function AddProjectModal({ onClose, editProject, presetEnvironmentId }: P
             <label className={labelCls}>
               {providerLabel(providerKind ?? inheritedProvider)} model override (optional)
             </label>
-            <ModelCombobox
+            <input
+              className={inputCls}
               value={model}
-              onChange={setModel}
-              providerKind={providerKind ?? inheritedProvider}
+              onChange={e => setModel(e.target.value)}
               placeholder={editEnv?.defaultModel || modelPlaceholderFor(providerKind ?? inheritedProvider)}
             />
             {editEnv?.defaultModel && !model && (

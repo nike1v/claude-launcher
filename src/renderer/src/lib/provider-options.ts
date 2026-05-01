@@ -27,48 +27,21 @@ export function providerBin(kind: ProviderKind): string {
   return PROVIDER_OPTIONS.find(o => o.value === kind)?.bin ?? kind
 }
 
-// Suggested model ids per provider. The combobox lets users free-type
-// anyway (private aliases, just-released models, opencode's
-// provider/model syntax), so this list is hints, not gates. Keep
-// short and conventional — exotic combinations can be typed.
-export interface ModelOption {
-  id: string
-  label: string
-}
-
-export const MODELS_BY_PROVIDER: Record<ProviderKind, ReadonlyArray<ModelOption>> = {
-  claude: [
-    { id: 'claude-opus-4-7', label: 'Opus 4.7' },
-    { id: 'claude-opus-4-7[1m]', label: 'Opus 4.7 (1M context)' },
-    { id: 'claude-sonnet-4-6', label: 'Sonnet 4.6' },
-    { id: 'claude-sonnet-4-6[1m]', label: 'Sonnet 4.6 (1M context)' },
-    { id: 'claude-haiku-4-5', label: 'Haiku 4.5' }
-  ],
-  codex: [
-    { id: 'gpt-5-codex', label: 'GPT-5 Codex' },
-    { id: 'gpt-5', label: 'GPT-5' },
-    { id: 'gpt-4o', label: 'GPT-4o' }
-  ],
-  // Cursor's agent picks a model server-side; the field here is a
-  // pass-through alias if you want to pin one.
-  cursor: [
-    { id: 'auto', label: 'Auto (Cursor decides)' }
-  ],
-  // Opencode routes through whichever provider the user's `opencode
-  // auth login` configured. The model id uses provider/model syntax.
-  opencode: [
-    { id: 'anthropic/claude-sonnet-4-6', label: 'Anthropic Sonnet 4.6' },
-    { id: 'anthropic/claude-opus-4-7', label: 'Anthropic Opus 4.7' },
-    { id: 'openai/gpt-5', label: 'OpenAI GPT-5' },
-    { id: 'openai/gpt-4o', label: 'OpenAI GPT-4o' }
-  ]
-}
-
+// Format hints for the model id field. Used as placeholders so the
+// user knows what shape to type for the chosen provider — we don't
+// hardcode the actual model list because:
+//   1. Each provider ships new models on its own cadence and our
+//      hardcoded list would lag behind / mislead users into
+//      typing stale ids.
+//   2. None of the four CLIs exposes a stable `--list-models` we
+//      could poll, so dynamic discovery isn't reliable today.
+// The user types whatever model the CLI accepts; we just suggest the
+// shape via the placeholder.
 const PLACEHOLDERS: Record<ProviderKind, string> = {
-  claude: 'claude-opus-4-7',
-  codex: 'gpt-5-codex',
-  cursor: 'auto',
-  opencode: 'anthropic/claude-sonnet-4-6'
+  claude: 'e.g. claude-opus-4-7 (leave blank for default)',
+  codex: 'e.g. gpt-5-codex (leave blank for default)',
+  cursor: 'e.g. auto (leave blank for default)',
+  opencode: 'e.g. anthropic/claude-sonnet-4-6 (leave blank for default)'
 }
 
 export function modelPlaceholderFor(kind: ProviderKind): string {
