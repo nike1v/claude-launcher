@@ -217,6 +217,10 @@ with a fixed STOP so the bail-out path actually works.
 
 See git log for details. Quick index:
 
+- v0.5.7 — message timestamps: HH:MM rendered next to user and
+  assistant bubbles, full date on hover. JSONL replay uses the
+  original ISO timestamp from disk; live and InputBar local pushes
+  stamp `Date.now()`.
 - v0.5.6 — revert 0.5.5 STOP watchdog (UI hung in `interrupting`,
   second click didn't escalate — re-logged as separate bug);
   ProjectItem now inherits `lastUsedTokens` from the project record

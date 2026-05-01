@@ -4,13 +4,15 @@ import { AttachmentImage } from './AttachmentImage'
 import type { UserAttachment } from '../../../../shared/events'
 import { FileText, Download } from 'lucide-react'
 import { saveFileAs } from '../../ipc/bridge'
+import { formatMessageTime, formatMessageTimeFull } from '../../lib/format-time'
 
 interface Props {
   text: string
   attachments?: ReadonlyArray<UserAttachment>
+  timestamp?: number
 }
 
-export const UserMessage = memo(function UserMessage({ text, attachments }: Props) {
+export const UserMessage = memo(function UserMessage({ text, attachments, timestamp }: Props) {
   const hasAttachments = attachments && attachments.length > 0
 
   return (
@@ -26,6 +28,14 @@ export const UserMessage = memo(function UserMessage({ text, attachments }: Prop
           <div className="bg-bubble-user/40 border border-divider rounded-lg px-3 py-2 text-sm text-fg whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
             {text}
           </div>
+        )}
+        {timestamp !== undefined && (
+          <span
+            title={formatMessageTimeFull(timestamp)}
+            className="text-[10px] text-fg-faint font-mono"
+          >
+            {formatMessageTime(timestamp)}
+          </span>
         )}
         {hasAttachments && (
           <div className="flex flex-col gap-1 items-end">

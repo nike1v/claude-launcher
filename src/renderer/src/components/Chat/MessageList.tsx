@@ -68,9 +68,9 @@ export const MessageList = memo(function MessageList({ sessionId }: Props) {
     switch (item.kind) {
       case 'user':
         if (!item.text && !item.attachments?.length) return null
-        return <UserMessage key={item.id} text={item.text} attachments={item.attachments} />
+        return <UserMessage key={item.id} text={item.text} attachments={item.attachments} timestamp={item.timestamp} />
       case 'assistant':
-        return item.text.trim() ? <AssistantMessage key={item.id} text={item.text} /> : null
+        return item.text.trim() ? <AssistantMessage key={item.id} text={item.text} timestamp={item.timestamp} /> : null
       case 'reasoning':
         return <Thinking key={item.id} text={item.text} />
       case 'tool':

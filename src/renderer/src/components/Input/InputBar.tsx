@@ -85,7 +85,8 @@ function useSubmit({
           turnId,
           itemType: 'user_message',
           text,
-          attachments: renderAtts.length ? renderAtts : undefined
+          attachments: renderAtts.length ? renderAtts : undefined,
+          timestamp: Date.now()
         },
         {
           kind: 'item.completed',

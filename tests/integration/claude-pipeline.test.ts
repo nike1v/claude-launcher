@@ -51,7 +51,14 @@ function resultEvent(opts: { contextWindow?: number; isError?: boolean } = {}): 
 // Strip the unstable item ids before comparing items across paths.
 function stripIds(items: RenderedItem[]): unknown[] {
   return items.map(item => {
-    const { id: _id, ...rest } = item
+    // Drop the random itemId and the wall-clock timestamp — both are
+    // expected to differ between live (Date.now()) and replay (parsed
+    // from the line, which lacks a JSONL `timestamp` field in this
+    // synthetic test fixture) and the equivalence we care about is
+    // structural (same items in the same order with the same content),
+    // not byte-identical.
+    const { id: _id, ...rest } = item as RenderedItem & { timestamp?: number }
+    delete (rest as { timestamp?: number }).timestamp
     return rest
   })
 }

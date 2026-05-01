@@ -150,7 +150,7 @@ export type NormalizedEvent =
       | { itemType: 'tool_use'; name: string; input: unknown }
       | { itemType: 'command_execution'; command: string; cwd?: string }
       | { itemType: 'file_change'; path: string; mode?: 'create' | 'edit' | 'delete' }
-    ) & { kind: 'item.started'; itemId: string; turnId: string }
+    ) & { kind: 'item.started'; itemId: string; turnId: string; timestamp?: number }
 
   // item.completed closes an item. For `tool_use` items the adapter
   // attaches the tool's output (the model's view of what happened) so

@@ -514,8 +514,13 @@ function emitItemStarted(
 
   const itemType = mapItemType(typeof item.type === 'string' ? item.type : 'unknown')
 
+  // Codex doesn't carry a per-item timestamp on the wire, so we stamp at
+  // parse time. Sub-second drift from when the wire packet was sent.
+  const timestamp = Date.now()
   switch (itemType) {
     case 'assistant_message':
+      out.push({ kind: 'item.started', itemId, turnId, itemType, timestamp })
+      break
     case 'reasoning':
       out.push({ kind: 'item.started', itemId, turnId, itemType })
       break
@@ -525,7 +530,8 @@ function emitItemStarted(
         itemId,
         turnId,
         itemType,
-        text: typeof item.text === 'string' ? item.text : ''
+        text: typeof item.text === 'string' ? item.text : '',
+        timestamp
       })
       break
     case 'tool_use':

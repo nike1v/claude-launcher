@@ -128,7 +128,11 @@ export class ClaudeAdapter implements IProviderAdapter {
     const out: NormalizedEvent[] = []
     for (const line of lines) {
       const event = parseStreamJsonLine(line)
-      if (event) this.translate(event, out)
+      // Live stream-json doesn't carry timestamps; stamping at parse
+      // time is accurate within sub-second of when claude printed the
+      // line. Replay path extracts the real ISO timestamp from the
+      // JSONL line below.
+      if (event) this.translate(event, out, Date.now())
     }
     return out
   }
@@ -143,14 +147,19 @@ export class ClaudeAdapter implements IProviderAdapter {
       const trimmed = line.trim()
       if (!trimmed) continue
       const event = parseStreamJsonLine(trimmed)
-      if (event) replayAdapter.translate(event, out)
+      if (!event) continue
+      // JSONL lines carry an ISO timestamp written when claude saved
+      // the message; that's the right value to display, not the
+      // replay-time wall clock.
+      const ts = extractJsonlTimestamp(trimmed) ?? Date.now()
+      replayAdapter.translate(event, out, ts)
     }
     return out
   }
 
   // ── Translation ────────────────────────────────────────────────────────
 
-  private translate(event: StreamJsonEvent, out: NormalizedEvent[]): void {
+  private translate(event: StreamJsonEvent, out: NormalizedEvent[], timestamp: number): void {
     if (event.type === 'system' && event.subtype === 'init') {
       out.push({
         kind: 'session.started',
@@ -168,12 +177,12 @@ export class ClaudeAdapter implements IProviderAdapter {
     }
 
     if (event.type === 'assistant') {
-      this.translateAssistant(event, out)
+      this.translateAssistant(event, out, timestamp)
       return
     }
 
     if (event.type === 'user') {
-      this.translateUser(event, out)
+      this.translateUser(event, out, timestamp)
       return
     }
 
@@ -198,7 +207,7 @@ export class ClaudeAdapter implements IProviderAdapter {
     return turnId
   }
 
-  private translateAssistant(event: AssistantEvent, out: NormalizedEvent[]): void {
+  private translateAssistant(event: AssistantEvent, out: NormalizedEvent[], timestamp: number): void {
     const turnId = this.ensureTurn(out, event.message.model)
     const isReplay = this.mode === 'replay'
 
@@ -226,11 +235,11 @@ export class ClaudeAdapter implements IProviderAdapter {
         const itemId = `text-${randomUUID()}`
         if (isReplay) {
           // Replay: text is whole already. One event with text inline.
-          out.push({ kind: 'item.started', itemId, turnId, itemType: 'assistant_message', text: block.text })
+          out.push({ kind: 'item.started', itemId, turnId, itemType: 'assistant_message', text: block.text, timestamp })
         } else {
           // Live: keep the start/delta/complete shape so streaming
           // providers (codex) can plug in without us revisiting this.
-          out.push({ kind: 'item.started', itemId, turnId, itemType: 'assistant_message' })
+          out.push({ kind: 'item.started', itemId, turnId, itemType: 'assistant_message', timestamp })
           out.push({ kind: 'content.delta', itemId, streamKind: 'assistant_text', text: block.text })
           out.push({ kind: 'item.completed', itemId, status: 'completed' })
         }
@@ -266,7 +275,7 @@ export class ClaudeAdapter implements IProviderAdapter {
     }
   }
 
-  private translateUser(event: UserEvent, out: NormalizedEvent[]): void {
+  private translateUser(event: UserEvent, out: NormalizedEvent[], timestamp: number): void {
     const content = event.message.content
 
     if (typeof content === 'string') {
@@ -278,7 +287,7 @@ export class ClaudeAdapter implements IProviderAdapter {
       if (this.mode === 'replay' && content.trim()) {
         const turnId = this.ensureTurn(out)
         const itemId = `user-${randomUUID()}`
-        out.push({ kind: 'item.started', itemId, turnId, itemType: 'user_message', text: content })
+        out.push({ kind: 'item.started', itemId, turnId, itemType: 'user_message', text: content, timestamp })
       }
       return
     }
@@ -332,7 +341,8 @@ export class ClaudeAdapter implements IProviderAdapter {
         turnId,
         itemType: 'user_message',
         text,
-        attachments: promptAttachments.length ? promptAttachments : undefined
+        attachments: promptAttachments.length ? promptAttachments : undefined,
+        timestamp
       })
     }
   }
@@ -367,6 +377,26 @@ export class ClaudeAdapter implements IProviderAdapter {
       })
     }
   }
+}
+
+// Pull the ISO8601 timestamp claude writes on every JSONL line so a
+// transcript replay can render the original message times instead of
+// the current wall clock. Live stream-json doesn't include this field —
+// timestamps for live events are stamped at parseChunk time.
+function extractJsonlTimestamp(line: string): number | undefined {
+  try {
+    const obj = JSON.parse(line) as unknown
+    if (obj && typeof obj === 'object' && 'timestamp' in obj) {
+      const t = (obj as { timestamp: unknown }).timestamp
+      if (typeof t === 'string') {
+        const ms = Date.parse(t)
+        return Number.isNaN(ms) ? undefined : ms
+      }
+    }
+  } catch {
+    // Unparseable line — caller already discarded it via parseStreamJsonLine.
+  }
+  return undefined
 }
 
 function blockToAttachment(block: ImageBlock | DocumentBlock): UserAttachment {

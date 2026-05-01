@@ -10,8 +10,8 @@
 import type { NormalizedEvent, UserAttachment } from '../../../shared/events'
 
 export type RenderedItem =
-  | { id: string; kind: 'user'; text: string; attachments?: readonly UserAttachment[] }
-  | { id: string; kind: 'assistant'; text: string }
+  | { id: string; kind: 'user'; text: string; attachments?: readonly UserAttachment[]; timestamp?: number }
+  | { id: string; kind: 'assistant'; text: string; timestamp?: number }
   | { id: string; kind: 'reasoning'; text: string }
   | {
       id: string
@@ -90,13 +90,13 @@ export function deriveItems(events: readonly NormalizedEvent[]): RenderedItem[] 
 function makeItem(event: Extract<NormalizedEvent, { kind: 'item.started' }>): RenderedItem | null {
   switch (event.itemType) {
     case 'user_message':
-      return { id: event.itemId, kind: 'user', text: event.text, attachments: event.attachments }
+      return { id: event.itemId, kind: 'user', text: event.text, attachments: event.attachments, timestamp: event.timestamp }
     case 'assistant_message':
       // text is inline when the provider sends the block whole
       // (transcript replay; claude live doesn't actually stream blocks
       // either but we keep the start/delta/complete shape for codex).
       // Subsequent content.delta events still append.
-      return { id: event.itemId, kind: 'assistant', text: event.text ?? '' }
+      return { id: event.itemId, kind: 'assistant', text: event.text ?? '', timestamp: event.timestamp }
     case 'reasoning':
       return { id: event.itemId, kind: 'reasoning', text: event.text ?? '' }
     case 'tool_use':

@@ -431,7 +431,8 @@ export class AcpAdapter implements IProviderAdapter {
             kind: 'item.started',
             itemId: this.currentAssistantItemId,
             turnId: this.currentTurnId ?? '',
-            itemType: 'assistant_message'
+            itemType: 'assistant_message',
+            timestamp: Date.now()
           })
         }
         out.push({
