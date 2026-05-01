@@ -1,8 +1,9 @@
-import { X } from 'lucide-react'
+import { X, AlertTriangle } from 'lucide-react'
 import type { Session } from '../../../../shared/types'
 import { useProjectsStore } from '../../store/projects'
 import { useEnvironmentsStore } from '../../store/environments'
 import { StatusDot } from '../StatusDot'
+import { useStaleBusy } from '../../lib/use-stale-busy'
 
 interface Props {
   session: Session
@@ -16,6 +17,7 @@ export function Tab({ session, isActive, onActivate, onClose }: Props) {
   const { environments } = useEnvironmentsStore()
   const project = projects.find(p => p.id === session.projectId)
   const env = project ? environments.find(e => e.id === project.environmentId) : undefined
+  const looksStale = useStaleBusy(session.id)
 
   const hostLabel = env
     ? env.config.kind === 'wsl'
@@ -39,6 +41,15 @@ export function Tab({ session, isActive, onActivate, onClose }: Props) {
         <span className="absolute inset-x-0 top-0 h-0.5 bg-accent pointer-events-none" />
       )}
       <StatusDot status={session.status} />
+      {looksStale && (
+        <AlertTriangle
+          size={11}
+          className="text-warn shrink-0"
+          aria-label="Session may be unresponsive"
+        >
+          <title>No activity for a while — session may be unresponsive</title>
+        </AlertTriangle>
+      )}
       <span className="text-xs truncate flex-1">
         <span className="text-fg-faint mr-1">{hostLabel}</span>
         {project?.name ?? 'Unknown'}

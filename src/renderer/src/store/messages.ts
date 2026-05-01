@@ -8,6 +8,12 @@ import type { NormalizedEvent } from '../../../shared/events'
 
 interface MessagesStore {
   eventsBySession: Record<string, NormalizedEvent[]>
+  // Wall-clock ms of the most recent live event arrival per session.
+  // Drives stale-busy detection visible from MessageList, TabBar and
+  // the sidebar — going N s without an event while busy means the
+  // session looks frozen. Only updated from appendEvents (live IPC),
+  // not prependEvents (history replay), since history isn't activity.
+  lastEventAt: Record<string, number>
   // Wall-clock ms of the user's most recent Stop click per session.
   // Used by MessageList to grade the "thinking…" hint into "stop sent…"
   // → "not acknowledged…" once we expect claude to have honoured the
@@ -25,6 +31,7 @@ interface MessagesStore {
 
 export const useMessagesStore = create<MessagesStore>((set) => ({
   eventsBySession: {},
+  lastEventAt: {},
   stopRequestedAt: {},
 
   appendEvents: (sessionId, events) =>
@@ -35,6 +42,10 @@ export const useMessagesStore = create<MessagesStore>((set) => ({
         eventsBySession: {
           ...state.eventsBySession,
           [sessionId]: [...existing, ...events]
+        },
+        lastEventAt: {
+          ...state.lastEventAt,
+          [sessionId]: Date.now()
         }
       }
     }),
@@ -56,7 +67,13 @@ export const useMessagesStore = create<MessagesStore>((set) => ({
       delete updated[sessionId]
       const stopUpdated = { ...state.stopRequestedAt }
       delete stopUpdated[sessionId]
-      return { eventsBySession: updated, stopRequestedAt: stopUpdated }
+      const lastUpdated = { ...state.lastEventAt }
+      delete lastUpdated[sessionId]
+      return {
+        eventsBySession: updated,
+        stopRequestedAt: stopUpdated,
+        lastEventAt: lastUpdated
+      }
     }),
 
   recordStopRequest: (sessionId) =>

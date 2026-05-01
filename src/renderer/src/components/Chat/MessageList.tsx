@@ -10,6 +10,7 @@ import { ToolGroup } from './ToolGroup'
 import { PermissionPrompt } from './PermissionPrompt'
 import { deriveItems, type RenderedItem } from '../../lib/derive-items'
 import { groupMessages } from '../../lib/group-messages'
+import { useStaleBusy } from '../../lib/use-stale-busy'
 
 interface Props {
   sessionId: string
@@ -37,26 +38,13 @@ export const MessageList = memo(function MessageList({ sessionId }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
 
-  // Stale-busy detection. Sessions sometimes get wedged (auto-compact
-  // mid-stream, hung tool call, ignored interrupt) and the spinner
-  // keeps spinning forever with no way to tell. Tracking the
-  // wall-clock time of the last event arrival on this session, ticking
-  // every 5 s while busy, lets the UI surface a hint that the session
-  // looks unresponsive — at which point closing the tab is the user's
-  // recovery path.
-  const lastEventAtRef = useRef(Date.now())
-  useEffect(() => {
-    lastEventAtRef.current = Date.now()
-  }, [events.length])
-  const [now, setNow] = useState(() => Date.now())
-  useEffect(() => {
-    if (!isBusy) return
-    setNow(Date.now())
-    const id = setInterval(() => setNow(Date.now()), 1000)
-    return () => clearInterval(id)
-  }, [isBusy])
-  const STALE_THRESHOLD_MS = 30_000
-  const looksStale = isBusy && now - lastEventAtRef.current > STALE_THRESHOLD_MS
+  // Stale-busy detection lives in useStaleBusy — same hook is used by
+  // TabBar and the sidebar so a wedged backgrounded session is visible
+  // without flipping to it. Pull the underlying lastEventAt here so we
+  // can show the elapsed-seconds hint (the hook itself just returns a
+  // boolean).
+  const looksStale = useStaleBusy(sessionId)
+  const lastEventAt = useMessagesStore(s => s.lastEventAt[sessionId])
 
   // Tracks whether the user's most recent Stop click is still in
   // flight (cleared by the IPC listener when status leaves busy).
@@ -64,6 +52,16 @@ export const MessageList = memo(function MessageList({ sessionId }: Props) {
   // "not acknowledged…" once we expect claude to have honoured it.
   // Most claude interrupts settle in <100 ms; 5 s is generous.
   const stopRequestedAt = useMessagesStore(s => s.stopRequestedAt[sessionId])
+  // Local tick used only by the elapsed-seconds counters under the
+  // spinner — finer-grained than the stale-busy 5 s tick so the user
+  // sees the seconds count up smoothly.
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    if (!isBusy) return
+    setNow(Date.now())
+    const id = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(id)
+  }, [isBusy])
   const STOP_SENT_THRESHOLD_MS = 5_000
   const stopSentMs = isBusy && stopRequestedAt ? now - stopRequestedAt : 0
   const stopAcknowledgePending = stopRequestedAt !== undefined && stopSentMs <= STOP_SENT_THRESHOLD_MS
@@ -162,8 +160,8 @@ export const MessageList = memo(function MessageList({ sessionId }: Props) {
             </div>
             {(stopUnacknowledged || looksStale) && (
               <div className="text-[11px] text-warn ml-5">
-                {looksStale
-                  ? `No activity for ${Math.round((now - lastEventAtRef.current) / 1000)}s — the session may be unresponsive. Close the tab if it stays stuck.`
+                {looksStale && lastEventAt !== undefined
+                  ? `No activity for ${Math.round((now - lastEventAt) / 1000)}s — the session may be unresponsive. Close the tab if it stays stuck.`
                   : 'If the spinner keeps going, close this tab to recover.'}
               </div>
             )}

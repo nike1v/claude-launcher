@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { MessageSquarePlus, Pencil, Trash2 } from 'lucide-react'
+import { MessageSquarePlus, Pencil, Trash2, AlertTriangle } from 'lucide-react'
 import type { Project } from '../../../../shared/types'
 import { useSessionsStore } from '../../store/sessions'
 import { useProjectsStore } from '../../store/projects'
@@ -7,6 +7,7 @@ import { useMessagesStore } from '../../store/messages'
 import { loadSessionHistory, startSession, stopSession } from '../../ipc/bridge'
 import { StatusDot } from '../StatusDot'
 import { ConfirmDialog } from '../ConfirmDialog'
+import { useStaleBusy } from '../../lib/use-stale-busy'
 
 interface Props {
   project: Project
@@ -31,13 +32,15 @@ export function ProjectItem({ project, isActive, onEdit }: Props) {
   // projects are working / errored / closed without flipping tabs. We pick
   // the most recently added session for the project — there's at most one
   // open per project today, but the reverse-find keeps it future-proof.
-  const sessionStatus = useSessionsStore(s => {
+  const projectSession = useSessionsStore(s => {
     for (let i = s.tabOrder.length - 1; i >= 0; i--) {
       const sess = s.sessions[s.tabOrder[i]]
-      if (sess?.projectId === project.id) return sess.status
+      if (sess?.projectId === project.id) return sess
     }
     return undefined
   })
+  const sessionStatus = projectSession?.status
+  const looksStale = useStaleBusy(projectSession?.id)
 
   const handleClick = async () => {
     setActiveProjectId(project.id)
@@ -168,6 +171,15 @@ export function ProjectItem({ project, isActive, onEdit }: Props) {
         <span className="absolute left-0 top-1 bottom-1 w-0.5 bg-accent rounded-r pointer-events-none" />
       )}
       <StatusDot status={sessionStatus} className="mr-2" />
+      {looksStale && (
+        <AlertTriangle
+          size={11}
+          className="text-warn shrink-0 mr-1.5"
+          aria-label="Session may be unresponsive"
+        >
+          <title>No activity for a while — session may be unresponsive</title>
+        </AlertTriangle>
+      )}
       {/* pr-16 (4rem) reserves room for up to 3 hover icons; the reset
           button only renders when there's actually a pinned conversation
           to reset, so the gap shrinks back for never-opened projects. */}

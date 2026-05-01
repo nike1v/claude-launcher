@@ -171,6 +171,12 @@ with a fixed STOP so the bail-out path actually works.
 
 See git log for details. Quick index:
 
+- v0.6.3 — Stale-busy detection now visible from TabBar and the
+  sidebar, not just the active chat: a small warn-tinted ⚠ glyph
+  appears next to the status dot on tabs/projects whose session has
+  gone 30 s without an event while busy. Lifted `lastEventAt` to the
+  messages store; new `useStaleBusy(sessionId)` hook is the shared
+  source of truth.
 - v0.6.2 — Stop button gives graded feedback: spinner caption flips
   to "stop sent — claude is wrapping up…" on click, then to "stop
   sent Ns ago — not acknowledged yet…" after 5 s if the turn hasn't
