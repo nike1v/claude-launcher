@@ -35,20 +35,7 @@ interface ActiveSession {
   // Held on the session so handleStdout can clear it from a turn-completed
   // event without us having to thread the closure variable through.
   readyTimer: NodeJS.Timeout | null
-  // Set when interruptSession fires; cleared on the next turn.completed
-  // (the CLI honoured the in-band interrupt) or on session exit. If the
-  // timer fires first, the in-band interrupt was ignored and we escalate
-  // to killing the child — better than leaving the user with a forever-
-  // busy chat that ate their next message into a buffered queue.
-  interruptWatchdog: NodeJS.Timeout | null
 }
-
-// How long we give the provider to honour an in-band interrupt before
-// we escalate to killing the child. Five seconds is generous for a CLI
-// that's actually responsive (claude acknowledges within ~100 ms in
-// practice) and short enough that a stuck session doesn't strand the
-// user's next message in the CLI's stdin buffer for an hour.
-const INTERRUPT_WATCHDOG_MS = 5000
 
 const SHUTDOWN_GRACE_MS = 1500
 
@@ -145,8 +132,7 @@ export class SessionManager {
       markedReady: false,
       stopping: false,
       exited,
-      readyTimer: null,
-      interruptWatchdog: null
+      readyTimer: null
     }
     this.sessions.set(sessionId, session)
 
@@ -208,10 +194,6 @@ export class SessionManager {
       if (session.readyTimer) {
         clearTimeout(session.readyTimer)
         session.readyTimer = null
-      }
-      if (session.interruptWatchdog) {
-        clearTimeout(session.interruptWatchdog)
-        session.interruptWatchdog = null
       }
       this.sessions.delete(sessionId)
       resolveExited()
@@ -327,12 +309,6 @@ export class SessionManager {
   public interruptSession(sessionId: string): void {
     const session = this.sessions.get(sessionId)
     if (!session) return
-    // Already mid-interrupt — second click is a "the first one didn't
-    // work, get me out now" signal. Skip straight to the escalation.
-    if (session.interruptWatchdog) {
-      this.escalateInterrupt(session)
-      return
-    }
     const payload = session.adapter.formatControl({ kind: 'interrupt' })
     if (payload !== null) {
       // Best-effort write: don't go through writeStdin (which would flip
@@ -348,30 +324,7 @@ export class SessionManager {
       // Provider has no in-band interrupt — fall back to SIGINT.
       try { session.process.kill('SIGINT') } catch { /* already dead */ }
     }
-    // Hold in 'interrupting' until the provider emits turn.completed (which
-    // applyStatusTransition flips back to 'ready') or the watchdog fires.
-    // The renderer blocks sends in this state so the user can't pile new
-    // messages into stdin while the previous turn is still being torn down.
-    this.onEvent('session:status', { sessionId, status: 'interrupting' })
-    session.interruptWatchdog = setTimeout(
-      () => this.escalateInterrupt(session),
-      INTERRUPT_WATCHDOG_MS
-    )
-  }
-
-  // Watchdog: the provider didn't honour the in-band interrupt within
-  // INTERRUPT_WATCHDOG_MS. Kill the child — the exit handler will flip
-  // status to 'closed' and the user can reopen the tab. This is the
-  // recovery path for stuck-busy states (auto-compact freeze, hung tool
-  // calls) where the CLI is alive but unresponsive.
-  private escalateInterrupt(session: ActiveSession): void {
-    if (session.interruptWatchdog) {
-      clearTimeout(session.interruptWatchdog)
-      session.interruptWatchdog = null
-    }
-    if (session.stopping) return
-    session.stopping = true
-    try { session.process.kill() } catch { /* already dead */ }
+    this.onEvent('session:status', { sessionId, status: 'ready' })
   }
 
   public async stopAll(): Promise<void> {
@@ -455,18 +408,11 @@ export class SessionManager {
       return
     }
     if (event.kind === 'turn.completed') {
-      // Turn finished — back to ready so the spinner clears. Also clears
-      // the interrupt watchdog: if the user pressed Stop and the provider
-      // honoured it, the in-flight turn ends with this same event, so we
-      // cancel the escalation that would otherwise kill the process.
+      // Turn finished — back to ready so the spinner clears.
       session.markedReady = true
       if (session.readyTimer) {
         clearTimeout(session.readyTimer)
         session.readyTimer = null
-      }
-      if (session.interruptWatchdog) {
-        clearTimeout(session.interruptWatchdog)
-        session.interruptWatchdog = null
       }
       this.onEvent('session:status', { sessionId: session.sessionId, status: 'ready' })
     }

@@ -18,7 +18,6 @@ const TONE: Record<Session['status'], string> = {
   starting: 'bg-warn status-dot-pulse',
   ready: 'bg-success',
   busy: 'bg-accent status-dot-pulse',
-  interrupting: 'bg-warn status-dot-pulse',
   error: 'bg-danger',
   closed: 'bg-elevated'
 }
@@ -27,7 +26,6 @@ const TITLE: Record<Session['status'], string> = {
   starting: 'Starting…',
   ready: 'Ready',
   busy: 'Working…',
-  interrupting: 'Stopping…',
   error: 'Error',
   closed: 'Closed'
 }

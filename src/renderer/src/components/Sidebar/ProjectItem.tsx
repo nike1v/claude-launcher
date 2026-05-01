@@ -73,7 +73,8 @@ export function ProjectItem({ project, isActive, onEdit }: Props) {
         // on every init / result, so this is always current as of the
         // last successful run.
         lastModel: project.lastModel,
-        lastContextWindow: project.lastContextWindow
+        lastContextWindow: project.lastContextWindow,
+        lastUsedTokens: project.lastUsedTokens
       })
       if (resume) {
         try {

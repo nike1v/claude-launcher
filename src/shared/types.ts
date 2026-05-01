@@ -67,11 +67,7 @@ export interface Session {
   // For claude this is the JSONL session UUID; for codex / others it
   // means whatever that provider's resumeRef means.
   sessionRef?: string
-  // 'interrupting' is the transient window between the user pressing Stop
-  // and the provider acknowledging the interrupt — sends are blocked
-  // during it. Falls through to 'ready' on turn.completed, or to
-  // 'error'/'closed' if the watchdog escalates to killing the process.
-  status: 'starting' | 'ready' | 'busy' | 'interrupting' | 'error' | 'closed'
+  status: 'starting' | 'ready' | 'busy' | 'error' | 'closed'
   pid?: number
   hasUnread: boolean
   errorMessage?: string

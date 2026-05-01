@@ -151,36 +151,26 @@ function ComposerInner({
         <FocusOnSessionChangePlugin sessionId={sessionId} />
       </div>
       <StopButton sessionId={sessionId} />
-      <SendButton sessionId={sessionId} disabled={!!disabled} submit={submit} />
+      <SendButton disabled={!!disabled} submit={submit} />
     </>
   )
 }
 
-// Send disables only while we're tearing down the previous turn —
-// otherwise claude CLI accepts and queues new messages mid-turn, matching
-// the Claude Code interactive behaviour. During 'interrupting' the
-// user's expectation is "I'm cancelling, don't fire off another message",
-// and the CLI's stdin would otherwise queue the typed message behind the
-// turn we're trying to abort.
+// Send is always enabled — claude CLI accepts and queues new messages while
+// a turn is in flight, matching the Claude Code interactive behaviour.
 function SendButton({
-  sessionId,
   disabled,
   submit
 }: {
-  sessionId: string
   disabled: boolean
   submit: () => boolean
 }) {
-  const blockedByInterrupt = useSessionsStore(
-    s => s.sessions[sessionId]?.status === 'interrupting'
-  )
-  const isDisabled = disabled || blockedByInterrupt
   return (
     <button
       type="button"
       onClick={() => submit()}
-      disabled={isDisabled}
-      title={blockedByInterrupt ? 'Stopping the previous turn…' : 'Send'}
+      disabled={disabled}
+      title="Send"
       className="p-2 text-fg-muted hover:text-accent disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
     >
       <Send size={16} />
@@ -188,25 +178,19 @@ function SendButton({
   )
 }
 
-// Visible while the session is busy or while we're waiting for the
-// provider to honour an interrupt. The first click sends an in-band
-// interrupt and arms a 5 s watchdog in main; a second click during
-// 'interrupting' escalates to killing the child, which is the user's
-// recovery path when the CLI is wedged (auto-compact, hung tool call).
+// Visible only while the active session is busy — clicking sends a
+// stream-json control_request/interrupt over stdin so claude aborts the
+// in-flight turn without us tearing down the wsl.exe / ssh / claude child
+// (which would close the whole chat).
 function StopButton({ sessionId }: { sessionId: string }) {
-  const status = useSessionsStore(s => s.sessions[sessionId]?.status)
-  if (status !== 'busy' && status !== 'interrupting') return null
-  const stopping = status === 'interrupting'
+  const isBusy = useSessionsStore(s => s.sessions[sessionId]?.status === 'busy')
+  if (!isBusy) return null
   return (
     <button
       type="button"
       onClick={() => interruptSession(sessionId)}
-      title={stopping ? 'Click again to force-kill the session' : 'Stop'}
-      className={`p-2 transition-colors ${
-        stopping
-          ? 'text-warn/80 hover:text-danger'
-          : 'text-danger/80 hover:text-danger'
-      }`}
+      title="Stop"
+      className="p-2 text-danger/80 hover:text-danger transition-colors"
     >
       <Square size={14} fill="currentColor" />
     </button>
