@@ -5,17 +5,19 @@ import { Sparkles } from 'lucide-react'
 import { CopyButton } from './CopyButton'
 import { formatMessageTime, formatMessageTimeFull } from '../../lib/format-time'
 import { useThemeStore } from '../../store/theme'
+import type { ProviderKind } from '../../../../shared/events'
 
 interface Props {
   text: string
   timestamp?: number
+  provider?: ProviderKind
 }
 
 // memo'd: deriveItems hands back a fresh RenderedItem object every
 // render of MessageList, but the leaf `text` value rarely changes.
 // Without memo this component (and its ReactMarkdown subtree, which is
 // expensive) re-renders on every event arrival in the same session.
-export const AssistantMessage = memo(function AssistantMessage({ text, timestamp }: Props) {
+export const AssistantMessage = memo(function AssistantMessage({ text, timestamp, provider = 'claude' }: Props) {
   // Subscribing here flips already-rendered timestamps when the user
   // toggles the clock-format preference — see UserMessage for context.
   const clockFormat = useThemeStore(s => s.clockFormat)
@@ -33,7 +35,7 @@ export const AssistantMessage = memo(function AssistantMessage({ text, timestamp
       </span>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1 mb-1">
-          <span className="text-xs font-medium text-fg-muted">claude</span>
+          <span className="text-xs font-medium text-fg-muted">{provider}</span>
           <CopyButton text={text} className="opacity-0 group-hover:opacity-100" />
           {timestamp !== undefined && (
             <span

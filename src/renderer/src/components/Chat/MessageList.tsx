@@ -11,6 +11,7 @@ import { PermissionPrompt } from './PermissionPrompt'
 import { deriveItems, type RenderedItem } from '../../lib/derive-items'
 import { groupMessages } from '../../lib/group-messages'
 import { useStaleBusy } from '../../lib/use-stale-busy'
+import { useSessionProvider } from '../../lib/use-session-provider'
 
 interface Props {
   sessionId: string
@@ -33,6 +34,7 @@ export const MessageList = memo(function MessageList({ sessionId }: Props) {
   const events = useMessagesStore(s => s.eventsBySession[sessionId] ?? EMPTY)
   const status = useSessionsStore(s => s.sessions[sessionId]?.status)
   const isBusy = status === 'busy'
+  const provider = useSessionProvider(sessionId)
   const bottomRef = useRef<HTMLDivElement>(null)
   const shouldFollowRef = useRef(true)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -100,7 +102,7 @@ export const MessageList = memo(function MessageList({ sessionId }: Props) {
         if (!item.text && !item.attachments?.length) return null
         return <UserMessage key={item.id} text={item.text} attachments={item.attachments} timestamp={item.timestamp} />
       case 'assistant':
-        return item.text.trim() ? <AssistantMessage key={item.id} text={item.text} timestamp={item.timestamp} /> : null
+        return item.text.trim() ? <AssistantMessage key={item.id} text={item.text} timestamp={item.timestamp} provider={provider} /> : null
       case 'reasoning':
         return <Thinking key={item.id} text={item.text} />
       case 'tool':
@@ -152,10 +154,10 @@ export const MessageList = memo(function MessageList({ sessionId }: Props) {
               <Loader2 size={12} className="animate-spin" />
               <span className="italic">
                 {stopAcknowledgePending
-                  ? 'stop sent — claude is wrapping up…'
+                  ? `stop sent — ${provider} is wrapping up…`
                   : stopUnacknowledged
                     ? `stop sent ${Math.round(stopSentMs / 1000)}s ago — not acknowledged yet…`
-                    : 'claude is thinking…'}
+                    : `${provider} is thinking…`}
               </span>
             </div>
             {(stopUnacknowledged || looksStale) && (

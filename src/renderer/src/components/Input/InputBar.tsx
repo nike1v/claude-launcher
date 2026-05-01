@@ -16,6 +16,7 @@ import { Send, Paperclip, X, FileText, Image as ImageIcon, Square } from 'lucide
 import { interruptSession, sendMessage } from '../../ipc/bridge'
 import { useMessagesStore } from '../../store/messages'
 import { useSessionsStore } from '../../store/sessions'
+import { useSessionProvider } from '../../lib/use-session-provider'
 import type { SendAttachment } from '../../../../shared/types'
 import type { UserAttachment } from '../../../../shared/events'
 
@@ -124,6 +125,7 @@ function ComposerInner({
   onPaste: (e: React.ClipboardEvent) => void
 }) {
   const submit = useSubmit({ sessionId, disabled: !!disabled, attachments, clearAttachments })
+  const provider = useSessionProvider(sessionId)
   return (
     <>
       <div className="flex-1 relative" onPaste={onPaste}>
@@ -135,7 +137,7 @@ function ComposerInner({
           }
           placeholder={
             <div className="absolute top-0 left-0 text-fg-faint text-sm pointer-events-none">
-              {disabled ? 'Waiting for session…' : 'Message claude…'}
+              {disabled ? 'Waiting for session…' : `Message ${provider}…`}
             </div>
           }
           ErrorBoundary={() => null}
