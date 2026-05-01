@@ -52,11 +52,22 @@ export const MessageList = memo(function MessageList({ sessionId }: Props) {
   useEffect(() => {
     if (!isBusy) return
     setNow(Date.now())
-    const id = setInterval(() => setNow(Date.now()), 5000)
+    const id = setInterval(() => setNow(Date.now()), 1000)
     return () => clearInterval(id)
   }, [isBusy])
   const STALE_THRESHOLD_MS = 30_000
   const looksStale = isBusy && now - lastEventAtRef.current > STALE_THRESHOLD_MS
+
+  // Tracks whether the user's most recent Stop click is still in
+  // flight (cleared by the IPC listener when status leaves busy).
+  // Drives the graded feedback under the spinner: "stop sent…" then
+  // "not acknowledged…" once we expect claude to have honoured it.
+  // Most claude interrupts settle in <100 ms; 5 s is generous.
+  const stopRequestedAt = useMessagesStore(s => s.stopRequestedAt[sessionId])
+  const STOP_SENT_THRESHOLD_MS = 5_000
+  const stopSentMs = isBusy && stopRequestedAt ? now - stopRequestedAt : 0
+  const stopAcknowledgePending = stopRequestedAt !== undefined && stopSentMs <= STOP_SENT_THRESHOLD_MS
+  const stopUnacknowledged = stopRequestedAt !== undefined && stopSentMs > STOP_SENT_THRESHOLD_MS
 
   // Watch the actual content size — not just events.length — so the view
   // stays pinned to the bottom while async work (markdown, images, restored
@@ -141,12 +152,19 @@ export const MessageList = memo(function MessageList({ sessionId }: Props) {
           <div className="flex flex-col gap-1 text-xs text-fg-faint">
             <div className="flex items-center gap-2">
               <Loader2 size={12} className="animate-spin" />
-              <span className="italic">claude is thinking…</span>
+              <span className="italic">
+                {stopAcknowledgePending
+                  ? 'stop sent — claude is wrapping up…'
+                  : stopUnacknowledged
+                    ? `stop sent ${Math.round(stopSentMs / 1000)}s ago — not acknowledged yet…`
+                    : 'claude is thinking…'}
+              </span>
             </div>
-            {looksStale && (
+            {(stopUnacknowledged || looksStale) && (
               <div className="text-[11px] text-warn ml-5">
-                No activity for {Math.round((now - lastEventAtRef.current) / 1000)}s — the
-                session may be unresponsive. Close the tab if it stays stuck.
+                {looksStale
+                  ? `No activity for ${Math.round((now - lastEventAtRef.current) / 1000)}s — the session may be unresponsive. Close the tab if it stays stuck.`
+                  : 'If the spinner keeps going, close this tab to recover.'}
               </div>
             )}
           </div>

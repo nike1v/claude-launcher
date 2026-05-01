@@ -28,6 +28,13 @@ export function useIpcListeners(): void {
       'session:status',
       ({ sessionId, status, errorMessage }: IpcChannels['session:status']) => {
         updateSession(sessionId, { status, errorMessage })
+        // Status flipping away from 'busy' means the in-flight turn
+        // wrapped — clear any pending stop request marker so the hint
+        // doesn't linger ("stop sent" sticking around after the next
+        // turn starts).
+        if (status !== 'busy') {
+          useMessagesStore.getState().clearStopRequest(sessionId)
+        }
       }
     )
 

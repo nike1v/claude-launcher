@@ -171,6 +171,13 @@ with a fixed STOP so the bail-out path actually works.
 
 See git log for details. Quick index:
 
+- v0.6.2 — Stop button gives graded feedback: spinner caption flips
+  to "stop sent — claude is wrapping up…" on click, then to "stop
+  sent Ns ago — not acknowledged yet…" after 5 s if the turn hasn't
+  ended, with a warn-tinted hint to close the tab. Cleared
+  automatically when status flips off busy. Provider-agnostic — no
+  control_response parsing needed; the existing turn.completed →
+  ready transition is the success signal.
 - v0.6.1 — Stop button is now plain "send in-band interrupt" and
   nothing else (reverted the 0.6.0 escalation ladder — the user just
   wanted a cancel-current-action button, not multi-stage SIGTERM /

@@ -8,16 +8,24 @@ import type { NormalizedEvent } from '../../../shared/events'
 
 interface MessagesStore {
   eventsBySession: Record<string, NormalizedEvent[]>
+  // Wall-clock ms of the user's most recent Stop click per session.
+  // Used by MessageList to grade the "thinking…" hint into "stop sent…"
+  // → "not acknowledged…" once we expect claude to have honoured the
+  // interrupt. Cleared when the session leaves busy (turn.completed).
+  stopRequestedAt: Record<string, number>
   // Append a batch of events for a session in one zustand publish.
   // Adapter chunks expand to ~5 events each — applying one mutation
   // per chunk avoids a render-storm on long histories.
   appendEvents: (sessionId: string, events: readonly NormalizedEvent[]) => void
   prependEvents: (sessionId: string, events: readonly NormalizedEvent[]) => void
   clearSession: (sessionId: string) => void
+  recordStopRequest: (sessionId: string) => void
+  clearStopRequest: (sessionId: string) => void
 }
 
 export const useMessagesStore = create<MessagesStore>((set) => ({
   eventsBySession: {},
+  stopRequestedAt: {},
 
   appendEvents: (sessionId, events) =>
     set(state => {
@@ -46,6 +54,21 @@ export const useMessagesStore = create<MessagesStore>((set) => ({
     set(state => {
       const updated = { ...state.eventsBySession }
       delete updated[sessionId]
-      return { eventsBySession: updated }
+      const stopUpdated = { ...state.stopRequestedAt }
+      delete stopUpdated[sessionId]
+      return { eventsBySession: updated, stopRequestedAt: stopUpdated }
+    }),
+
+  recordStopRequest: (sessionId) =>
+    set(state => ({
+      stopRequestedAt: { ...state.stopRequestedAt, [sessionId]: Date.now() }
+    })),
+
+  clearStopRequest: (sessionId) =>
+    set(state => {
+      if (state.stopRequestedAt[sessionId] === undefined) return state
+      const updated = { ...state.stopRequestedAt }
+      delete updated[sessionId]
+      return { stopRequestedAt: updated }
     })
 }))

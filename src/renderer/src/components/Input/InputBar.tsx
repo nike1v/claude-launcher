@@ -180,16 +180,20 @@ function SendButton({
 }
 
 // Visible while the session is busy. Click sends the provider's in-band
-// interrupt protocol message and that's it — no escalation, no
-// process kill. If the CLI is wedged and ignores the interrupt, the
-// stale-busy hint in MessageList tells the user to close the tab.
+// interrupt protocol message and records the click time so MessageList
+// can grade the "thinking…" hint into "stop sent…" → "not acknowledged"
+// once the wait passes the typical-honour window.
 function StopButton({ sessionId }: { sessionId: string }) {
   const isBusy = useSessionsStore(s => s.sessions[sessionId]?.status === 'busy')
+  const recordStopRequest = useMessagesStore(s => s.recordStopRequest)
   if (!isBusy) return null
   return (
     <button
       type="button"
-      onClick={() => interruptSession(sessionId)}
+      onClick={() => {
+        interruptSession(sessionId)
+        recordStopRequest(sessionId)
+      }}
       title="Stop"
       className="p-2 text-danger/80 hover:text-danger transition-colors"
     >
