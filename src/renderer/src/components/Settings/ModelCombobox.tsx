@@ -1,34 +1,36 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import type { ProviderKind } from '../../../../shared/events'
+import { MODELS_BY_PROVIDER } from '../../lib/provider-options'
 
 interface Props {
   value: string
   onChange: (value: string) => void
+  // Drives the suggestion list — codex/cursor/opencode have very
+  // different model id shapes than claude. Defaults to claude for
+  // backward compatibility with any caller that hasn't been updated.
+  providerKind?: ProviderKind
   placeholder?: string
   className?: string
 }
 
-// Seed list of currently shipping Claude Code-compatible model ids. The user
-// can also type a free-form value (e.g. a private alias) — the combobox is
-// just a hint, not a hard restriction.
-const KNOWN_MODELS: ReadonlyArray<{ id: string; label: string }> = [
-  { id: 'claude-opus-4-7', label: 'Opus 4.7' },
-  { id: 'claude-opus-4-7[1m]', label: 'Opus 4.7 (1M context)' },
-  { id: 'claude-sonnet-4-6', label: 'Sonnet 4.6' },
-  { id: 'claude-sonnet-4-6[1m]', label: 'Sonnet 4.6 (1M context)' },
-  { id: 'claude-haiku-4-5', label: 'Haiku 4.5' }
-]
-
-export function ModelCombobox({ value, onChange, placeholder, className = '' }: Props) {
+export function ModelCombobox({
+  value,
+  onChange,
+  providerKind = 'claude',
+  placeholder,
+  className = ''
+}: Props) {
   const [open, setOpen] = useState(false)
   const wrapperRef = useRef<HTMLDivElement>(null)
 
   const matches = useMemo(() => {
+    const known = MODELS_BY_PROVIDER[providerKind]
     const q = value.trim().toLowerCase()
-    if (!q) return KNOWN_MODELS
-    return KNOWN_MODELS.filter(m =>
+    if (!q) return known
+    return known.filter(m =>
       m.id.toLowerCase().includes(q) || m.label.toLowerCase().includes(q)
     )
-  }, [value])
+  }, [value, providerKind])
 
   useEffect(() => {
     const onDocMouseDown = (e: MouseEvent) => {

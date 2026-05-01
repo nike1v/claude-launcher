@@ -3,7 +3,7 @@ import type { Environment, HostType } from '../../../../shared/types'
 import type { ProviderKind } from '../../../../shared/events'
 import { useEnvironmentsStore } from '../../store/environments'
 import { findDuplicateEnvironment } from '../../lib/environment-dedup'
-import { PROVIDER_OPTIONS } from '../../lib/provider-options'
+import { PROVIDER_OPTIONS, modelPlaceholderFor, providerLabel } from '../../lib/provider-options'
 import { EnvironmentStatus, type ProbeState } from './EnvironmentStatus'
 import { ModelCombobox } from './ModelCombobox'
 
@@ -204,8 +204,13 @@ export function EnvironmentForm({ initial, onCancel, onSave }: Props) {
       </div>
 
       <div>
-        <label className={labelCls}>Default Model (optional)</label>
-        <ModelCombobox value={defaultModel} onChange={setDefaultModel} placeholder="claude-opus-4-7" />
+        <label className={labelCls}>Default {providerLabel(providerKind)} model (optional)</label>
+        <ModelCombobox
+          value={defaultModel}
+          onChange={setDefaultModel}
+          providerKind={providerKind}
+          placeholder={modelPlaceholderFor(providerKind)}
+        />
         <p className="mt-1 text-[10px] text-fg-faint">
           Projects under this environment use this unless they set their own model.
         </p>

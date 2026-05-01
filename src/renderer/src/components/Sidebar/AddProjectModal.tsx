@@ -9,7 +9,7 @@ import { ModelCombobox } from '../Settings/ModelCombobox'
 import { PathCombobox } from '../Settings/PathCombobox'
 import { EnvironmentStatus } from '../Settings/EnvironmentStatus'
 import { findDuplicateEnvironment } from '../../lib/environment-dedup'
-import { PROVIDER_OPTIONS, providerLabel } from '../../lib/provider-options'
+import { PROVIDER_OPTIONS, providerLabel, modelPlaceholderFor } from '../../lib/provider-options'
 import { describeHost, transcriptDirHint } from '../../../../shared/host-utils'
 import { listSessionIds } from '../../ipc/bridge'
 
@@ -350,11 +350,14 @@ export function AddProjectModal({ onClose, editProject, presetEnvironmentId }: P
           )}
 
           <div>
-            <label className={labelCls}>Model Override (optional)</label>
+            <label className={labelCls}>
+              {providerLabel(providerKind ?? inheritedProvider)} model override (optional)
+            </label>
             <ModelCombobox
               value={model}
               onChange={setModel}
-              placeholder={editEnv?.defaultModel || 'claude-opus-4-7'}
+              providerKind={providerKind ?? inheritedProvider}
+              placeholder={editEnv?.defaultModel || modelPlaceholderFor(providerKind ?? inheritedProvider)}
             />
             {editEnv?.defaultModel && !model && (
               <p className="mt-1 text-[10px] text-fg-faint">

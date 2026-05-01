@@ -8,7 +8,7 @@ import { useThemeStore, type Theme, type Palette } from '../../store/theme'
 import { useDragReorder } from '../../hooks/useDragReorder'
 import { Modal } from '../Modal'
 import { EnvironmentForm } from './EnvironmentForm'
-import { EnvironmentStatus } from './EnvironmentStatus'
+import { ProvidersStatus } from './ProvidersStatus'
 import { UsageModal } from './UsageModal'
 
 interface Props {
@@ -131,7 +131,7 @@ function EnvironmentRow({
         <div className="text-sm text-fg truncate">{env.name}</div>
         <div className="text-xs text-fg-faint truncate">{describeHost(env.config)}</div>
       </div>
-      <EnvironmentStatus config={env.config} compact />
+      <ProvidersStatus config={env.config} defaultProviderKind={env.providerKind} />
       {/* Fixed width + right-align so "1 project" and "4 projects" occupy the
           same column across rows — otherwise the trailing action icons land
           at different x positions per row when revealed on hover. */}
