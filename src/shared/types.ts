@@ -51,6 +51,11 @@ export interface Project {
   // project record so it survives a tab close.
   lastModel?: string
   lastContextWindow?: number
+  // Most recent input + cached-input token total reported on this
+  // project's session. Mirrors lastContextWindow's role for the "used"
+  // half of the StatusBar meter so a cold tab restore shows real usage
+  // immediately instead of zero until the next assistant reply.
+  lastUsedTokens?: number
 }
 
 export interface Session {
@@ -62,7 +67,11 @@ export interface Session {
   // For claude this is the JSONL session UUID; for codex / others it
   // means whatever that provider's resumeRef means.
   sessionRef?: string
-  status: 'starting' | 'ready' | 'busy' | 'error' | 'closed'
+  // 'interrupting' is the transient window between the user pressing Stop
+  // and the provider acknowledging the interrupt — sends are blocked
+  // during it. Falls through to 'ready' on turn.completed, or to
+  // 'error'/'closed' if the watchdog escalates to killing the process.
+  status: 'starting' | 'ready' | 'busy' | 'interrupting' | 'error' | 'closed'
   pid?: number
   hasUnread: boolean
   errorMessage?: string
@@ -73,6 +82,7 @@ export interface Session {
   // model + 200K total" flash.
   lastModel?: string
   lastContextWindow?: number
+  lastUsedTokens?: number
 }
 
 export interface PersistedTab {
@@ -80,6 +90,7 @@ export interface PersistedTab {
   sessionRef: string
   lastModel?: string
   lastContextWindow?: number
+  lastUsedTokens?: number
 }
 
 export interface PersistedTabs {

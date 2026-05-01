@@ -89,17 +89,40 @@ function applyMetadata(sessionId: string, event: NormalizedEvent): void {
     return
   }
 
-  if (event.kind === 'tokenUsage.updated' && event.usage.contextWindow) {
+  if (event.kind === 'tokenUsage.updated') {
     const current = useSessionsStore.getState().sessions[sessionId]
     if (!current) return
-    if (current.lastContextWindow !== event.usage.contextWindow) {
-      updateSession(sessionId, { lastContextWindow: event.usage.contextWindow })
-      const project = useProjectsStore.getState().projects.find(p => p.id === current.projectId)
-      if (project && project.lastContextWindow !== event.usage.contextWindow) {
-        useProjectsStore.getState().updateProject({
-          ...project,
-          lastContextWindow: event.usage.contextWindow
-        })
+    const u = event.usage
+    // Both halves of the StatusBar meter need a sticky cache: contextWindow
+    // for the denominator and (input + cached) tokens for the numerator.
+    // parseTranscript skips tokenUsage.updated events on cold replay, so
+    // without these caches the meter would show 0 / 200K until the next
+    // live turn. We accept transient subagent values here too — the
+    // bigger picture filtering (subagent bleed-through) is a separate bug.
+    const nextUsed =
+      u.inputTokens !== undefined || u.cachedInputTokens !== undefined
+        ? (u.inputTokens ?? 0) + (u.cachedInputTokens ?? 0)
+        : undefined
+    const sessionUpdate: Partial<typeof current> = {}
+    if (u.contextWindow !== undefined && current.lastContextWindow !== u.contextWindow) {
+      sessionUpdate.lastContextWindow = u.contextWindow
+    }
+    if (nextUsed !== undefined && current.lastUsedTokens !== nextUsed) {
+      sessionUpdate.lastUsedTokens = nextUsed
+    }
+    if (Object.keys(sessionUpdate).length) updateSession(sessionId, sessionUpdate)
+
+    const project = useProjectsStore.getState().projects.find(p => p.id === current.projectId)
+    if (project) {
+      const projectUpdate: Partial<typeof project> = {}
+      if (u.contextWindow !== undefined && project.lastContextWindow !== u.contextWindow) {
+        projectUpdate.lastContextWindow = u.contextWindow
+      }
+      if (nextUsed !== undefined && project.lastUsedTokens !== nextUsed) {
+        projectUpdate.lastUsedTokens = nextUsed
+      }
+      if (Object.keys(projectUpdate).length) {
+        useProjectsStore.getState().updateProject({ ...project, ...projectUpdate })
       }
     }
   }

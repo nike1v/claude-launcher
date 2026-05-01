@@ -194,10 +194,93 @@ describe('SessionManager', () => {
     expect(parsed.request).toEqual({ subtype: 'interrupt' })
     expect(parsed.request_id).toMatch(/^req_/)
 
+    // Holds in 'interrupting' until the provider acknowledges with
+    // turn.completed (the renderer blocks sends meanwhile so the user
+    // can't pile messages into stdin behind the turn we're tearing down).
     expect(onEvent).toHaveBeenCalledWith(
+      'session:status',
+      expect.objectContaining({ sessionId, status: 'interrupting' })
+    )
+    expect(onEvent).not.toHaveBeenCalledWith(
       'session:status',
       expect.objectContaining({ sessionId, status: 'ready' })
     )
+  })
+
+  it('interrupt watchdog escalates to killing the child if no turn.completed arrives', async () => {
+    // The whole point of the 'interrupting' state: if the CLI is wedged
+    // (auto-compact, hung tool call) the in-band interrupt sits in stdin
+    // forever. The watchdog escalation is the user's only recovery.
+    vi.useFakeTimers()
+    try {
+      const sessionId = await manager.startSession(makeEnv(), makeProject())
+      const proc = mockTransport.spawn.mock.results[0].value
+      manager.interruptSession(sessionId)
+      expect(proc.kill).not.toHaveBeenCalled()
+      // 5 s watchdog — fast-forward and verify the child got killed.
+      vi.advanceTimersByTime(5000)
+      expect(proc.kill).toHaveBeenCalledOnce()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('turn.completed clears the interrupt watchdog and flips back to ready', async () => {
+    vi.useFakeTimers()
+    try {
+      const sessionId = await manager.startSession(makeEnv(), makeProject())
+      const proc = mockTransport.spawn.mock.results[0].value
+
+      // Open a turn first — claude-adapter only emits turn.completed when
+      // there's an open turn to close, so an assistant event has to land
+      // before the result event for the watchdog-clear path to fire.
+      const assistantLine = JSON.stringify({
+        type: 'assistant',
+        message: {
+          id: 'msg-1', type: 'message', role: 'assistant',
+          content: [{ type: 'text', text: 'partial' }],
+          model: 'claude-sonnet-4-5', stop_reason: null,
+          usage: { input_tokens: 5, output_tokens: 1 }
+        }
+      })
+      proc.stdout.emit('data', Buffer.from(assistantLine + '\n'))
+
+      manager.interruptSession(sessionId)
+
+      // Provider honoured the interrupt — result event closes the open
+      // turn, producing turn.completed which clears the watchdog.
+      const resultLine = JSON.stringify({
+        type: 'result',
+        subtype: 'success',
+        session_id: 'sess-1',
+        is_error: false,
+        num_turns: 1
+      })
+      proc.stdout.emit('data', Buffer.from(resultLine + '\n'))
+
+      // Watchdog should now be cleared — advancing past 5 s does NOT
+      // kill the process.
+      vi.advanceTimersByTime(10000)
+      expect(proc.kill).not.toHaveBeenCalled()
+
+      expect(onEvent).toHaveBeenCalledWith(
+        'session:status',
+        expect.objectContaining({ sessionId, status: 'ready' })
+      )
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('second interruptSession during the watchdog window force-kills the child', async () => {
+    // A user clicking Stop twice means "the first one didn't work, get me
+    // out now". Skip waiting for the timer.
+    const sessionId = await manager.startSession(makeEnv(), makeProject())
+    const proc = mockTransport.spawn.mock.results[0].value
+    manager.interruptSession(sessionId)
+    expect(proc.kill).not.toHaveBeenCalled()
+    manager.interruptSession(sessionId)
+    expect(proc.kill).toHaveBeenCalledOnce()
   })
 
   it('skips spawn and emits error when probe rejects', async () => {

@@ -115,7 +115,8 @@ async function restoreTabs(knownProjectIds: string[]): Promise<void> {
         errorMessage: err instanceof Error ? err.message : 'Could not start session',
         hasUnread: false,
         lastModel: tab.lastModel,
-        lastContextWindow: tab.lastContextWindow
+        lastContextWindow: tab.lastContextWindow,
+        lastUsedTokens: tab.lastUsedTokens
       })
       if (firstRestoredId === null) firstRestoredId = sessionId
       if (saved.activeIndex !== null && saved.tabs[saved.activeIndex] === tab) {
@@ -130,7 +131,8 @@ async function restoreTabs(knownProjectIds: string[]): Promise<void> {
       status: 'starting',
       hasUnread: false,
       lastModel: tab.lastModel,
-      lastContextWindow: tab.lastContextWindow
+      lastContextWindow: tab.lastContextWindow,
+      lastUsedTokens: tab.lastUsedTokens
     })
     if (firstRestoredId === null) firstRestoredId = sessionId
     if (saved.activeIndex !== null && saved.tabs[saved.activeIndex] === tab) {
@@ -173,7 +175,8 @@ function serializeTabs(
       projectId: s.projectId,
       sessionRef: s.sessionRef!,
       lastModel: s.lastModel,
-      lastContextWindow: s.lastContextWindow
+      lastContextWindow: s.lastContextWindow,
+      lastUsedTokens: s.lastUsedTokens
     }))
 
   let activeIndex: number | null = null

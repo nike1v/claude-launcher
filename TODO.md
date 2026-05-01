@@ -132,60 +132,56 @@ session's status to a non-busy state (probably `'starting'` until the
 probe + spawn settle, never carrying any prior busy through) and
 ignore any persisted busy flag.
 
-### Context-fill meter shows 0 used after cold tab restore
-Reported 2026-04-30. After the app reloads (cold restore of an
-existing tab), the StatusBar's context meter shows the "used" portion
-as zero until the user sends a new message and the assistant reply
-fires a fresh `tokenUsage.updated`.
+### Context-fill meter jumps wildly mid-session (subagent bleed-through)
+Reported 2026-05-01. User observed the meter swinging between
+~100k → ~950k → ~48k → ~420k across consecutive messages within one
+session.
 
-Cause: `parseTranscript` skips `tokenUsage.updated` events in replay
-mode (alpha.9 compact-replay optimisation) because we only need the
-contextWindow total — which we already cache on the project record
-as `lastContextWindow`. But `used` (input + cache tokens) was also
-coming from those events; without them in the replay stream, the
-StatusBar's `computeContextFill` finds no `used` value and falls
-back to 0.
-
-Fix direction: persist `lastUsedTokens` alongside `lastContextWindow`
-on the Session / Project record (updated on each live
-tokenUsage.updated), and have the StatusBar fall back to it when no
-in-memory event has fired yet — same pattern as the existing
-contextWindow fallback.
-
-### UI stuck on "claude is thinking…" during auto-compact
-Reported 2026-05-01. While typing a long reply, the user's claude
-session crossed its context limit and Claude Code's built-in
-auto-compaction kicked in. From the renderer's perspective the
-session sat on the busy spinner for 30+ minutes with no further
-events arriving. User had to wait it out.
-
-Hypotheses:
-- Claude's stream-json output during auto-compact may emit nothing
-  visible (or events we don't recognise) for an extended period
-  while the CLI summarises the conversation in the background. Our
-  `turn.started → busy` flip never gets a corresponding
-  `turn.completed → ready`, so the spinner stays.
-- Or the session genuinely processes for that long and the UI is
-  honest, but the user has no signal that it's progressing vs hung.
+Cause: `StatusBar.computeContextFill`
+(`src/renderer/src/components/StatusBar/StatusBar.tsx:58-98`) walks
+the event stream backwards and picks the most recent
+`tokenUsage.updated` event. The claude adapter
+(`src/main/providers/claude/adapter.ts:209-220`) emits one of these
+on every assistant message — including assistant messages produced
+by **subagents** (Task tool delegations). Subagents have their own
+small context window distinct from the main agent's, so when a
+subagent fires its meter overwrites the display with its much
+smaller `used`/`contextWindow` numbers; when the main agent resumes,
+the next assistant event flips it back. The 100k/950k/48k/420k
+pattern is exactly main-agent vs subagent values interleaving.
 
 Fix directions:
-- Detect claude's auto-compact signal — there's likely a system
-  event in stream-json that announces "compacting now". Surface it
-  as a distinct status (`compacting`?) in the UI with its own
-  affordance (progress text, optional cancel) so the user knows
-  what's happening.
-- Generic stale-busy timeout: if we've been in `busy` for >N seconds
-  with no content.delta or item.* event arriving, surface a "still
-  thinking — claude may be auto-compacting" hint with a manual reset
-  option. Less precise but cheap.
-- Pair with the related bug "Stale thinking status after Windows
-  hard-restore" above — both point to needing better recovery from
-  any state where `busy` gets stuck.
+- Tag `tokenUsage.updated` events with a `scope: 'main' | 'subagent'`
+  field at adapter parse time (claude stream-json identifies
+  subagent assistant messages — they're inside Task tool result
+  envelopes), and have `computeContextFill` filter to `scope === 'main'`.
+- Alternatively, key the meter on session/turn boundary events
+  rather than the latest tokenUsage event — only update on the
+  outermost `turn.completed`.
+
+### Auto-compact detection (positive signal)
+Partially addressed in 0.5.5. The STOP-watchdog fix means a stuck
+auto-compact is at least *recoverable*: pressing Stop arms a 5 s
+watchdog that escalates to killing the child if no `turn.completed`
+arrives, and a second Stop click escalates immediately. So a 30-min
+freeze is no longer the only option — the user can bail out.
+
+What's still missing: a *positive* signal that compaction is in
+progress so the user knows whether to wait (compaction will finish)
+or escalate (the session is genuinely wedged). Today both look
+identical: spinner + "claude is thinking…".
+
+Fix direction: detect claude's auto-compact event in stream-json,
+surface it as a distinct status (`compacting`?) with progress text,
+and skip the watchdog escalation while we're in that state —
+compaction can legitimately take 30+ minutes on long sessions.
 
 ## Closed (recent shipped work)
 
 See git log for details. Quick index:
 
+- v0.5.5 — STOP watchdog with `interrupting` status + escalation;
+  cold-restore context meter (persist `lastUsedTokens`)
 - v0.4.37 — runtime validators for persisted JSON
 - v0.4.38 — `docs/providers.md` (multi-provider planning)
 - v0.4.36 — pruned debug breadcrumbs from restoreTabs

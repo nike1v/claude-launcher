@@ -25,7 +25,12 @@ export function StatusBar() {
   // cached on the previous run (persisted via tabs.json), then to the
   // project's configured override.
   const modelLabel = eventModel ?? session?.lastModel ?? project?.model ?? null
-  const ctx = computeContextFill(events, modelLabel ?? undefined, session?.lastContextWindow)
+  const ctx = computeContextFill(
+    events,
+    modelLabel ?? undefined,
+    session?.lastContextWindow,
+    session?.lastUsedTokens
+  )
 
   const hostLabel = env
     ? env.config.kind === 'local'
@@ -58,7 +63,8 @@ export function StatusBar() {
 function computeContextFill(
   events: readonly NormalizedEvent[],
   model: string | undefined,
-  cachedTotal: number | undefined
+  cachedTotal: number | undefined,
+  cachedUsed: number | undefined
 ): { used: number; total: number } | null {
   // Walk backwards: the most recent tokenUsage.updated tells us both the
   // input context size for the latest assistant call and (when claude
@@ -77,13 +83,15 @@ function computeContextFill(
     }
     if (used !== null && totalFromEvent !== null) break
   }
-  // If we don't even have a model id (or a cached total from a previous
-  // run) we can't pick a sensible total, so suppress the meter entirely.
-  // Otherwise show the bar — even at 0% used — so the user always sees
-  // the budget.
-  if (used === null && !model && !cachedTotal) return null
-  const total = totalFromEvent ?? cachedTotal ?? defaultContextWindow(model, used ?? 0)
-  return { used: used ?? 0, total }
+  // Fall back to the cached values from the previous run when there's no
+  // live tokenUsage.updated in the current event stream — parseTranscript
+  // skips those events on cold replay (alpha.9 optimisation) so a freshly
+  // restored tab would otherwise show 0/200K until the next assistant
+  // reply lands.
+  const resolvedUsed = used ?? cachedUsed ?? null
+  if (resolvedUsed === null && !model && !cachedTotal) return null
+  const total = totalFromEvent ?? cachedTotal ?? defaultContextWindow(model, resolvedUsed ?? 0)
+  return { used: resolvedUsed ?? 0, total }
 }
 
 // Fall back when no result has supplied contextWindow yet (e.g. mid-turn

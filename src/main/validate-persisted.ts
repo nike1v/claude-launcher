@@ -90,6 +90,7 @@ export function validateProject(raw: unknown): asserts raw is Project {
   requireOptionalString(raw.lastSessionRef, 'Project.lastSessionRef')
   requireOptionalString(raw.lastModel, 'Project.lastModel')
   requireOptionalNumber(raw.lastContextWindow, 'Project.lastContextWindow')
+  requireOptionalNumber(raw.lastUsedTokens, 'Project.lastUsedTokens')
 }
 
 // ── Environment ──────────────────────────────────────────────────────────
@@ -116,6 +117,7 @@ export function validatePersistedTab(raw: unknown): asserts raw is PersistedTab 
   requireNonEmptyString(raw.sessionRef, 'PersistedTab.sessionRef')
   requireOptionalString(raw.lastModel, 'PersistedTab.lastModel')
   requireOptionalNumber(raw.lastContextWindow, 'PersistedTab.lastContextWindow')
+  requireOptionalNumber(raw.lastUsedTokens, 'PersistedTab.lastUsedTokens')
 }
 
 // Top-level PersistedTabs: the wrapper object holding the tabs array

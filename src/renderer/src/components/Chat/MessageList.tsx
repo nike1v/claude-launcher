@@ -32,6 +32,7 @@ export const MessageList = memo(function MessageList({ sessionId }: Props) {
   const events = useMessagesStore(s => s.eventsBySession[sessionId] ?? EMPTY)
   const status = useSessionsStore(s => s.sessions[sessionId]?.status)
   const isBusy = status === 'busy'
+  const isInterrupting = status === 'interrupting'
   const bottomRef = useRef<HTMLDivElement>(null)
   const shouldFollowRef = useRef(true)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -116,10 +117,12 @@ export const MessageList = memo(function MessageList({ sessionId }: Props) {
             </ToolGroup>
           )
         })}
-        {isBusy && (
+        {(isBusy || isInterrupting) && (
           <div className="flex items-center gap-2 text-xs text-fg-faint">
             <Loader2 size={12} className="animate-spin" />
-            <span className="italic">claude is thinking…</span>
+            <span className="italic">
+              {isInterrupting ? 'stopping the previous turn…' : 'claude is thinking…'}
+            </span>
           </div>
         )}
         <div ref={bottomRef} />
