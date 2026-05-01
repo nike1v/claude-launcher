@@ -12,38 +12,38 @@ import { spawn } from 'node:child_process'
 const PATH_MARKER = '__CL_PATH='
 
 // One-shot bash script: source PATH additions from every common shell
-// init file, defensively prepend a few well-known install dirs, then
-// print the resolved PATH on a marker line and run `<bin> --version`.
-// Used by WSL and SSH transports where wsl.exe / a non-interactive ssh
-// shell otherwise miss profile-only PATH additions.
+// init file, then UNCONDITIONALLY prepend a handful of installer-default
+// dirs using $HOME, print the resolved PATH on a marker line, and run
+// `<bin> --version`. Used by WSL and SSH transports where wsl.exe / a
+// non-interactive ssh shell otherwise miss profile-only PATH additions.
 //
-// We source four init files because installer scripts vary widely in
-// where they add PATH:
-//   ~/.profile     POSIX-standard, sourced by bash -l
-//   ~/.bashrc      bash-interactive
-//   ~/.zshrc       zsh-interactive (most curl-pipe installers target this
-//                  for users on macOS / WSL who default to zsh)
-//   ~/.zprofile    zsh-login
-// Sourcing zsh files in bash can hit zsh-specific syntax (`setopt`,
-// extended globs, etc.); we swallow stderr so those don't break the
-// probe — bash drops the bad lines and keeps the PATH= assignments
-// that came before, which is what we need.
+// We source many init files because installer scripts vary widely in
+// where they add PATH (~/.profile, ~/.bashrc, ~/.zshrc, ~/.path.sh,
+// ~/.cargo/env, etc.). Sourcing zsh files in bash can hit
+// zsh-specific syntax (setopt, anonymous functions); we swallow
+// stderr so the parse errors don't break the probe — bash drops the
+// bad lines and keeps the PATH= assignments that did execute.
 //
-// We also defensively prepend a few directories that common installers
-// drop binaries into without touching shell init at all
-// (~/.opencode/bin from the opencode curl-installer, ~/.local/bin
-// from npm-global, ~/.cargo/bin, etc.). This is the belt to the
-// suspenders of sourcing init files.
+// The unconditional prepend is the belt to those suspenders.
+// 0.6.5–0.6.8 used a conditional `for p in ~/.opencode/bin … [ -d
+// "$p" ] && PATH=…` form. That form failed silently for at least one
+// real user (PATH dump showed ~/.opencode/bin still missing despite
+// the dir existing). We don't know why — tilde expansion *should*
+// work in `for` lists — so this version sidesteps the question
+// entirely: use $HOME (which is reliably set in any bash login
+// shell) and prepend without a guard. If a dir doesn't exist, PATH
+// search just skips it, no harm done.
 //
 // `bin` MUST be a known provider binary name ('claude', 'codex', …) —
 // not user input. It's interpolated unquoted so a malicious value
 // would be a shell-injection sink. ProviderRegistry hands these out;
 // no untrusted path reaches here.
 const PROBE_RC_FILES = '~/.profile ~/.bash_profile ~/.bashrc ~/.zprofile ~/.zshrc ~/.path.sh ~/.cargo/env'
-const PROBE_EXTRA_PATHS = '~/.local/bin ~/.opencode/bin ~/.bun/bin ~/.cargo/bin ~/.npm-global/bin /usr/local/bin'
+const PROBE_EXTRA_PATH_PREPEND =
+  '"$HOME/.opencode/bin:$HOME/.bun/bin:$HOME/.cargo/bin:$HOME/.npm-global/bin:$HOME/.local/bin:/usr/local/bin:$PATH"'
 
 export function probeScript(bin: string): string {
-  return `for rc in ${PROBE_RC_FILES}; do [ -f "$rc" ] && . "$rc" 2>/dev/null; done; for p in ${PROBE_EXTRA_PATHS}; do case ":$PATH:" in *":$p:"*) ;; *) [ -d "$p" ] && PATH="$p:$PATH" ;; esac; done; printf '${PATH_MARKER}%s\\n' "$PATH"; ${bin} --version`
+  return `for rc in ${PROBE_RC_FILES}; do [ -f "$rc" ] && . "$rc" 2>/dev/null; done; PATH=${PROBE_EXTRA_PATH_PREPEND}; printf '${PATH_MARKER}%s\\n' "$PATH"; ${bin} --version`
 }
 
 interface RunOpts {
