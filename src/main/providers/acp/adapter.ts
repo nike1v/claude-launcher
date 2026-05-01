@@ -218,6 +218,28 @@ export class AcpAdapter implements IProviderAdapter {
 
   // ── Internals ─────────────────────────────────────────────────────────
 
+  // Queue session/new (or session/load on resume) — the next step
+  // after either a successful authenticate or a skipped/no-op
+  // authenticate. Centralised so the post-initialize and
+  // post-authenticate code paths can share it without duplicating
+  // the queue-and-flush logic.
+  private openSessionAfterAuth(): void {
+    if (this.resumeSessionId) {
+      const id = this.allocateId('session.load')
+      this.pendingWrites += jsonRpcRequest(id, 'session/load', {
+        sessionId: this.resumeSessionId,
+        cwd: this.startCwd,
+        mcpServers: []
+      })
+    } else {
+      const id = this.allocateId('session.new')
+      this.pendingWrites += jsonRpcRequest(id, 'session/new', {
+        cwd: this.startCwd,
+        mcpServers: []
+      })
+    }
+  }
+
   private dispatch(msg: unknown, out: NormalizedEvent[]): void {
     if (!msg || typeof msg !== 'object') return
     const obj = msg as Record<string, unknown>
@@ -248,6 +270,17 @@ export class AcpAdapter implements IProviderAdapter {
 
     if (msg.error) {
       const err = msg.error as { message?: string; code?: number }
+      // authenticate is intentionally not implemented by opencode and
+      // may be a no-op for other flavors that auth out-of-band. Don't
+      // strand the bootstrap on its error response — if the agent has
+      // a usable external auth, session/new will succeed and the user
+      // is fine; if it doesn't, session/new errors and we surface
+      // *that* as the visible failure instead of a misleading
+      // "authenticate failed".
+      if (pending.kind === 'authenticate') {
+        this.openSessionAfterAuth()
+        return
+      }
       out.push({
         kind: 'error',
         message: `${this.flavor} ${pending.kind} failed: ${err.message ?? 'unknown'}`,
@@ -260,8 +293,17 @@ export class AcpAdapter implements IProviderAdapter {
     const result = (msg.result ?? {}) as Record<string, unknown>
 
     if (pending.kind === 'initialize') {
-      // Pick auth method. Both flavors advertise an authMethods[]
-      // array; we want the one matching our flavor's preference.
+      // opencode advertises an authMethod ("Login with opencode") but
+      // its actual `authenticate` implementation rejects with
+      // "Authentication not implemented" — auth is configured
+      // externally via `opencode auth login`. So for opencode we skip
+      // the authenticate step entirely and proceed straight to
+      // session/new. Cursor's flow does need authenticate (cursor's
+      // login methodId), so it keeps the original chain.
+      if (this.flavor === 'opencode') {
+        this.openSessionAfterAuth()
+        return
+      }
       const authMethods = Array.isArray(result.authMethods)
         ? result.authMethods as Array<{ id?: string }>
         : []
@@ -274,21 +316,7 @@ export class AcpAdapter implements IProviderAdapter {
     }
 
     if (pending.kind === 'authenticate') {
-      // Auth ok (or pass-through). Open the session.
-      if (this.resumeSessionId) {
-        const id = this.allocateId('session.load')
-        this.pendingWrites += jsonRpcRequest(id, 'session/load', {
-          sessionId: this.resumeSessionId,
-          cwd: this.startCwd,
-          mcpServers: []
-        })
-      } else {
-        const id = this.allocateId('session.new')
-        this.pendingWrites += jsonRpcRequest(id, 'session/new', {
-          cwd: this.startCwd,
-          mcpServers: []
-        })
-      }
+      this.openSessionAfterAuth()
       return
     }
 

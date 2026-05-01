@@ -109,18 +109,23 @@ describe('AcpAdapter — bootstrap handshake (cursor flavor)', () => {
 })
 
 describe('AcpAdapter — opencode flavor differences', () => {
-  it('uses the first authMethod as-is for opencode (auth is a pass-through)', () => {
+  it('skips authenticate for opencode and goes straight to session/new', () => {
+    // Repro for the v0.7.7 stall: opencode's `authenticate` returns
+    // `{error: "Authentication not implemented"}` because auth is
+    // configured externally (`opencode auth login`). The adapter must
+    // not even *send* authenticate — go from initialize → session/new.
     const adapter = new AcpAdapter('opencode')
     adapter.startupBytes({ cwd: '/srv' })
     feed(adapter, {
       jsonrpc: '2.0', id: 1,
-      result: { authMethods: [{ id: 'opencode-default' }] }
+      result: { authMethods: [{ id: 'opencode-login' }] }
     })
     const queued = adapter.drainPendingWrites()
-    const auth = firstMessage(queued)
-    expect(auth).toMatchObject({
-      method: 'authenticate',
-      params: { methodId: 'opencode-default' }
+    const messages = allMessages(queued)
+    expect(messages.find(m => m.method === 'authenticate')).toBeUndefined()
+    expect(messages.find(m => m.method === 'session/new')).toMatchObject({
+      method: 'session/new',
+      params: { cwd: '/srv', mcpServers: [] }
     })
   })
 
@@ -128,8 +133,8 @@ describe('AcpAdapter — opencode flavor differences', () => {
     const adapter = new AcpAdapter('opencode')
     adapter.startupBytes({ cwd: '/srv', model: 'gpt-4o' })
     feed(adapter, { jsonrpc: '2.0', id: 1, result: { authMethods: [{ id: 'oc' }] } })
-    feed(adapter, { jsonrpc: '2.0', id: 2, result: null })
-    feed(adapter, { jsonrpc: '2.0', id: 3, result: { sessionId: 's' } })
+    // No id:2 authenticate response — opencode skips authenticate.
+    feed(adapter, { jsonrpc: '2.0', id: 2, result: { sessionId: 's' } })
     const queued = adapter.drainPendingWrites()
     expect(allMessages(queued).find(m => m.method === 'session/set_config_option')).toBeUndefined()
   })
