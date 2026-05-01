@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { Search, X } from 'lucide-react'
 import type { HostType } from '../../../../shared/types'
-import type { ProviderKind } from '../../../../shared/events'
 import { EnvironmentStatus } from './EnvironmentStatus'
 import { Modal } from '../Modal'
 import { PROVIDER_OPTIONS, providerLabel, providerBin } from '../../lib/provider-options'
@@ -9,19 +8,15 @@ import { describeHost } from '../../../../shared/host-utils'
 
 interface Props {
   config: HostType
-  // Env's default provider — gets the at-a-glance dot on the row.
-  // Defaults to claude for envs persisted before per-env provider
-  // selection landed.
-  defaultProviderKind?: ProviderKind
   envName?: string
 }
 
-// At-a-glance provider status for an environment row in Settings.
-// The inline chip shows the env's default provider; clicking it opens
-// a modal that probes all four providers in parallel. Modal lives in
-// the page-level overlay so it doesn't push the row layout and works
-// the same regardless of how many envs the user has.
-export function ProvidersStatus({ config, defaultProviderKind = 'claude', envName }: Props) {
+// "Check all providers" button on the env row. Idle until clicked —
+// no eager probe, since each provider's --version walk takes a few
+// seconds on SSH and the user mostly doesn't care about the row's
+// status until they're investigating something. Click opens a modal
+// that probes all four providers in parallel.
+export function ProvidersStatus({ config, envName }: Props) {
   const [open, setOpen] = useState(false)
   return (
     <>
@@ -29,10 +24,10 @@ export function ProvidersStatus({ config, defaultProviderKind = 'claude', envNam
         type="button"
         onClick={() => setOpen(true)}
         title="Check all providers on this env"
-        className="flex items-center gap-1 text-xs hover:text-fg transition-colors"
+        className="flex items-center gap-1 px-2 py-1 rounded text-xs text-fg-muted hover:text-fg hover:bg-elevated border border-divider transition-colors"
       >
-        <EnvironmentStatus config={config} providerKind={defaultProviderKind} compact />
-        <Search size={11} className="text-fg-faint" />
+        <Search size={11} />
+        <span>Check</span>
       </button>
       {open && (
         <ProvidersProbeModal
