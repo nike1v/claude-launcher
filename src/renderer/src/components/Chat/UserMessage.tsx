@@ -27,6 +27,27 @@ export const UserMessage = memo(function UserMessage({ text, attachments, timest
         <CopyButton text={text} className="opacity-0 group-hover:opacity-100 mt-1 shrink-0" />
       )}
       <div className="max-w-xl flex flex-col items-end gap-2">
+        {hasAttachments && (
+          // Attachments float above the text bubble — that's how chat UIs
+          // (iMessage, WhatsApp, Slack) lay out images sent with a caption,
+          // and it makes the message read top-down: "here's the picture,
+          // here's what I'm asking about it" rather than the other way
+          // around.
+          <div className="flex flex-col gap-1 items-end">
+            {attachments!.map((att, i) => {
+              if (att.kind === 'image') {
+                return (
+                  <AttachmentImage
+                    key={i}
+                    mediaType={att.mediaType}
+                    data={att.data}
+                  />
+                )
+              }
+              return <DocumentChip key={i} attachment={att} />
+            })}
+          </div>
+        )}
         {text.trim() && (
           // bg-bubble-user is an accent-tinted token (indigo-grey on dark,
           // pale blue on light) so user messages read distinctly from
@@ -42,22 +63,6 @@ export const UserMessage = memo(function UserMessage({ text, attachments, timest
           >
             {formatMessageTime(timestamp, clockFormat)}
           </span>
-        )}
-        {hasAttachments && (
-          <div className="flex flex-col gap-1 items-end">
-            {attachments!.map((att, i) => {
-              if (att.kind === 'image') {
-                return (
-                  <AttachmentImage
-                    key={i}
-                    mediaType={att.mediaType}
-                    data={att.data}
-                  />
-                )
-              }
-              return <DocumentChip key={i} attachment={att} />
-            })}
-          </div>
         )}
       </div>
     </div>

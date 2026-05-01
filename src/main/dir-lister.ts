@@ -65,10 +65,16 @@ async function listRemoteDir(host: HostType, rawPath: string): Promise<DirListin
   const target = rawPath.trim() || '~'
   // Resolve the path on the remote and emit one directory name per line.
   // POSIX find with -maxdepth 1 -mindepth 1 keeps it cheap even on big trees.
+  // The tilde patterns are quoted ("~" / "~/"*) because bash subjects
+  // case patterns and ${var#pattern} pattern arguments to tilde
+  // expansion — without the quotes `~` matches against $HOME, not the
+  // literal `~` the user typed, and the whole branch silently no-ops.
+  // Same trap on the strip side: ${t#"~"} keeps the prefix-removal
+  // pattern as the literal tilde character.
   const script =
     `t=${shQuote(target)}; ` +
     `[ -z "$t" ] && t=$HOME; ` +
-    `case "$t" in ~|~/*) t="$HOME${'$'}{t#~}" ;; esac; ` +
+    `case "$t" in "~"|"~/"*) t="$HOME${'$'}{t#"~"}" ;; esac; ` +
     `cd "$t" 2>/dev/null || exit 2; ` +
     `pwd; ` +
     `find . -mindepth 1 -maxdepth 1 -type d 2>/dev/null | sed 's|^\\./||' | sort | head -${MAX_DIR_LIST_ENTRIES}`
