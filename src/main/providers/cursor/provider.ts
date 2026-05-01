@@ -43,7 +43,12 @@ export class CursorProvider implements IProvider {
   }
 
   public probeOptions(): { bin: string; versionLine: RegExp } {
-    return { bin: 'agent', versionLine: /cursor|agent/i }
+    // Cursor's CLI may print a bare version ("1.2.3") rather than
+    // mention "cursor" or "agent" by name, so we accept anything with a
+    // digit.dot.digit pattern. Exit-code 0 + a version-like banner is
+    // enough to distinguish a real CLI from "command not found" or
+    // unrelated stderr noise.
+    return { bin: 'agent', versionLine: /\d+\.\d+/ }
   }
 
   public envScrubList(_host: HostType): readonly EnvScrubPattern[] {

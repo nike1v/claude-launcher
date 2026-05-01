@@ -53,7 +53,10 @@ export class OpencodeProvider implements IProvider {
   }
 
   public probeOptions(): { bin: string; versionLine: RegExp } {
-    return { bin: 'opencode', versionLine: /opencode/i }
+    // opencode's CLI may print just a bare version ("0.5.0") without
+    // the word "opencode", so we accept anything with a digit.dot.digit
+    // pattern. Exit-code 0 + a version-shaped banner is enough.
+    return { bin: 'opencode', versionLine: /\d+\.\d+/ }
   }
 
   public envScrubList(_host: HostType): readonly EnvScrubPattern[] {
