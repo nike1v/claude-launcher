@@ -11,21 +11,39 @@ import { spawn } from 'node:child_process'
 
 const PATH_MARKER = '__CL_PATH='
 
-// One-shot bash script: source the user's login + bashrc PATH, print it
-// on a dedicated marker line, then run `<bin> --version` so the same
-// probe validates the binary. Used by WSL and SSH transports where
-// wsl.exe / a non-interactive ssh shell otherwise miss profile-only
-// PATH additions (~/.local/bin via .profile, npm-global, asdf shims,
-// mise, etc.). `printf` (not `echo`) so unusual PATH characters survive
-// intact, and we guard the bashrc source with `[ -f ~/.bashrc ]` to
-// avoid noise on hosts that don't have one.
+// One-shot bash script: source PATH additions from every common shell
+// init file, defensively prepend a few well-known install dirs, then
+// print the resolved PATH on a marker line and run `<bin> --version`.
+// Used by WSL and SSH transports where wsl.exe / a non-interactive ssh
+// shell otherwise miss profile-only PATH additions.
+//
+// We source four init files because installer scripts vary widely in
+// where they add PATH:
+//   ~/.profile     POSIX-standard, sourced by bash -l
+//   ~/.bashrc      bash-interactive
+//   ~/.zshrc       zsh-interactive (most curl-pipe installers target this
+//                  for users on macOS / WSL who default to zsh)
+//   ~/.zprofile    zsh-login
+// Sourcing zsh files in bash can hit zsh-specific syntax (`setopt`,
+// extended globs, etc.); we swallow stderr so those don't break the
+// probe — bash drops the bad lines and keeps the PATH= assignments
+// that came before, which is what we need.
+//
+// We also defensively prepend a few directories that common installers
+// drop binaries into without touching shell init at all
+// (~/.opencode/bin from the opencode curl-installer, ~/.local/bin
+// from npm-global, ~/.cargo/bin, etc.). This is the belt to the
+// suspenders of sourcing init files.
 //
 // `bin` MUST be a known provider binary name ('claude', 'codex', …) —
 // not user input. It's interpolated unquoted so a malicious value
 // would be a shell-injection sink. ProviderRegistry hands these out;
 // no untrusted path reaches here.
+const PROBE_RC_FILES = '~/.profile ~/.bashrc ~/.zshrc ~/.zprofile'
+const PROBE_EXTRA_PATHS = '~/.local/bin ~/.opencode/bin ~/.cargo/bin ~/.npm-global/bin'
+
 export function probeScript(bin: string): string {
-  return `[ -f ~/.bashrc ] && . ~/.bashrc 2>/dev/null; printf '${PATH_MARKER}%s\\n' "$PATH"; ${bin} --version`
+  return `for rc in ${PROBE_RC_FILES}; do [ -f "$rc" ] && . "$rc" 2>/dev/null; done; for p in ${PROBE_EXTRA_PATHS}; do case ":$PATH:" in *":$p:"*) ;; *) [ -d "$p" ] && PATH="$p:$PATH" ;; esac; done; printf '${PATH_MARKER}%s\\n' "$PATH"; ${bin} --version`
 }
 
 interface RunOpts {
