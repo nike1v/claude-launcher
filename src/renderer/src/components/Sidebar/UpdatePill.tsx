@@ -54,7 +54,11 @@ interface View {
 }
 
 function describe(status: UpdaterStatus): View {
-  const tonePrimary = 'bg-accent text-fg'
+  // text-accent-fg adapts per palette — most palettes resolve it to
+  // white, but amber's bright-yellow dark-mode fill needs near-black to
+  // be readable. Without this, "Update ready" was ghosted-out white on
+  // saturated yellow.
+  const tonePrimary = 'bg-accent text-accent-fg'
   const toneNeutral = 'bg-elevated text-fg-muted border border-divider'
   const toneError = 'bg-danger/90 text-fg'
 
@@ -123,12 +127,17 @@ function ActionButton({
 }) {
   // No horizontal padding so the action text starts at the same x as the
   // title text in the row above.
+  // The emphasized button sits on the accent-coloured pill, so it
+  // inherits text-accent-fg from the parent — leaving it as-is (no
+  // explicit colour class) lets that flow through and adapt per
+  // palette. The non-emphasized form is used on the neutral-toned
+  // pill so it keeps the muted-fg colour.
   return (
     <button
       onClick={onClick}
       className={`text-left text-xs transition-colors ${
         emphasized
-          ? 'font-semibold text-fg hover:text-fg'
+          ? 'font-semibold opacity-90 hover:opacity-100'
           : 'font-medium text-fg-muted hover:text-fg'
       }`}
     >

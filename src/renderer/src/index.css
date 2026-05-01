@@ -55,10 +55,20 @@
    these via var(). Default palette (Blue) is on :root so installs that
    never touched the picker get the historical look. */
 
+/* Per-palette accent foregrounds: text colour that contrasts on the
+   accent fill. Most palettes use a deep accent so white sits well on
+   top; the dark-mode amber is the outlier (bright yellow #fbbf24 needs
+   near-black text or it's illegible). The -d variant is the dark-mode
+   accent fg, -l the light-mode one. Themes pick from these via
+   var(--pl-accent-fg-d|l) so AccentPill / UpdatePill pick up the right
+   contrast automatically. */
+
 :root,
 :root[data-palette="blue"] {
   --pl-accent-d: #4f8cff;
   --pl-accent-l: #2563eb;
+  --pl-accent-fg-d: #ffffff;
+  --pl-accent-fg-l: #ffffff;
   --pl-bubble-d: #2a3358;
   --pl-bubble-l: #dbe6ff;
 }
@@ -66,6 +76,8 @@
 :root[data-palette="violet"] {
   --pl-accent-d: #a78bfa;
   --pl-accent-l: #7c3aed;
+  --pl-accent-fg-d: #ffffff;
+  --pl-accent-fg-l: #ffffff;
   --pl-bubble-d: #2d2552;
   --pl-bubble-l: #ede4ff;
 }
@@ -73,6 +85,8 @@
 :root[data-palette="rose"] {
   --pl-accent-d: #fb7185;
   --pl-accent-l: #e11d48;
+  --pl-accent-fg-d: #ffffff;
+  --pl-accent-fg-l: #ffffff;
   --pl-bubble-d: #4a2330;
   --pl-bubble-l: #ffe0e6;
 }
@@ -80,6 +94,8 @@
 :root[data-palette="emerald"] {
   --pl-accent-d: #34d399;
   --pl-accent-l: #059669;
+  --pl-accent-fg-d: #0a1f17;
+  --pl-accent-fg-l: #ffffff;
   --pl-bubble-d: #1f3a35;
   --pl-bubble-l: #d6f5e8;
 }
@@ -87,6 +103,11 @@
 :root[data-palette="amber"] {
   --pl-accent-d: #fbbf24;
   --pl-accent-l: #b45309;
+  /* Dark-mode amber fill is bright yellow — only near-black text is
+     readable on top. Light mode uses a deeper amber and white reads
+     fine. */
+  --pl-accent-fg-d: #1a1a1a;
+  --pl-accent-fg-l: #ffffff;
   --pl-bubble-d: #3d3018;
   --pl-bubble-l: #ffedc7;
 }
@@ -96,6 +117,8 @@
      find any colour distracting. */
   --pl-accent-d: #94a3b8;
   --pl-accent-l: #475569;
+  --pl-accent-fg-d: #0a0a0a;
+  --pl-accent-fg-l: #ffffff;
   --pl-bubble-d: #2a2e36;
   --pl-bubble-l: #e3e6ec;
 }
@@ -117,7 +140,7 @@
   --cl-fg-muted: rgba(255, 255, 255, 0.70);
   --cl-fg-faint: rgba(255, 255, 255, 0.45);
   --cl-accent: var(--pl-accent-d);
-  --cl-accent-fg: #ffffff;
+  --cl-accent-fg: var(--pl-accent-fg-d);
   --cl-bubble-user: var(--pl-bubble-d);
   --cl-success: #4ade80;
   --cl-warn: #fbbf24;
@@ -138,7 +161,7 @@
   --cl-fg-muted: rgba(0, 0, 0, 0.65);
   --cl-fg-faint: rgba(0, 0, 0, 0.42);
   --cl-accent: var(--pl-accent-l);
-  --cl-accent-fg: #ffffff;
+  --cl-accent-fg: var(--pl-accent-fg-l);
   --cl-bubble-user: var(--pl-bubble-l);
   --cl-success: #15803d;
   --cl-warn: #b45309;
