@@ -219,6 +219,8 @@ function AppearanceSection() {
   const zoomIn = useThemeStore(s => s.zoomIn)
   const zoomOut = useThemeStore(s => s.zoomOut)
   const zoomReset = useThemeStore(s => s.zoomReset)
+  const clockFormat = useThemeStore(s => s.clockFormat)
+  const setClockFormat = useThemeStore(s => s.setClockFormat)
   // Approximate the visual zoom % the way Chromium does: each integer
   // step of webFrame.zoomLevel is a 1.2× factor.
   const zoomPercent = Math.round(Math.pow(1.2, zoom) * 100)
@@ -284,6 +286,33 @@ function AppearanceSection() {
           >
             <ZoomIn size={14} />
           </button>
+        </div>
+      </div>
+
+      {/* Clock format — drives the HH:MM stamp on each message bubble.
+          Default 24h because Electron's locale detection isn't reliable
+          enough across WSL/Windows/macOS/SSH to auto-pick the right one. */}
+      <div>
+        <p className="text-[11px] text-fg-faint mb-1.5">Clock format</p>
+        <div className="grid grid-cols-2 gap-2">
+          {(['24h', '12h'] as const).map(opt => {
+            const active = clockFormat === opt
+            return (
+              <button
+                key={opt}
+                type="button"
+                onClick={() => setClockFormat(opt)}
+                aria-pressed={active}
+                className={`px-3 py-1.5 rounded border text-xs transition-colors
+                  ${active
+                    ? 'bg-accent/10 border-accent/60 text-fg'
+                    : 'border-divider text-fg-muted hover:border-divider-strong hover:text-fg'}
+                `}
+              >
+                {opt === '24h' ? '24-hour (14:45)' : '12-hour (2:45 PM)'}
+              </button>
+            )
+          })}
         </div>
       </div>
 

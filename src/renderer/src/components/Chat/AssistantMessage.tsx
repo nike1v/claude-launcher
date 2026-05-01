@@ -4,6 +4,7 @@ import remarkGfm from 'remark-gfm'
 import { Sparkles } from 'lucide-react'
 import { CopyButton } from './CopyButton'
 import { formatMessageTime, formatMessageTimeFull } from '../../lib/format-time'
+import { useThemeStore } from '../../store/theme'
 
 interface Props {
   text: string
@@ -15,6 +16,9 @@ interface Props {
 // Without memo this component (and its ReactMarkdown subtree, which is
 // expensive) re-renders on every event arrival in the same session.
 export const AssistantMessage = memo(function AssistantMessage({ text, timestamp }: Props) {
+  // Subscribing here flips already-rendered timestamps when the user
+  // toggles the clock-format preference — see UserMessage for context.
+  const clockFormat = useThemeStore(s => s.clockFormat)
   return (
     // Two-column message grid: a small accent-tinted "claude" badge
     // anchors the left edge, the markdown body sits in the right column.
@@ -33,10 +37,10 @@ export const AssistantMessage = memo(function AssistantMessage({ text, timestamp
           <CopyButton text={text} className="opacity-0 group-hover:opacity-100" />
           {timestamp !== undefined && (
             <span
-              title={formatMessageTimeFull(timestamp)}
+              title={formatMessageTimeFull(timestamp, clockFormat)}
               className="ml-auto text-[10px] text-fg-faint font-mono"
             >
-              {formatMessageTime(timestamp)}
+              {formatMessageTime(timestamp, clockFormat)}
             </span>
           )}
         </div>

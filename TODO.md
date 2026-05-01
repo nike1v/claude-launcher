@@ -217,6 +217,12 @@ with a fixed STOP so the bail-out path actually works.
 
 See git log for details. Quick index:
 
+- v0.5.9 — Settings → Appearance now has a 24h/12h clock-format
+  toggle that drives the message timestamps and their hover tooltips.
+  Persists in localStorage; default 24h.
+- v0.5.8 — force 24h timestamps universally (Electron locale
+  detection didn't track host OS preference reliably). Superseded
+  by 0.5.9's explicit setting.
 - v0.5.7 — message timestamps: HH:MM rendered next to user and
   assistant bubbles, full date on hover. JSONL replay uses the
   original ISO timestamp from disk; live and InputBar local pushes

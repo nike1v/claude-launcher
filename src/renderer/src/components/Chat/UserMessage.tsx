@@ -5,6 +5,7 @@ import type { UserAttachment } from '../../../../shared/events'
 import { FileText, Download } from 'lucide-react'
 import { saveFileAs } from '../../ipc/bridge'
 import { formatMessageTime, formatMessageTimeFull } from '../../lib/format-time'
+import { useThemeStore } from '../../store/theme'
 
 interface Props {
   text: string
@@ -14,6 +15,11 @@ interface Props {
 
 export const UserMessage = memo(function UserMessage({ text, attachments, timestamp }: Props) {
   const hasAttachments = attachments && attachments.length > 0
+  // Subscribing here is what flips already-rendered timestamps when the
+  // user changes the clock-format preference — without it, memo'd
+  // bubbles would keep showing the old format until the next mutation
+  // to their props (which for old messages is never).
+  const clockFormat = useThemeStore(s => s.clockFormat)
 
   return (
     <div className="group flex justify-end items-start gap-1">
@@ -31,10 +37,10 @@ export const UserMessage = memo(function UserMessage({ text, attachments, timest
         )}
         {timestamp !== undefined && (
           <span
-            title={formatMessageTimeFull(timestamp)}
+            title={formatMessageTimeFull(timestamp, clockFormat)}
             className="text-[10px] text-fg-faint font-mono"
           >
-            {formatMessageTime(timestamp)}
+            {formatMessageTime(timestamp, clockFormat)}
           </span>
         )}
         {hasAttachments && (
