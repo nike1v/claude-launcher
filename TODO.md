@@ -171,14 +171,13 @@ with a fixed STOP so the bail-out path actually works.
 
 See git log for details. Quick index:
 
-- v0.6.0 — STOP modelled after claude CLI's ESC: each click escalates
-  one notch on a soft → hard → force ladder
-  (in-band interrupt → SIGTERM → SIGKILL), with auto-escalation
-  watchdogs (5 s soft, 3 s hard) so a wedged session never strands
-  the UI. Phase resets on `turn.completed` (clean abort) or exit.
-  Status stays `busy` throughout — the 0.5.5 `'interrupting'` state
-  hung in production and is intentionally not reintroduced. Stop
-  button title hints at what the next click does.
+- v0.6.1 — Stop button is now plain "send in-band interrupt" and
+  nothing else (reverted the 0.6.0 escalation ladder — the user just
+  wanted a cancel-current-action button, not multi-stage SIGTERM /
+  SIGKILL). Added stale-busy hint in MessageList instead: after 30 s
+  of no events while busy, surfaces "session may be unresponsive,
+  close the tab" so a wedged session is at least visible.
+- v0.6.0 — STOP escalation ladder (reverted in 0.6.1).
 - v0.5.9 — Settings → Appearance now has a 24h/12h clock-format
   toggle that drives the message timestamps and their hover tooltips.
   Persists in localStorage; default 24h.

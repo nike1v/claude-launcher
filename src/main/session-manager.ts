@@ -35,30 +35,7 @@ interface ActiveSession {
   // Held on the session so handleStdout can clear it from a turn-completed
   // event without us having to thread the closure variable through.
   readyTimer: NodeJS.Timeout | null
-  // Tracks how far we've escalated the user's Stop click. Each click
-  // moves one notch (none → soft → hard → force); auto-advanced by the
-  // interruptTimer when a level fails to settle in time. Resets on
-  // turn.completed (the in-band interrupt was honoured) and on exit.
-  // Crucially, this stays set even after a watchdog fires — so a second
-  // user click escalates instead of restarting the soft interrupt loop.
-  interruptPhase: 'none' | 'soft' | 'hard' | 'force'
-  interruptTimer: NodeJS.Timeout | null
 }
-
-// Phase timeouts. These are the windows we give one stop level before
-// auto-advancing to the next. Tuned for "claude responsive within ~100 ms,
-// auto-compact stuck for minutes" — soft phase has to be long enough to
-// avoid spuriously killing a real auto-compact, short enough that a
-// genuinely wedged session doesn't strand the user.
-//
-// SOFT: in-band protocol interrupt (claude control_request, codex
-//       turn/interrupt, ACP session/interrupt). Most of the time this
-//       ends the turn within ms.
-// HARD: SIGTERM the spawned child. On WSL/SSH that's the wsl.exe / ssh
-//       wrapper; the inner claude usually exits when its parent goes.
-// FORCE: SIGKILL.
-const SOFT_INTERRUPT_TIMEOUT_MS = 5000
-const HARD_INTERRUPT_TIMEOUT_MS = 3000
 
 const SHUTDOWN_GRACE_MS = 1500
 
@@ -155,9 +132,7 @@ export class SessionManager {
       markedReady: false,
       stopping: false,
       exited,
-      readyTimer: null,
-      interruptPhase: 'none',
-      interruptTimer: null
+      readyTimer: null
     }
     this.sessions.set(sessionId, session)
 
@@ -219,10 +194,6 @@ export class SessionManager {
       if (session.readyTimer) {
         clearTimeout(session.readyTimer)
         session.readyTimer = null
-      }
-      if (session.interruptTimer) {
-        clearTimeout(session.interruptTimer)
-        session.interruptTimer = null
       }
       this.sessions.delete(sessionId)
       resolveExited()
@@ -335,100 +306,25 @@ export class SessionManager {
   //      the CLI itself; signalling those tears down the whole transport
   //      connection (the symptom the user reported: "Stop closes the
   //      chat instead of stopping the message").
-  // Stop, modelled after claude CLI's ESC key: try to abort the current
-  // turn cleanly via the provider's in-band interrupt protocol, escalate
-  // if that doesn't take. Each user click bumps to the next level; the
-  // interruptTimer auto-advances if a level fails to settle. Status
-  // stays 'busy' through the whole sequence because we *are* still busy
-  // — until either turn.completed lands (clean abort) or the child
-  // exits (hard kill landed). Keeping a single status simplifies the
-  // renderer and avoids the 0.5.5 trap where a stuck transitional state
-  // stranded the UI.
-  //
-  // Phase ladder:
-  //   none → soft   write in-band interrupt (works ~always for claude
-  //                 unless the CLI is wedged in auto-compact / hung tool)
-  //   soft → hard   SIGTERM the spawned child (the WSL/SSH wrapper, if any
-  //                 — those usually propagate to the inner claude)
-  //   hard → force  SIGKILL
+  // Stop the current action. Mirrors claude CLI's ESC: write the
+  // provider's in-band interrupt protocol message and trust the CLI to
+  // process it. Status stays 'busy' until claude actually emits
+  // turn.completed — if it never does (wedged session), the renderer's
+  // stale-busy hint tells the user to close the tab manually. We
+  // intentionally don't kill the child here: signalling tears down the
+  // WSL/SSH wrapper, which closes the whole chat instead of just
+  // aborting the turn (the v0.4.4 bug). Tab close already handles
+  // teardown cleanly when the user wants out.
   public interruptSession(sessionId: string): void {
     const session = this.sessions.get(sessionId)
     if (!session) return
-    switch (session.interruptPhase) {
-      case 'none':
-        this.beginSoftInterrupt(session)
-        return
-      case 'soft':
-        // User clicked again before the soft interrupt settled — they
-        // want out now. Skip the wait and SIGTERM directly.
-        this.escalateToHard(session)
-        return
-      case 'hard':
-        this.escalateToForce(session)
-        return
-      case 'force':
-        // Already SIGKILLed — the only thing left is the OS getting
-        // around to reaping the process. Re-clicking does nothing.
-        return
-    }
-  }
-
-  private beginSoftInterrupt(session: ActiveSession): void {
-    console.log(`[interrupt] ${session.sessionId}: soft (in-band protocol)`)
-    session.interruptPhase = 'soft'
     const payload = session.adapter.formatControl({ kind: 'interrupt' })
-    if (payload !== null) {
-      // Best-effort write: don't go through writeStdin (which would flip
-      // the session to 'error' on a broken pipe). If the pipe is gone the
-      // next exit handler will surface that on its own; nothing useful to
-      // do here.
-      const stdin = session.process.stdin
-      if (stdin && !stdin.destroyed && stdin.writable) {
-        try { stdin.write(payload) } catch { /* swallow — session is winding down */ }
-      }
-      this.drainAdapterWrites(session)
-    } else {
-      // Provider has no in-band interrupt — skip straight to hard. SIGINT
-      // is intentionally not used: on Windows it's TerminateProcess
-      // anyway, and on WSL/SSH it tears down the wrapper.
-      this.escalateToHard(session)
-      return
+    if (payload === null) return
+    const stdin = session.process.stdin
+    if (stdin && !stdin.destroyed && stdin.writable) {
+      try { stdin.write(payload) } catch { /* pipe gone; exit handler surfaces it */ }
     }
-    session.interruptTimer = setTimeout(
-      () => this.escalateToHard(session),
-      SOFT_INTERRUPT_TIMEOUT_MS
-    )
-  }
-
-  private escalateToHard(session: ActiveSession): void {
-    if (session.interruptTimer) {
-      clearTimeout(session.interruptTimer)
-      session.interruptTimer = null
-    }
-    if (session.interruptPhase === 'hard' || session.interruptPhase === 'force') return
-    console.log(`[interrupt] ${session.sessionId}: hard (SIGTERM)`)
-    session.interruptPhase = 'hard'
-    session.stopping = true
-    try { session.process.kill() } catch { /* already dead */ }
-    // If the child doesn't exit on SIGTERM (rare but possible — wedged
-    // wsl.exe, hung remote ssh), force-kill after a bounded wait so the
-    // user isn't stuck staring at a busy spinner forever.
-    session.interruptTimer = setTimeout(
-      () => this.escalateToForce(session),
-      HARD_INTERRUPT_TIMEOUT_MS
-    )
-  }
-
-  private escalateToForce(session: ActiveSession): void {
-    if (session.interruptTimer) {
-      clearTimeout(session.interruptTimer)
-      session.interruptTimer = null
-    }
-    if (session.interruptPhase === 'force') return
-    console.log(`[interrupt] ${session.sessionId}: force (SIGKILL)`)
-    session.interruptPhase = 'force'
-    session.stopping = true
-    try { session.process.kill('SIGKILL') } catch { /* already dead */ }
+    this.drainAdapterWrites(session)
   }
 
   public async stopAll(): Promise<void> {
@@ -512,20 +408,12 @@ export class SessionManager {
       return
     }
     if (event.kind === 'turn.completed') {
-      // Turn finished — back to ready so the spinner clears. If the user
-      // hit Stop and the in-band soft interrupt was honoured, this is
-      // also where we reset the phase ladder and cancel the auto-
-      // escalation timer so the next click starts fresh from 'none'.
+      // Turn finished — back to ready so the spinner clears.
       session.markedReady = true
       if (session.readyTimer) {
         clearTimeout(session.readyTimer)
         session.readyTimer = null
       }
-      if (session.interruptTimer) {
-        clearTimeout(session.interruptTimer)
-        session.interruptTimer = null
-      }
-      session.interruptPhase = 'none'
       this.onEvent('session:status', { sessionId: session.sessionId, status: 'ready' })
     }
   }

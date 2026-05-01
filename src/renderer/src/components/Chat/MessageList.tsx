@@ -1,4 +1,4 @@
-import { memo, useMemo, useRef, useEffect, type ReactNode } from 'react'
+import { memo, useMemo, useRef, useEffect, useState, type ReactNode } from 'react'
 import { Loader2 } from 'lucide-react'
 import { useMessagesStore } from '../../store/messages'
 import { useSessionsStore } from '../../store/sessions'
@@ -36,6 +36,27 @@ export const MessageList = memo(function MessageList({ sessionId }: Props) {
   const shouldFollowRef = useRef(true)
   const containerRef = useRef<HTMLDivElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
+
+  // Stale-busy detection. Sessions sometimes get wedged (auto-compact
+  // mid-stream, hung tool call, ignored interrupt) and the spinner
+  // keeps spinning forever with no way to tell. Tracking the
+  // wall-clock time of the last event arrival on this session, ticking
+  // every 5 s while busy, lets the UI surface a hint that the session
+  // looks unresponsive — at which point closing the tab is the user's
+  // recovery path.
+  const lastEventAtRef = useRef(Date.now())
+  useEffect(() => {
+    lastEventAtRef.current = Date.now()
+  }, [events.length])
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    if (!isBusy) return
+    setNow(Date.now())
+    const id = setInterval(() => setNow(Date.now()), 5000)
+    return () => clearInterval(id)
+  }, [isBusy])
+  const STALE_THRESHOLD_MS = 30_000
+  const looksStale = isBusy && now - lastEventAtRef.current > STALE_THRESHOLD_MS
 
   // Watch the actual content size — not just events.length — so the view
   // stays pinned to the bottom while async work (markdown, images, restored
@@ -117,9 +138,17 @@ export const MessageList = memo(function MessageList({ sessionId }: Props) {
           )
         })}
         {isBusy && (
-          <div className="flex items-center gap-2 text-xs text-fg-faint">
-            <Loader2 size={12} className="animate-spin" />
-            <span className="italic">claude is thinking…</span>
+          <div className="flex flex-col gap-1 text-xs text-fg-faint">
+            <div className="flex items-center gap-2">
+              <Loader2 size={12} className="animate-spin" />
+              <span className="italic">claude is thinking…</span>
+            </div>
+            {looksStale && (
+              <div className="text-[11px] text-warn ml-5">
+                No activity for {Math.round((now - lastEventAtRef.current) / 1000)}s — the
+                session may be unresponsive. Close the tab if it stays stuck.
+              </div>
+            )}
           </div>
         )}
         <div ref={bottomRef} />
