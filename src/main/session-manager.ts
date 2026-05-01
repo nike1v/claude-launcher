@@ -13,7 +13,6 @@ import { resolveTransport as defaultResolveTransport } from './transports'
 import { getProvider } from './providers/registry'
 import type { IProvider, IProviderAdapter } from './providers/types'
 import { resolveProviderKind, type NormalizedEvent } from '../shared/events'
-import { acpLog } from './acp-debug-log'
 
 type EventCallback = (channel: string, payload: unknown) => void
 
@@ -36,6 +35,13 @@ interface ActiveSession {
   // Held on the session so handleStdout can clear it from a turn-completed
   // event without us having to thread the closure variable through.
   readyTimer: NodeJS.Timeout | null
+  // True between user clicking Stop and the provider emitting
+  // turn.completed (or the session ending). Drives the 'interrupting'
+  // status flag, gates sendMessage so users can't queue more turns
+  // into a stdin pipe that's still tearing down the previous one,
+  // and makes interruptSession idempotent so multi-clicks don't
+  // multi-send the protocol message.
+  interrupting: boolean
 }
 
 const SHUTDOWN_GRACE_MS = 1500
@@ -133,7 +139,8 @@ export class SessionManager {
       markedReady: false,
       stopping: false,
       exited,
-      readyTimer: null
+      readyTimer: null,
+      interrupting: false
     }
     this.sessions.set(sessionId, session)
 
@@ -220,6 +227,15 @@ export class SessionManager {
   public sendMessage(sessionId: string, text: string, attachments: SendAttachment[] = []): void {
     const session = this.sessions.get(sessionId)
     if (!session) return
+    // Refuse sends while we're winding down a previous turn via Stop.
+    // The renderer disables Send too, but enforcing it here as well
+    // closes the IPC race (renderer hadn't yet received the
+    // 'interrupting' status flip) and matches what tests should rely
+    // on. The user's next message would otherwise sit in the same
+    // stdin pipe behind the not-yet-aborted turn — which is exactly
+    // the "send goes nowhere for an hour" symptom from the original
+    // bug report.
+    if (session.interrupting) return
     // Bound the attachment payload before it lands in the JSON line we
     // write to the provider's stdin. Without this, a renderer (or a
     // compromised one) could OOM the main process via base64 inflation.
@@ -276,15 +292,6 @@ export class SessionManager {
     }
     try {
       stdin.write(payload)
-      // Mirror outbound bytes to the ACP debug log for cursor / opencode
-      // sessions. Other providers go through the same code path but the
-      // log is filtered to ACP flavors where remote-protocol debugging
-      // tends to be needed.
-      if (session.provider.kind === 'cursor' || session.provider.kind === 'opencode') {
-        for (const line of payload.split('\n')) {
-          if (line.trim()) acpLog('tx', sessionId, session.provider.kind, line)
-        }
-      }
       return true
     } catch (err) {
       const reason = err instanceof Error ? err.message : 'write to claude stdin failed'
@@ -325,9 +332,26 @@ export class SessionManager {
   // WSL/SSH wrapper, which closes the whole chat instead of just
   // aborting the turn (the v0.4.4 bug). Tab close already handles
   // teardown cleanly when the user wants out.
+  // Stop the in-flight turn cleanly. Sends the provider's in-band
+  // interrupt protocol message (claude control_request, codex
+  // turn/interrupt, ACP session/cancel) and parks the session in
+  // 'interrupting' until the provider emits turn.completed. While
+  // interrupting:
+  //   - sendMessage is a no-op (no piling messages behind a
+  //     not-yet-aborted turn — the original bug).
+  //   - the Stop click is idempotent (multiple clicks don't multi-
+  //     send the protocol message).
+  //   - the renderer shows "stop sent — waiting…" → "not
+  //     acknowledged…" via the existing stopRequestedAt machinery.
+  // Recovery for a wedged provider that never honors the interrupt is
+  // user-driven: close the tab. We deliberately do NOT auto-kill —
+  // signalling tears down the WSL/SSH wrapper (the v0.4.4 bug) and
+  // every previous attempt at auto-escalation either hung the UI in
+  // production or regressed the spawn end-to-end.
   public interruptSession(sessionId: string): void {
     const session = this.sessions.get(sessionId)
     if (!session) return
+    if (session.interrupting) return
     const payload = session.adapter.formatControl({ kind: 'interrupt' })
     if (payload === null) return
     const stdin = session.process.stdin
@@ -335,6 +359,8 @@ export class SessionManager {
       try { stdin.write(payload) } catch { /* pipe gone; exit handler surfaces it */ }
     }
     this.drainAdapterWrites(session)
+    session.interrupting = true
+    this.onEvent('session:status', { sessionId, status: 'interrupting' })
   }
 
   public async stopAll(): Promise<void> {
@@ -376,11 +402,7 @@ export class SessionManager {
     const lines = session.lineBuffer.split('\n')
     session.lineBuffer = lines.pop() ?? ''
 
-    const isAcp = session.provider.kind === 'cursor' || session.provider.kind === 'opencode'
     for (const line of lines) {
-      // Mirror inbound bytes for ACP sessions before parsing, so a
-      // parse failure in the adapter still leaves a record on disk.
-      if (isAcp && line.trim()) acpLog('rx', session.sessionId, session.provider.kind, line)
       // adapter.parseChunk takes a chunk; feeding it one complete line
       // at a time keeps its own internal buffer empty after every call.
       const events = session.adapter.parseChunk(line + '\n')
@@ -422,8 +444,12 @@ export class SessionManager {
       return
     }
     if (event.kind === 'turn.completed') {
-      // Turn finished — back to ready so the spinner clears.
+      // Turn finished — back to ready so the spinner clears. This is
+      // also where the interrupt window closes: the provider honoured
+      // Stop and emitted turn-end, so we lift the send-block and the
+      // renderer flips out of 'interrupting'.
       session.markedReady = true
+      session.interrupting = false
       if (session.readyTimer) {
         clearTimeout(session.readyTimer)
         session.readyTimer = null

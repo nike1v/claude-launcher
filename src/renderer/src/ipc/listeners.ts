@@ -28,11 +28,12 @@ export function useIpcListeners(): void {
       'session:status',
       ({ sessionId, status, errorMessage }: IpcChannels['session:status']) => {
         updateSession(sessionId, { status, errorMessage })
-        // Status flipping away from 'busy' means the in-flight turn
-        // wrapped — clear any pending stop request marker so the hint
-        // doesn't linger ("stop sent" sticking around after the next
-        // turn starts).
-        if (status !== 'busy') {
+        // Stop-request marker is cleared when the turn fully ends
+        // (ready / error / closed). 'busy' and 'interrupting' both
+        // count as in-flight — keeping the marker through 'interrupting'
+        // is what drives the "stop sent…" → "no acknowledgement after
+        // Ns…" copy under the spinner.
+        if (status !== 'busy' && status !== 'interrupting') {
           useMessagesStore.getState().clearStopRequest(sessionId)
         }
       }

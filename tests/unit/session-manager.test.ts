@@ -199,10 +199,11 @@ describe('SessionManager', () => {
     expect(parsed.request_id).toMatch(/^req_/)
   })
 
-  it('repeated interrupt clicks just resend the in-band protocol message', async () => {
-    // Simple pass-through: clicking Stop twice is harmless extra wire
-    // bytes, no escalation, no kill — that pattern hung the UI in 0.5.5
-    // and we keep things simple now.
+  it('interrupt is idempotent — repeated clicks send only one protocol message', async () => {
+    // The session enters 'interrupting' on the first click and stays
+    // there until turn.completed (or session-end). Subsequent clicks
+    // are no-ops — no extra wire bytes, no kill, no state thrash. The
+    // UI mirrors this by disabling the Stop button on 'interrupting'.
     const sessionId = await manager.startSession(makeEnv(), makeProject())
     const proc = mockTransport.spawn.mock.results[0].value
     manager.interruptSession(sessionId)
@@ -210,7 +211,70 @@ describe('SessionManager', () => {
     manager.interruptSession(sessionId)
     expect(proc.kill).not.toHaveBeenCalled()
     const writes = (proc._written as string[]).filter(l => l.includes('"control_request"'))
-    expect(writes).toHaveLength(3)
+    expect(writes).toHaveLength(1)
+  })
+
+  it('emits status: interrupting after a Stop click and not ready until turn.completed', async () => {
+    const sessionId = await manager.startSession(makeEnv(), makeProject())
+    onEvent.mockClear()
+    manager.interruptSession(sessionId)
+    expect(onEvent).toHaveBeenCalledWith(
+      'session:status',
+      expect.objectContaining({ sessionId, status: 'interrupting' })
+    )
+    // No 'ready' until the provider acknowledges via turn.completed.
+    expect(onEvent).not.toHaveBeenCalledWith(
+      'session:status',
+      expect.objectContaining({ sessionId, status: 'ready' })
+    )
+  })
+
+  it('blocks sendMessage while interrupting (no piling onto the stdin pipe)', async () => {
+    const sessionId = await manager.startSession(makeEnv(), makeProject())
+    const proc = mockTransport.spawn.mock.results[0].value
+    manager.interruptSession(sessionId)
+    proc.stdin.write.mockClear()
+    manager.sendMessage(sessionId, 'queued message?')
+    expect(proc.stdin.write).not.toHaveBeenCalled()
+  })
+
+  it('lifts the interrupt block once turn.completed lands', async () => {
+    const sessionId = await manager.startSession(makeEnv(), makeProject())
+    const proc = mockTransport.spawn.mock.results[0].value
+
+    // Open a turn first so claude-adapter has something to close.
+    const assistantLine = JSON.stringify({
+      type: 'assistant',
+      message: {
+        id: 'msg-1', type: 'message', role: 'assistant',
+        content: [{ type: 'text', text: 'partial' }],
+        model: 'claude-sonnet-4-5', stop_reason: null,
+        usage: { input_tokens: 5, output_tokens: 1 }
+      }
+    })
+    proc.stdout.emit('data', Buffer.from(assistantLine + '\n'))
+
+    manager.interruptSession(sessionId)
+
+    const resultLine = JSON.stringify({
+      type: 'result',
+      subtype: 'success',
+      session_id: 'sess-1',
+      is_error: false,
+      num_turns: 1
+    })
+    proc.stdout.emit('data', Buffer.from(resultLine + '\n'))
+
+    // Status flips back to 'ready' after the provider's turn.completed.
+    expect(onEvent).toHaveBeenCalledWith(
+      'session:status',
+      expect.objectContaining({ sessionId, status: 'ready' })
+    )
+
+    // And subsequent sendMessage should now write to stdin again.
+    proc.stdin.write.mockClear()
+    manager.sendMessage(sessionId, 'next turn please')
+    expect(proc.stdin.write).toHaveBeenCalled()
   })
 
   it('skips spawn and emits error when probe rejects', async () => {

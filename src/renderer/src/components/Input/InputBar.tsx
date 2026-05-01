@@ -154,26 +154,38 @@ function ComposerInner({
         <FocusOnSessionChangePlugin sessionId={sessionId} />
       </div>
       <StopButton sessionId={sessionId} />
-      <SendButton disabled={!!disabled} submit={submit} />
+      <SendButton sessionId={sessionId} disabled={!!disabled} submit={submit} />
     </>
   )
 }
 
-// Send is always enabled — claude CLI accepts and queues new messages while
-// a turn is in flight, matching the Claude Code interactive behaviour.
+// Send disables only while we're tearing down the previous turn —
+// otherwise providers accept and queue new messages mid-turn, matching
+// the underlying CLI's behaviour. During 'interrupting' the user's
+// expectation is "I'm cancelling, don't fire off another message"; the
+// CLI's stdin would otherwise queue the typed message behind the turn
+// we're trying to abort, which was the original "stop and chat hangs
+// for an hour" symptom. Main also enforces this server-side via the
+// session.interrupting flag — the disabled-button is the visible cue.
 function SendButton({
+  sessionId,
   disabled,
   submit
 }: {
+  sessionId: string
   disabled: boolean
   submit: () => boolean
 }) {
+  const blockedByInterrupt = useSessionsStore(
+    s => s.sessions[sessionId]?.status === 'interrupting'
+  )
+  const isDisabled = disabled || blockedByInterrupt
   return (
     <button
       type="button"
       onClick={() => submit()}
-      disabled={disabled}
-      title="Send"
+      disabled={isDisabled}
+      title={blockedByInterrupt ? 'Stopping the previous turn…' : 'Send'}
       className="p-2 text-fg-muted hover:text-accent disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
     >
       <Send size={16} />
@@ -181,23 +193,28 @@ function SendButton({
   )
 }
 
-// Visible while the session is busy. Click sends the provider's in-band
-// interrupt protocol message and records the click time so MessageList
-// can grade the "thinking…" hint into "stop sent…" → "not acknowledged"
-// once the wait passes the typical-honour window.
+// Visible while the session is busy or while we're winding down a Stop
+// click. Click sends the provider's in-band interrupt; main makes the
+// call idempotent so multi-clicks don't multi-send. If the provider
+// never honours the interrupt, the user's recovery is to close the
+// tab — that path is always clean (stopSession kills the wrapper).
 function StopButton({ sessionId }: { sessionId: string }) {
-  const isBusy = useSessionsStore(s => s.sessions[sessionId]?.status === 'busy')
+  const status = useSessionsStore(s => s.sessions[sessionId]?.status)
   const recordStopRequest = useMessagesStore(s => s.recordStopRequest)
-  if (!isBusy) return null
+  const isBusy = status === 'busy'
+  const isInterrupting = status === 'interrupting'
+  if (!isBusy && !isInterrupting) return null
   return (
     <button
       type="button"
       onClick={() => {
+        if (isInterrupting) return
         interruptSession(sessionId)
         recordStopRequest(sessionId)
       }}
-      title="Stop"
-      className="p-2 text-danger/80 hover:text-danger transition-colors"
+      disabled={isInterrupting}
+      title={isInterrupting ? 'Stop already sent — close the tab if it stays stuck' : 'Stop'}
+      className="p-2 text-danger/80 hover:text-danger disabled:cursor-not-allowed transition-colors"
     >
       <Square size={14} fill="currentColor" />
     </button>

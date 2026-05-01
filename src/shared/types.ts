@@ -67,7 +67,14 @@ export interface Session {
   // For claude this is the JSONL session UUID; for codex / others it
   // means whatever that provider's resumeRef means.
   sessionRef?: string
-  status: 'starting' | 'ready' | 'busy' | 'error' | 'closed'
+  // 'interrupting' is the window between Stop click and the provider
+  // emitting turn.completed: the in-band interrupt was sent and we're
+  // waiting for the agent to wind down. Sends are blocked here so the
+  // user can't pile messages into stdin behind the still-running turn
+  // — that was the original "stop and chat hangs forever" symptom.
+  // Falls through to 'ready' on turn.completed; closing the tab is
+  // the recovery path if the provider never acknowledges.
+  status: 'starting' | 'ready' | 'busy' | 'interrupting' | 'error' | 'closed'
   pid?: number
   hasUnread: boolean
   errorMessage?: string

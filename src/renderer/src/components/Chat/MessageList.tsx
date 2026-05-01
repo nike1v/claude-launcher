@@ -33,7 +33,12 @@ export const MessageList = memo(function MessageList({ sessionId }: Props) {
   // useMemo's deps reference-equal between renders for empty sessions.
   const events = useMessagesStore(s => s.eventsBySession[sessionId] ?? EMPTY)
   const status = useSessionsStore(s => s.sessions[sessionId]?.status)
+  // 'interrupting' means main has dispatched the in-band interrupt and
+  // is waiting on turn.completed — for the spinner it's still "in
+  // progress" from the user's POV, just labeled differently.
   const isBusy = status === 'busy'
+  const isInterrupting = status === 'interrupting'
+  const isInFlight = isBusy || isInterrupting
   const provider = useSessionProvider(sessionId)
   const bottomRef = useRef<HTMLDivElement>(null)
   const shouldFollowRef = useRef(true)
@@ -59,13 +64,13 @@ export const MessageList = memo(function MessageList({ sessionId }: Props) {
   // sees the seconds count up smoothly.
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
-    if (!isBusy) return
+    if (!isInFlight) return
     setNow(Date.now())
     const id = setInterval(() => setNow(Date.now()), 1000)
     return () => clearInterval(id)
-  }, [isBusy])
+  }, [isInFlight])
   const STOP_SENT_THRESHOLD_MS = 5_000
-  const stopSentMs = isBusy && stopRequestedAt ? now - stopRequestedAt : 0
+  const stopSentMs = isInFlight && stopRequestedAt ? now - stopRequestedAt : 0
   const stopAcknowledgePending = stopRequestedAt !== undefined && stopSentMs <= STOP_SENT_THRESHOLD_MS
   const stopUnacknowledged = stopRequestedAt !== undefined && stopSentMs > STOP_SENT_THRESHOLD_MS
 
@@ -148,25 +153,27 @@ export const MessageList = memo(function MessageList({ sessionId }: Props) {
             </ToolGroup>
           )
         })}
-        {isBusy && (
+        {isInFlight && (
           <div className="flex flex-col gap-1 text-xs text-fg-faint">
             <div className="flex items-center gap-2">
               <Loader2 size={12} className="animate-spin" />
               <span className="italic">
-                {stopAcknowledgePending
-                  ? `stop sent — ${provider} is wrapping up…`
-                  : stopUnacknowledged
-                    ? `stop sent ${Math.round(stopSentMs / 1000)}s ago — not acknowledged yet…`
+                {isInterrupting
+                  ? stopUnacknowledged
+                    ? `stopping — no acknowledgement after ${Math.round(stopSentMs / 1000)}s…`
+                    : `stopping ${provider}…`
+                  : stopAcknowledgePending
+                    ? `stop sent — ${provider} is wrapping up…`
                     : `${provider} is thinking…`}
               </span>
             </div>
-            {(stopUnacknowledged || looksStale) && (
+            {(isInterrupting && stopUnacknowledged) || looksStale ? (
               <div className="text-[11px] text-warn ml-5">
                 {looksStale && lastEventAt !== undefined
                   ? `No activity for ${Math.round((now - lastEventAt) / 1000)}s — the session may be unresponsive. Close the tab if it stays stuck.`
                   : 'If the spinner keeps going, close this tab to recover.'}
               </div>
-            )}
+            ) : null}
           </div>
         )}
         <div ref={bottomRef} />
