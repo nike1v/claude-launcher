@@ -106,6 +106,43 @@ transcripts on the env.
 
 ## Bugs to investigate
 
+### Cold-restore on ACP providers (cursor / opencode) lands in stuck "thinking…"
+Reported 2026-05-02. After full launcher restart, opencode and cursor
+tabs that were open before the restart come up in the busy spinner
+state with no user input — and stay there indefinitely (487 s and
+counting in the screenshot). claude tabs restore fine.
+
+Hypothesis: our `session/load` flow on cold restore for ACP
+providers might either resume an in-progress turn from before the
+shutdown, or get stuck waiting on a response the agent doesn't
+actually send. acp-debug.log will show the exact wire trace —
+restored that diagnostic in 0.7.10. Need user to reproduce and
+share log.
+
+Fix directions (depending on what the log shows):
+- Skip auto-resume on cold restore for ACP, treat each restart as
+  a fresh `session/new`. Loses conversation continuity but never
+  hangs.
+- If the log shows a specific session/load error response we're
+  swallowing, surface it as a session-error status (not stuck
+  busy).
+- If session/load succeeds but no follow-up events, force a status
+  flip to 'ready' after a short timeout post-load and let the user
+  type the next message.
+
+### Codex transcript listing not implemented
+The Edit Project dialog used to claim "no transcript with this id
+found in ~/.claude/projects/" for every provider; 0.7.10 hides the
+autocomplete + transcript-dir hint for non-claude. Long-term we
+want codex sessions enumerable too. Codex stores rollouts under
+`$CODEX_HOME/sessions/<thr_*>.jsonl` per the codex-rs README.
+We'd need:
+- A per-provider `listSessions(env, project)` IPC (today it's
+  hardcoded to the claude path under fs:listSessionIds)
+- Codex-specific path hint in the modal
+- ACP keeps state inside the agent — would need an HTTP/JSON-RPC
+  list endpoint we don't currently call, defer.
+
 ### Stale "thinking" status after Windows app-restore from a hard crash
 Reported 2026-04-30. User's laptop died (out of battery). Windows
 restored open apps; claude-launcher came back showing the chat as

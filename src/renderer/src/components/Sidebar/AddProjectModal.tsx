@@ -365,69 +365,75 @@ export function AddProjectModal({ onClose, editProject, presetEnvironmentId }: P
             )}
           </div>
 
-          {/* Session id is editable only when editing an existing project —
-              for fresh projects there's nothing to pin yet, the listener
-              will write the id on first system:init. The helper text shows
-              the on-disk transcripts dir for the current env so the user
-              knows where to look if they want to paste a different id. */}
-          {editProject && editEnv && (
-            <div>
-              <label className={labelCls}>
-                Claude Session ID (resume target, optional)
-              </label>
-              <input
-                list={`session-ids-${editProject.id}`}
-                className={`${inputCls} ${
-                  clearedSessionId
-                    ? 'border-danger/40'
-                    : idNotFound
-                    ? 'border-warn/40'
-                    : ''
-                }`}
-                value={claudeSessionId}
-                onChange={e => setClaudeSessionId(e.target.value)}
-                placeholder={hadInitialSessionId ? '' : 'auto-pinned on first session'}
-                spellCheck={false}
-              />
-              {/* Native autocomplete from the env's transcripts dir. The
-                  Chromium <datalist> dropdown filters by what the user has
-                  typed, no custom widget needed. Hidden when the list is
-                  still loading or genuinely empty. */}
-              {availableIds && availableIds.length > 0 && (
-                <datalist id={`session-ids-${editProject.id}`}>
-                  {availableIds.map(id => <option key={id} value={id} />)}
-                </datalist>
-              )}
-              {clearedSessionId ? (
-                // Hard guard: clearing a previously-pinned id via this
-                // field skips the explicit reset path (which confirms +
-                // closes any open tab). Block save and steer the user to
-                // the reset button on the project row.
-                <p className="mt-1 text-[10px] text-danger break-words">
-                  Use the reset-conversation button on the project row to
-                  clear this — it also closes any open tab and confirms
-                  before unpinning. Saving now would silently lose the
-                  pinned id.
-                </p>
-              ) : idNotFound ? (
-                // Soft warning: typed id wasn't in the env's transcripts
-                // list. Most likely a typo, but we don't block — the ls
-                // might have failed, or the file may exist but be missed
-                // (rare). Surface the path so the user can verify.
-                <p className="mt-1 text-[10px] text-warn break-words">
-                  No transcript with this id found in <span className="font-mono">{transcriptDirHint(editEnv.config, path.trim() || editProject.path)}</span>. Saving anyway will let you resume only if claude can find it.
-                </p>
-              ) : (
-                <p className="mt-1 text-[10px] text-fg-faint break-words">
-                  {availableIds === null
-                    ? 'Loading saved conversations…'
-                    : availableIds.length === 0
-                    ? <>No saved conversations yet at <span className="font-mono text-fg-muted">{transcriptDirHint(editEnv.config, path.trim() || editProject.path)}</span> — the field will auto-fill on the first session.</>
-                    : <>{availableIds.length} saved conversation{availableIds.length === 1 ? '' : 's'} available — pick from the dropdown or paste a <span className="font-mono">…jsonl</span> filename without the extension.</>}
-                </p>
-              )}
-            </div>
-          )}
+          {/* Session id is editable only when editing an existing project,
+              and only for providers we can actually enumerate
+              transcripts for. claude has on-disk JSONL we list via
+              fs:listSessionIds. codex / cursor / opencode either don't
+              expose transcripts or store them in formats we don't read
+              yet — for those, we still surface the pinned id (so the
+              user sees what's persisted) but skip the autocomplete +
+              transcript-dir hint to avoid claiming behaviour that
+              isn't there. */}
+          {editProject && editEnv && (() => {
+            const resolvedProvider = providerKind ?? inheritedProvider
+            const supportsTranscriptList = resolvedProvider === 'claude'
+            return (
+              <div>
+                <label className={labelCls}>
+                  {providerLabel(resolvedProvider)} session id (resume target, optional)
+                </label>
+                <input
+                  list={supportsTranscriptList ? `session-ids-${editProject.id}` : undefined}
+                  className={`${inputCls} ${
+                    clearedSessionId
+                      ? 'border-danger/40'
+                      : idNotFound && supportsTranscriptList
+                      ? 'border-warn/40'
+                      : ''
+                  }`}
+                  value={claudeSessionId}
+                  onChange={e => setClaudeSessionId(e.target.value)}
+                  placeholder={hadInitialSessionId ? '' : 'auto-pinned on first session'}
+                  spellCheck={false}
+                />
+                {/* Native autocomplete from claude's on-disk transcripts.
+                    Other providers don't have an equivalent listing
+                    (codex sessions aren't indexed yet; ACP keeps state
+                    inside the agent). */}
+                {supportsTranscriptList && availableIds && availableIds.length > 0 && (
+                  <datalist id={`session-ids-${editProject.id}`}>
+                    {availableIds.map(id => <option key={id} value={id} />)}
+                  </datalist>
+                )}
+                {clearedSessionId ? (
+                  <p className="mt-1 text-[10px] text-danger break-words">
+                    Use the reset-conversation button on the project row to
+                    clear this — it also closes any open tab and confirms
+                    before unpinning. Saving now would silently lose the
+                    pinned id.
+                  </p>
+                ) : !supportsTranscriptList ? (
+                  <p className="mt-1 text-[10px] text-fg-faint break-words">
+                    {providerLabel(resolvedProvider)} keeps session state inside the agent —
+                    we can't list pinned conversations from disk. The id is auto-pinned on
+                    first session and used as the resume target on next open.
+                  </p>
+                ) : idNotFound ? (
+                  <p className="mt-1 text-[10px] text-warn break-words">
+                    No transcript with this id found in <span className="font-mono">{transcriptDirHint(editEnv.config, path.trim() || editProject.path)}</span>. Saving anyway will let you resume only if claude can find it.
+                  </p>
+                ) : (
+                  <p className="mt-1 text-[10px] text-fg-faint break-words">
+                    {availableIds === null
+                      ? 'Loading saved conversations…'
+                      : availableIds.length === 0
+                      ? <>No saved conversations yet at <span className="font-mono text-fg-muted">{transcriptDirHint(editEnv.config, path.trim() || editProject.path)}</span> — the field will auto-fill on the first session.</>
+                      : <>{availableIds.length} saved conversation{availableIds.length === 1 ? '' : 's'} available — pick from the dropdown or paste a <span className="font-mono">…jsonl</span> filename without the extension.</>}
+                  </p>
+                )}
+              </div>
+            )
+          })()}
 
           <button
             type="submit"
