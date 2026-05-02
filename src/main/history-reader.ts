@@ -152,10 +152,19 @@ export class HistoryReader {
   private async loadCodexSession(host: HostType, sessionId: string, adapter: ReturnType<ReturnType<typeof getProvider>['createAdapter']>): Promise<HistoryLoadResult> {
     // The script: find the rollout, abort cleanly if not found, print
     // the matched path to stderr (so we can surface it in diagnostics)
-    // and cat its contents to stdout. `head -n 1` ensures we cat at
-    // most one match in the unlikely event of duplicates.
+    // and cat its contents to stdout. Two quoting subtleties:
+    //   1. `-name '*-…jsonl'` uses SINGLE quotes around the glob.
+    //      Double quotes worked locally but the user's WSL routed
+    //      `wsl.exe -- bash -c <script>` through their default shell
+    //      (zsh) which then tried to glob-expand the `*`. Single
+    //      quotes survive that — zsh treats `'…'` as literal.
+    //   2. We use `wsl.exe -e bash -c …` instead of `wsl.exe -- bash
+    //      -c …` for the same reason: `-e` bypasses the user's login
+    //      shell entirely, so bash runs directly and the script
+    //      content is its own argv item, not subject to outer-shell
+    //      tokenisation.
     const findScript =
-      `f=$(find "$HOME/.codex/sessions" -type f -name "*-${sessionId}.jsonl" 2>/dev/null | head -n 1); ` +
+      `f=$(find "$HOME/.codex/sessions" -type f -name '*-${sessionId}.jsonl' 2>/dev/null | head -n 1); ` +
       `if [ -z "$f" ]; then echo "rollout not found for ${sessionId} under \\$HOME/.codex/sessions" 1>&2; exit 2; fi; ` +
       `echo "matched: $f" 1>&2; cat "$f"`
     let cmd: { bin: string; args: string[] }
@@ -165,7 +174,7 @@ export class HistoryReader {
       try { validateWslDistro(host.distro) } catch (err) {
         return { events: [], diagnostic: err instanceof Error ? err.message : 'invalid wsl distro' }
       }
-      cmd = { bin: 'wsl.exe', args: ['-d', host.distro, '--', 'bash', '-c', findScript] }
+      cmd = { bin: 'wsl.exe', args: ['-d', host.distro, '-e', 'bash', '-c', findScript] }
     } else if (host.kind === 'ssh') {
       try { validateSshHost(host) } catch (err) {
         return { events: [], diagnostic: err instanceof Error ? err.message : 'invalid ssh host' }
