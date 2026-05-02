@@ -150,12 +150,14 @@ export class HistoryReader {
   // sessionId has already been validated against SESSION_ID_PATTERN
   // so it's safe to drop into the find pattern unquoted.
   private async loadCodexSession(host: HostType, sessionId: string, adapter: ReturnType<ReturnType<typeof getProvider>['createAdapter']>): Promise<HistoryLoadResult> {
-    // The script: find the rollout, abort cleanly if not found, cat
-    // the file's contents to stdout. `head -n 1` ensures we cat at
+    // The script: find the rollout, abort cleanly if not found, print
+    // the matched path to stderr (so we can surface it in diagnostics)
+    // and cat its contents to stdout. `head -n 1` ensures we cat at
     // most one match in the unlikely event of duplicates.
     const findScript =
       `f=$(find "$HOME/.codex/sessions" -type f -name "*-${sessionId}.jsonl" 2>/dev/null | head -n 1); ` +
-      `if [ -z "$f" ]; then echo "rollout not found for ${sessionId}" 1>&2; exit 2; fi; cat "$f"`
+      `if [ -z "$f" ]; then echo "rollout not found for ${sessionId} under \\$HOME/.codex/sessions" 1>&2; exit 2; fi; ` +
+      `echo "matched: $f" 1>&2; cat "$f"`
     let cmd: { bin: string; args: string[] }
     if (host.kind === 'local') {
       cmd = { bin: 'bash', args: ['-c', findScript] }
@@ -183,13 +185,30 @@ export class HistoryReader {
       const reason = err instanceof Error ? err.message : String(err)
       return { events: [], diagnostic: `codex rollout lookup threw: ${reason}` }
     }
+    const stderrTail = result.stderr.trim().slice(-500)
     if (result.exitCode !== 0) {
       return {
         events: [],
-        diagnostic: `codex rollout lookup exited ${result.exitCode}; stderr: ${result.stderr.trim().slice(-500) || '(empty)'}`
+        diagnostic: `codex rollout lookup exited ${result.exitCode}; stderr: ${stderrTail || '(empty)'}`
       }
     }
-    return { events: adapter.parseTranscript(result.stdout) }
+    const events = adapter.parseTranscript(result.stdout)
+    if (events.length === 0) {
+      // We found and read a file (exit 0) but it parsed to zero
+      // renderable events. Surface the path stderr printed so the
+      // user can verify the rollout content if needed.
+      return {
+        events: [],
+        diagnostic: `codex rollout for ${sessionId} parsed to 0 events (${result.stdout.length} bytes read; ${stderrTail || 'no stderr'})`
+      }
+    }
+    return {
+      events,
+      // Surface the path even on success so the renderer console
+      // shows where the history came from — useful when the user
+      // says "I expected the other session, not this one".
+      diagnostic: stderrTail || undefined
+    }
   }
 
   // Returns the session ids (jsonl filename minus extension) found in
