@@ -24,6 +24,7 @@
 // request's id, captured in pendingServerRequests as approval prompts
 // arrive.
 
+import { randomUUID } from 'node:crypto'
 import type { ApprovalDecision, ItemType, NormalizedEvent } from '../../../shared/events'
 import type { SendAttachment } from '../../../shared/types'
 import type { ControlCommand, IProviderAdapter, SpawnOpts } from '../types'
@@ -167,19 +168,95 @@ export class CodexAdapter implements IProviderAdapter {
   }
 
   public parseTranscript(content: string): NormalizedEvent[] {
-    // Codex rollout files are JSONL of server notifications captured
-    // during the original session. The dispatch path is the same; we
-    // just don't drive any bootstrap.
-    const replayAdapter = this.mode === 'replay' ? this : new CodexAdapter('replay')
+    // Codex rollout files use a different envelope from the JSON-RPC
+    // wire: `{timestamp, type, payload}` per record. Types we care
+    // about for renderable history:
+    //
+    //   session_meta    — synthesize session.started (cwd, model from
+    //                     payload.model_provider+payload.model)
+    //   response_item   — actual messages. payload.role drives item
+    //                     type; payload.phase distinguishes the
+    //                     visible "final_answer" reply from internal
+    //                     "commentary" reasoning.
+    //
+    // Other types (event_msg, turn_context, exec_command_*, etc.)
+    // are skipped today. They carry tool / state info that isn't
+    // strictly needed to reconstruct the chat as the user saw it
+    // when the session was live; we can wire them in later if users
+    // miss tool-call cards on resume.
     const out: NormalizedEvent[] = []
+    let synthesizedTurnId: string | null = null
     for (const line of content.split('\n')) {
       const trimmed = line.trim()
       if (!trimmed) continue
+      let rec: Record<string, unknown>
       try {
-        const msg = JSON.parse(trimmed)
-        replayAdapter.dispatch(msg, out)
+        rec = JSON.parse(trimmed) as Record<string, unknown>
       } catch {
-        // skip
+        continue
+      }
+      const type = typeof rec.type === 'string' ? rec.type : ''
+      const payload = (rec.payload ?? {}) as Record<string, unknown>
+      const ts = parseRolloutTimestamp(rec.timestamp)
+      if (type === 'session_meta') {
+        const sessionRef = typeof payload.id === 'string' ? payload.id : ''
+        const cwd = typeof payload.cwd === 'string' ? payload.cwd : undefined
+        const modelProvider = typeof payload.model_provider === 'string' ? payload.model_provider : ''
+        const model = typeof payload.model === 'string' ? payload.model : modelProvider || undefined
+        if (sessionRef) {
+          out.push({ kind: 'session.started', sessionRef, cwd, model })
+        }
+        continue
+      }
+      if (type !== 'response_item') continue
+      const role = typeof payload.role === 'string' ? payload.role : ''
+      // Skip developer-role entries (system prompts) and any user
+      // entry whose first chunk is a codex-injected `<environment_context>`
+      // wrapper — those aren't user input, they're metadata codex
+      // sticks in front of the real conversation.
+      if (role === 'developer') continue
+      const text = extractRolloutText(payload)
+      if (!text) continue
+      if (role === 'user' && text.startsWith('<environment_context>')) continue
+      if (synthesizedTurnId === null) {
+        synthesizedTurnId = `replay-${randomUUID()}`
+      }
+      const itemId = `replay-${randomUUID()}`
+      if (role === 'user') {
+        out.push({
+          kind: 'item.started',
+          itemId,
+          turnId: synthesizedTurnId,
+          itemType: 'user_message',
+          text,
+          timestamp: ts
+        })
+        out.push({ kind: 'item.completed', itemId, status: 'completed' })
+      } else if (role === 'assistant') {
+        // phase=commentary is the agent's internal reasoning, render
+        // as a thinking block; phase=final_answer (or absent) is the
+        // visible reply.
+        const phase = typeof payload.phase === 'string' ? payload.phase : 'final_answer'
+        if (phase === 'commentary') {
+          out.push({
+            kind: 'item.started',
+            itemId,
+            turnId: synthesizedTurnId,
+            itemType: 'reasoning',
+            text
+          })
+          out.push({ kind: 'item.completed', itemId, status: 'completed' })
+        } else {
+          out.push({
+            kind: 'item.started',
+            itemId,
+            turnId: synthesizedTurnId,
+            itemType: 'assistant_message',
+            text,
+            timestamp: ts
+          })
+          out.push({ kind: 'item.completed', itemId, status: 'completed' })
+        }
       }
     }
     return out
@@ -634,4 +711,33 @@ function numOpt(v: unknown): number | undefined {
 
 function truncate(s: string, n: number): string {
   return s.length > n ? s.slice(0, n - 1) + '…' : s
+}
+
+// Parse codex rollout timestamps (ISO 8601). Returns ms since epoch or
+// undefined if the field isn't a parseable ISO string — falls back to
+// "no timestamp" rather than 0 so the renderer's
+// `timestamp !== undefined` guard hides the time chip cleanly for
+// records that lack one.
+function parseRolloutTimestamp(v: unknown): number | undefined {
+  if (typeof v !== 'string') return undefined
+  const ms = Date.parse(v)
+  return Number.isNaN(ms) ? undefined : ms
+}
+
+// Codex response_item.payload.content is an array of block objects.
+// User messages use `input_text`, assistant messages use `output_text`.
+// We concatenate every text block we recognise; non-text blocks are
+// skipped (image attachments aren't surfaced in replay today).
+function extractRolloutText(payload: Record<string, unknown>): string {
+  const content = payload.content
+  if (!Array.isArray(content)) return ''
+  const parts: string[] = []
+  for (const block of content) {
+    if (block && typeof block === 'object') {
+      const b = block as Record<string, unknown>
+      const t = b.text
+      if (typeof t === 'string' && t) parts.push(t)
+    }
+  }
+  return parts.join('\n').trim()
 }

@@ -102,6 +102,17 @@ export class HistoryReader {
       return { events: [], diagnostic: `rejected sessionId ${JSON.stringify(sessionId)} (must match ${SESSION_ID_PATTERN})` }
     }
     const adapter = getProvider(providerKind).createAdapter()
+    if (providerKind === 'codex') {
+      return this.loadCodexSession(host, sessionId, adapter)
+    }
+    // Cursor / opencode keep state inside the agent — no on-disk
+    // transcript we can read. Resume happens via session/load over
+    // the protocol; backfill there is the agent's job. Return empty
+    // here so the caller (cold-restore path) doesn't surface a
+    // misleading "file not found" diagnostic.
+    if (providerKind === 'cursor' || providerKind === 'opencode') {
+      return { events: [] }
+    }
     if (host.kind === 'local') {
       const filePath = join(localClaudeProjectDir(projectPath), `${sessionId}.jsonl`)
       let content: string
@@ -127,6 +138,55 @@ export class HistoryReader {
       return {
         events: adapter.parseTranscript(result.stdout),
         diagnostic: `${host.kind} \`cat "${filePath}"\` exited ${result.exitCode}; stderr: ${result.stderr.trim().slice(-500) || '(empty)'}`
+      }
+    }
+    return { events: adapter.parseTranscript(result.stdout) }
+  }
+
+  // Codex rollouts live under $CODEX_HOME/sessions/<YYYY>/<MM>/<DD>/
+  // with filenames of the form `rollout-<iso-stamp>-<sessionId>.jsonl`.
+  // Date-sharding means we don't know the subdirectory from sessionId
+  // alone — `find` for the suffix and cat the first match.
+  // sessionId has already been validated against SESSION_ID_PATTERN
+  // so it's safe to drop into the find pattern unquoted.
+  private async loadCodexSession(host: HostType, sessionId: string, adapter: ReturnType<ReturnType<typeof getProvider>['createAdapter']>): Promise<HistoryLoadResult> {
+    // The script: find the rollout, abort cleanly if not found, cat
+    // the file's contents to stdout. `head -n 1` ensures we cat at
+    // most one match in the unlikely event of duplicates.
+    const findScript =
+      `f=$(find "$HOME/.codex/sessions" -type f -name "*-${sessionId}.jsonl" 2>/dev/null | head -n 1); ` +
+      `if [ -z "$f" ]; then echo "rollout not found for ${sessionId}" 1>&2; exit 2; fi; cat "$f"`
+    let cmd: { bin: string; args: string[] }
+    if (host.kind === 'local') {
+      cmd = { bin: 'bash', args: ['-c', findScript] }
+    } else if (host.kind === 'wsl') {
+      try { validateWslDistro(host.distro) } catch (err) {
+        return { events: [], diagnostic: err instanceof Error ? err.message : 'invalid wsl distro' }
+      }
+      cmd = { bin: 'wsl.exe', args: ['-d', host.distro, '--', 'bash', '-c', findScript] }
+    } else if (host.kind === 'ssh') {
+      try { validateSshHost(host) } catch (err) {
+        return { events: [], diagnostic: err instanceof Error ? err.message : 'invalid ssh host' }
+      }
+      cmd = {
+        bin: 'ssh',
+        args: ['-T', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=4',
+          ...sshConnectArgs(host), sshTarget(host), findScript]
+      }
+    } else {
+      return { events: [], diagnostic: `unsupported host kind: ${(host as { kind: string }).kind}` }
+    }
+    let result: StreamResult
+    try {
+      result = await streamCommand(cmd.bin, cmd.args)
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err)
+      return { events: [], diagnostic: `codex rollout lookup threw: ${reason}` }
+    }
+    if (result.exitCode !== 0) {
+      return {
+        events: [],
+        diagnostic: `codex rollout lookup exited ${result.exitCode}; stderr: ${result.stderr.trim().slice(-500) || '(empty)'}`
       }
     }
     return { events: adapter.parseTranscript(result.stdout) }

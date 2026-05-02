@@ -266,6 +266,66 @@ describe('CodexAdapter — notification translation', () => {
   })
 })
 
+describe('CodexAdapter — parseTranscript (rollout files)', () => {
+  it('extracts user + assistant messages from a real codex rollout shape', () => {
+    // Real shape captured from ~/.codex/sessions/.../rollout-*.jsonl —
+    // codex uses a {timestamp, type, payload} envelope, NOT JSON-RPC.
+    // The renderable bits live in `response_item` records.
+    const transcript = [
+      { timestamp: '2026-05-01T21:34:36.412Z', type: 'session_meta', payload: { id: '019de575-e471-7283-9722-75eac8e49e91', cwd: '/home/dolsze/projects', model: 'gpt-5-codex' } },
+      { timestamp: '2026-05-01T21:34:36.418Z', type: 'response_item', payload: { type: 'message', role: 'developer', content: [{ type: 'input_text', text: '<permissions instructions>...' }] } },
+      { timestamp: '2026-05-01T21:34:36.418Z', type: 'response_item', payload: { type: 'message', role: 'user', content: [{ type: 'input_text', text: '<environment_context>\n  <cwd>/x</cwd>\n</environment_context>' }] } },
+      { timestamp: '2026-05-01T21:34:39.000Z', type: 'response_item', payload: { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'hi, what this project is about' }] } },
+      { timestamp: '2026-05-01T21:34:40.000Z', type: 'response_item', payload: { type: 'message', role: 'assistant', phase: 'commentary', content: [{ type: 'output_text', text: 'I should inspect the workspace.' }] } },
+      { timestamp: '2026-05-01T21:34:42.000Z', type: 'response_item', payload: { type: 'message', role: 'assistant', phase: 'final_answer', content: [{ type: 'output_text', text: 'This is a workspace folder with multiple repos.' }] } }
+    ].map(r => JSON.stringify(r)).join('\n')
+
+    const adapter = new CodexAdapter('replay')
+    const events = adapter.parseTranscript(transcript)
+
+    expect(events.find(e => e.kind === 'session.started')).toMatchObject({
+      kind: 'session.started',
+      sessionRef: '019de575-e471-7283-9722-75eac8e49e91',
+      cwd: '/home/dolsze/projects',
+      model: 'gpt-5-codex'
+    })
+
+    // developer-role and <environment_context> wrappers are dropped.
+    const userItems = events.filter(e => e.kind === 'item.started' && 'itemType' in e && e.itemType === 'user_message')
+    expect(userItems).toHaveLength(1)
+    expect(userItems[0]).toMatchObject({
+      itemType: 'user_message',
+      text: 'hi, what this project is about'
+    })
+
+    // Assistant phase=commentary becomes reasoning, phase=final_answer
+    // becomes assistant_message.
+    const reasoningItems = events.filter(e => e.kind === 'item.started' && 'itemType' in e && e.itemType === 'reasoning')
+    expect(reasoningItems).toHaveLength(1)
+    expect(reasoningItems[0]).toMatchObject({ itemType: 'reasoning', text: 'I should inspect the workspace.' })
+
+    const assistantItems = events.filter(e => e.kind === 'item.started' && 'itemType' in e && e.itemType === 'assistant_message')
+    expect(assistantItems).toHaveLength(1)
+    expect(assistantItems[0]).toMatchObject({
+      itemType: 'assistant_message',
+      text: 'This is a workspace folder with multiple repos.'
+    })
+  })
+
+  it('handles malformed lines and unknown record types without throwing', () => {
+    const transcript = [
+      'not json',
+      JSON.stringify({ type: 'turn_context', payload: {} }),
+      JSON.stringify({ type: 'event_msg', payload: { type: 'task_started' } }),
+      JSON.stringify({ timestamp: '2026-05-01T21:34:39.000Z', type: 'response_item', payload: { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'hello' }] } })
+    ].join('\n')
+    const adapter = new CodexAdapter('replay')
+    const events = adapter.parseTranscript(transcript)
+    const userItem = events.find(e => e.kind === 'item.started' && 'itemType' in e && e.itemType === 'user_message')
+    expect(userItem).toMatchObject({ text: 'hello' })
+  })
+})
+
 // ── helpers ────────────────────────────────────────────────────────────
 
 // A CodexAdapter that's gone through the bootstrap dance and is ready
