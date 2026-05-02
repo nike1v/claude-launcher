@@ -5,6 +5,73 @@ pre-MVP planning notes (Tauri scaffold, Phase 1 build, etc.) all
 shipped in v0.1–v0.3 and have been removed from this doc — git
 history is the source of truth for "what was the plan back then".
 
+## Pre-public (must ship before we call this v1 / public-ready)
+
+These two are the things that, if a stranger downloaded the launcher
+today, would burn them within the first session. Everything else can
+follow.
+
+### 1. Stop button — production-verified
+
+**Status:** designed in 0.7.9, never actually battle-tested. The
+production case where Stop matters most is exactly the auto-compact
+freeze (1312-second stuck "thinking…" we hit on 2026-05-02 in this
+very chat). We don't yet know if the 0.7.9 design (`'interrupting'`
+status + main-side `sendMessage` block + idempotent click + no
+auto-kill) holds up there.
+
+**Test matrix that has to pass before we call this done:**
+- Stop on a normal active turn → spinner clears within ~100 ms,
+  next message sends fine.
+- Stop during auto-compact → either claude honours and clears, or
+  user can close-tab to recover (no zombie state).
+- Stop on a wedged tool call → same.
+- Stop double-click during interrupting → no extra protocol bytes,
+  no escalation, button shows "already sent" state.
+- Send while interrupting → blocked client and server side.
+- Across all 4 providers (claude, codex, cursor, opencode) — the
+  protocol message is provider-agnostic but the symptoms might
+  differ.
+
+**Likely follow-up:** auto-compact detection (see below) is the
+deeper fix — Stop is the "out" but the user needs to know when
+they need to reach for it.
+
+### 2. Permissions UI — uniform across providers
+
+**Status:** not started, except a stub `PermissionPrompt` component
+that handles claude's `permission-prompt-tool` flow only. The other
+three providers each emit permission requests with their own shape,
+and we don't yet have a tested unified path:
+
+- **claude** — `tool_use` with name containing "permission" → reply
+  via tool_result with allow/deny. Partial impl, untested under load.
+- **codex** — `commandExecution.approval` and `fileChange.approval`,
+  each with their own reply vocabularies (`approved`/`approve`,
+  `approved_for_session`/`approve_for_session`, etc.) per
+  POSSIBLE-ISSUES.md §2. Not wired.
+- **ACP (cursor / opencode)** — server-initiated
+  `session/request_permission` with `options[]` carrying ids like
+  `allow_once`, `allow_always`, `reject_once`, `reject_always`.
+  Adapter side decodes via `pickPermissionOptionId`; the renderer
+  surfaces `request.opened` as a NormalizedEvent but the UI side
+  hasn't been verified end-to-end.
+
+**Acceptance:** for each provider, a tool that requires permission
+(write a file, run a command, fetch a URL) shows a card in the chat
+with **Allow once**, **Allow for session**, **Decline**, plus any
+"don't ask again" affordance the protocol exposes. Click maps to
+the right wire vocab; declines surface a clear "tool was denied"
+follow-up message.
+
+**Acceptance — the ugly cases:**
+- Permission prompt arrives mid-stream, user ignores it for 10 min,
+  comes back — UI still shows the card, decision still works.
+- User closes the tab while a permission is pending — agent gets
+  cancellation cleanly, no orphaned process.
+- Multiple concurrent permission requests in one turn (claude can
+  do this) — UI queues / stacks them.
+
 ## Open
 
 ### Slash command autocomplete + execution
@@ -204,10 +271,89 @@ surface it as a distinct status (`compacting`?) with progress text
 so the user knows whether to wait or bail out via Stop. Pair this
 with a fixed STOP so the bail-out path actually works.
 
+## Known fragile points
+
+Things that have broken in production before and will break again
+under the wrong conditions. Not bugs to fix — caveats to remember
+when something starts behaving oddly.
+
+### wsl.exe argv handling
+`wsl.exe -d <distro> -- bash -c <script>` does NOT actually run bash
+directly when the WSL user has a non-bash login shell. wsl.exe
+forwards through that shell first. Symptom: any `*` / `?` glob
+character in the script gets eaten by the outer shell (zsh's
+`nomatch` fired in 0.7.13 against codex history lookup). Workaround:
+use single quotes for any glob pattern, or switch to
+`wsl.exe -d <distro> -e bash -c <script>` which uses execve and
+bypasses the user shell entirely. The codex history path uses `-e`;
+everything else still uses `--` and works because none of them
+expose globs to the outer shell.
+
+### Process kill on Windows
+Node's `process.kill()` on Windows = `TerminateProcess` — there are
+no real signals. For `wsl.exe` / `ssh.exe` wrappers the inner CLI
+may not get the kill, leading to "I clicked stop but it's still
+running" symptoms. We deliberately don't auto-kill on Stop because
+of this; close-tab is the explicit "tear it all down" path.
+
+### Auto-update lag
+electron-updater downloads in background but applies on next launch.
+Closing the window doesn't quit on Windows by default — user has to
+quit the tray icon for an update to take. Multiple times we've
+debugged a "fix didn't ship" report that turned out to be the user
+running an older build.
+
+### Cross-provider session ID incompatibility
+claude UUIDs, codex `thr_*` ids, and ACP `sess_*` ids look similar
+but are not interchangeable. The provider picker in AddProjectModal
+locks when a session is pinned (see 0.5.4) so this can't slip
+through the UI.
+
+### Env scrubbing on remote vs local
+`envScrubList` is only consulted by the WSL / SSH transports. Local
+spawns inherit the launcher's env unchanged. If we ever generalise
+scrubbing to local, codex / opencode auth via env vars
+(`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`) will silently break — see
+POSSIBLE-ISSUES.md §4.
+
+### Subagent context jitter
+StatusBar meter walks `tokenUsage.updated` events backwards and
+picks the most recent. Subagent (Task tool) emissions have their
+own much smaller context, so the meter flickers between main-agent
+and subagent values. Cosmetic, logged but not yet tagged at parse
+time.
+
 ## Closed (recent shipped work)
 
 See git log for details. Quick index:
 
+- v0.7.14 — codex history lookup survives WSL routing through
+  zsh login shell (single-quoted find pattern + wsl.exe -e bash)
+- v0.7.13 — better diagnostics on codex history lookup failures
+  (find script reports matched path / not-found reason via stderr)
+- v0.7.12 — codex history replay from JSONL rollouts (codex
+  rollout envelope parser + provider-aware HistoryReader)
+- v0.7.11 — ACP history replay (opencode session/load replays
+  past messages via session/update; user_message_chunk handler;
+  session-not-found → fall back to session/new for cursor)
+- v0.7.10 — provider-aware Session ID UI in Edit Project dialog;
+  restored acp-debug-log as permanent diagnostic
+- v0.7.9 — complete Stop solution: 'interrupting' status,
+  send-block, idempotent click, no auto-kill (PRE-PUBLIC GATE)
+- v0.7.8 — skip authenticate for opencode (returns "not implemented")
+- v0.7.7 — temporary debug log file for ACP traffic (folded into
+  the 0.7.10 permanent restoration)
+- v0.7.6 — per-palette accent foregrounds; UpdatePill readable on
+  amber
+- v0.7.5 — WSL spawn unconditionally prepends installer dirs via
+  cached HOME (final opencode resolution fix)
+- v0.7.4 — revert 0.7.1 bash -c spawn (broke WSL chats end-to-end)
+- v0.7.3 — fix folder autocomplete tilde expansion + attachments
+  above text in user messages
+- v0.7.2 — provider-aware copy in chat label / input placeholder /
+  busy hints (no more "Message claude…" on a codex tab)
+- v0.7.1 — auto-close tabs on project delete
+- v0.7.0 — probe unconditionally prepends installer dirs via $HOME
 - v0.6.3 — Stale-busy detection now visible from TabBar and the
   sidebar, not just the active chat: a small warn-tinted ⚠ glyph
   appears next to the status dot on tabs/projects whose session has
