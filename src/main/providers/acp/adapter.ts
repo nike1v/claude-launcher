@@ -117,6 +117,16 @@ export class AcpAdapter implements IProviderAdapter {
   private currentAssistantItemId: string | null = null
   private currentReasoningItemId: string | null = null
 
+  // True between sending session/load and receiving its response.
+  // Opencode (and per spec, any compliant ACP server) emits the loaded
+  // session's history as a series of session/update notifications
+  // BEFORE the load response — replaying past user messages, agent
+  // thoughts, and agent replies. We skip the synthetic turn.started
+  // those updates would otherwise trigger so the renderer doesn't end
+  // up with an unclosable busy state, and emit each replayed message
+  // as a one-shot item rather than a streamed delta.
+  private inLoadReplay = false
+
   public constructor(flavor: AcpFlavor, mode: 'live' | 'replay' = 'live') {
     this.flavor = flavor
     this.mode = mode
@@ -226,6 +236,7 @@ export class AcpAdapter implements IProviderAdapter {
   private openSessionAfterAuth(): void {
     if (this.resumeSessionId) {
       const id = this.allocateId('session.load')
+      this.inLoadReplay = true
       this.pendingWrites += jsonRpcRequest(id, 'session/load', {
         sessionId: this.resumeSessionId,
         cwd: this.startCwd,
@@ -269,7 +280,7 @@ export class AcpAdapter implements IProviderAdapter {
     this.pendingClient.delete(id)
 
     if (msg.error) {
-      const err = msg.error as { message?: string; code?: number }
+      const err = msg.error as { message?: string; code?: number; data?: unknown }
       // authenticate is intentionally not implemented by opencode and
       // may be a no-op for other flavors that auth out-of-band. Don't
       // strand the bootstrap on its error response — if the agent has
@@ -279,6 +290,28 @@ export class AcpAdapter implements IProviderAdapter {
       // "authenticate failed".
       if (pending.kind === 'authenticate') {
         this.openSessionAfterAuth()
+        return
+      }
+      // session/load failure with "session not found" is the
+      // common-and-recoverable case: cursor evicts old sessions, opencode
+      // forgets after restart in some setups. Fall back to session/new
+      // so the user lands in a fresh session instead of a tab stuck on
+      // an unrecoverable error. They lose the prior history but keep a
+      // working chat — and lastSessionRef will be repinned to the new
+      // sessionId on session.started.
+      if (pending.kind === 'session.load' && isSessionNotFound(err)) {
+        this.inLoadReplay = false
+        this.resumeSessionId = undefined
+        out.push({
+          kind: 'warning',
+          message: `${this.flavor} could not resume the previous session — starting fresh.`,
+          detail: err
+        })
+        const newId = this.allocateId('session.new')
+        this.pendingWrites += jsonRpcRequest(newId, 'session/new', {
+          cwd: this.startCwd,
+          mcpServers: []
+        })
         return
       }
       out.push({
@@ -324,6 +357,17 @@ export class AcpAdapter implements IProviderAdapter {
       const sessionId = typeof result.sessionId === 'string' ? result.sessionId : null
       if (sessionId) {
         this.sessionId = sessionId
+        // Replay finished. Reset the synthetic turn id we may have
+        // bound replayed items to — the next live prompt should open a
+        // fresh turn. Clearing currentAssistant/Reasoning item ids too
+        // so a fresh assistant chunk after resume creates a new
+        // bubble, not a continuation of the last replayed one.
+        if (pending.kind === 'session.load') {
+          this.inLoadReplay = false
+          this.currentTurnId = null
+          this.currentAssistantItemId = null
+          this.currentReasoningItemId = null
+        }
         out.push({
           kind: 'session.started',
           sessionRef: sessionId,
@@ -442,8 +486,17 @@ export class AcpAdapter implements IProviderAdapter {
     const variant = typeof update.sessionUpdate === 'string' ? update.sessionUpdate : ''
 
     // First content arriving means a turn has started — synthesize
-    // turn.started.
-    if (this.currentTurnId === null && (variant === 'agent_message_chunk' || variant === 'agent_thought_chunk' || variant === 'tool_call')) {
+    // turn.started. Skip during inLoadReplay: opencode replays past
+    // history through the same session/update notifications, but those
+    // historical messages aren't a "turn" in the
+    // user-pressed-send-and-is-waiting sense — synthesizing a
+    // turn.started here would flip the session to busy and never close
+    // (no turn.completed for replay), leaving the spinner stuck. The
+    // replayed items still emit (just without a turnId binding); the
+    // session/load response then markReady's the session normally.
+    if (!this.inLoadReplay
+      && this.currentTurnId === null
+      && (variant === 'agent_message_chunk' || variant === 'agent_thought_chunk' || variant === 'tool_call')) {
       this.currentTurnId = `turn-${this.nextRequestId++}`
       out.push({ kind: 'turn.started', turnId: this.currentTurnId, model: this.startModel })
     }
@@ -453,7 +506,21 @@ export class AcpAdapter implements IProviderAdapter {
         const content = (update.content ?? {}) as Record<string, unknown>
         const text = typeof content.text === 'string' ? content.text : ''
         if (!text) return
-        if (this.currentAssistantItemId === null) {
+        // Use messageId as the stable item id when present so chunks
+        // belonging to the same message append to one bubble. On a new
+        // messageId (e.g. multiple historical messages in replay, or
+        // the next live turn after the first), open a fresh item.
+        const msgId = typeof update.messageId === 'string' ? update.messageId : null
+        if (msgId !== null && this.currentAssistantItemId !== msgId) {
+          this.currentAssistantItemId = msgId
+          out.push({
+            kind: 'item.started',
+            itemId: this.currentAssistantItemId,
+            turnId: this.currentTurnId ?? '',
+            itemType: 'assistant_message',
+            timestamp: Date.now()
+          })
+        } else if (this.currentAssistantItemId === null) {
           this.currentAssistantItemId = `msg-${this.nextRequestId++}`
           out.push({
             kind: 'item.started',
@@ -476,7 +543,16 @@ export class AcpAdapter implements IProviderAdapter {
         const content = (update.content ?? {}) as Record<string, unknown>
         const text = typeof content.text === 'string' ? content.text : ''
         if (!text) return
-        if (this.currentReasoningItemId === null) {
+        const msgId = typeof update.messageId === 'string' ? update.messageId : null
+        if (msgId !== null && this.currentReasoningItemId !== msgId) {
+          this.currentReasoningItemId = `reasoning-${msgId}`
+          out.push({
+            kind: 'item.started',
+            itemId: this.currentReasoningItemId,
+            turnId: this.currentTurnId ?? '',
+            itemType: 'reasoning'
+          })
+        } else if (this.currentReasoningItemId === null) {
           this.currentReasoningItemId = `reasoning-${this.nextRequestId++}`
           out.push({
             kind: 'item.started',
@@ -491,6 +567,31 @@ export class AcpAdapter implements IProviderAdapter {
           streamKind: 'reasoning_text',
           text
         })
+        return
+      }
+
+      case 'user_message_chunk': {
+        // Only emitted during session/load history replay. Live user
+        // messages come via session/prompt and are mirrored locally by
+        // InputBar's optimistic push, so we'd duplicate the bubble if
+        // we rendered them here. The inLoadReplay guard makes the
+        // intent explicit.
+        if (!this.inLoadReplay) return
+        const content = (update.content ?? {}) as Record<string, unknown>
+        const text = typeof content.text === 'string' ? content.text : ''
+        if (!text) return
+        const msgId = typeof update.messageId === 'string'
+          ? update.messageId
+          : `user-${this.nextRequestId++}`
+        out.push({
+          kind: 'item.started',
+          itemId: msgId,
+          turnId: this.currentTurnId ?? '',
+          itemType: 'user_message',
+          text,
+          timestamp: Date.now()
+        })
+        out.push({ kind: 'item.completed', itemId: msgId, status: 'completed' })
         return
       }
 
@@ -564,8 +665,7 @@ export class AcpAdapter implements IProviderAdapter {
       case 'plan':
       case 'available_commands_update':
       case 'current_mode_update':
-      case 'user_message_chunk':
-        // Cosmetic / echo — not rendered today.
+        // Cosmetic / metadata — not rendered today.
         return
 
       default:
@@ -637,6 +737,21 @@ function pickPermissionOptionId(options: PermissionOption[], decision: ApprovalD
     return options.find(o => o.kind?.startsWith('allow_'))?.optionId ?? options[0]?.optionId ?? ''
   }
   return options.find(o => o.kind?.startsWith('reject_'))?.optionId ?? options[0]?.optionId ?? ''
+}
+
+// Match the cursor / opencode "session expired" error responses to
+// session/load. Both report code -32602 (Invalid params) with a
+// message containing "Session" and "not found" — checking the message
+// substring is more robust than the exact format which has differed
+// between server versions.
+function isSessionNotFound(err: { code?: number; message?: string; data?: unknown }): boolean {
+  const messages: string[] = []
+  if (typeof err.message === 'string') messages.push(err.message)
+  if (err.data && typeof err.data === 'object' && 'message' in err.data) {
+    const m = (err.data as Record<string, unknown>).message
+    if (typeof m === 'string') messages.push(m)
+  }
+  return messages.some(m => /session.*not found/i.test(m))
 }
 
 function mapToolKindToRequestType(kind: string): 'tool_approval' | 'command_approval' | 'file_change_approval' | 'unknown' {

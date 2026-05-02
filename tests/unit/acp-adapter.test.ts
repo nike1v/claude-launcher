@@ -140,6 +140,82 @@ describe('AcpAdapter — opencode flavor differences', () => {
   })
 })
 
+describe('AcpAdapter — session/load history replay', () => {
+  it('replays past user_message + agent_message + agent_thought without synthesizing a turn', () => {
+    // Repro of the 0.7.10 stuck-thinking bug. opencode (and any
+    // compliant ACP server) emits the loaded session's past messages
+    // as session/update notifications BEFORE the load response. Our
+    // adapter used to synthesize a turn.started for the first chunk
+    // — which session-manager flipped to busy — and never close it,
+    // leaving the spinner stuck.
+    const adapter = new AcpAdapter('opencode')
+    adapter.startupBytes({ cwd: '/srv', resumeRef: 'ses_old' })
+    // initialize response
+    feed(adapter, { jsonrpc: '2.0', id: 1, result: { authMethods: [{ id: 'opencode-login' }] } })
+    // session/load is now in flight (opencode skips authenticate).
+    // Replay the history before the load response lands.
+    const replayEvents = feed(adapter,
+      { jsonrpc: '2.0', method: 'session/update', params: { sessionId: 'ses_old', update: { sessionUpdate: 'available_commands_update', availableCommands: [] } } },
+      { jsonrpc: '2.0', method: 'session/update', params: { sessionId: 'ses_old', update: { sessionUpdate: 'user_message_chunk', messageId: 'msg_user1', content: { type: 'text', text: 'hi' } } } },
+      { jsonrpc: '2.0', method: 'session/update', params: { sessionId: 'ses_old', update: { sessionUpdate: 'agent_thought_chunk', messageId: 'msg_agent1', content: { type: 'text', text: 'thinking…' } } } },
+      { jsonrpc: '2.0', method: 'session/update', params: { sessionId: 'ses_old', update: { sessionUpdate: 'agent_message_chunk', messageId: 'msg_agent1', content: { type: 'text', text: 'Hey!' } } } }
+    )
+
+    // No synthetic turn.started during replay.
+    expect(replayEvents.find(e => e.kind === 'turn.started')).toBeUndefined()
+
+    // User's past message rendered.
+    const userItem = replayEvents.find(e => e.kind === 'item.started' && 'itemType' in e && e.itemType === 'user_message')
+    expect(userItem).toMatchObject({
+      kind: 'item.started',
+      itemId: 'msg_user1',
+      itemType: 'user_message',
+      text: 'hi'
+    })
+
+    // Agent's past thought + message rendered as separate items.
+    const reasoningItem = replayEvents.find(e => e.kind === 'item.started' && 'itemType' in e && e.itemType === 'reasoning')
+    expect(reasoningItem).toBeDefined()
+    const assistantItem = replayEvents.find(e => e.kind === 'item.started' && 'itemType' in e && e.itemType === 'assistant_message')
+    expect(assistantItem).toBeDefined()
+    // Assistant content delta carries the past reply text.
+    const assistantDelta = replayEvents.find(e => e.kind === 'content.delta' && 'streamKind' in e && e.streamKind === 'assistant_text')
+    expect(assistantDelta).toMatchObject({ text: 'Hey!' })
+
+    // session/load response — replay phase ends, session becomes ready.
+    const loadResponseEvents = feed(adapter, { jsonrpc: '2.0', id: 2, result: { sessionId: 'ses_old' } })
+    expect(loadResponseEvents.find(e => e.kind === 'session.started')).toBeDefined()
+    expect(loadResponseEvents.find(e => e.kind === 'session.stateChanged' && 'state' in e && e.state === 'ready')).toBeDefined()
+  })
+
+  it('falls back to session/new when session/load returns "session not found"', () => {
+    // Cursor evicts old sessions — the saved sessionRef stops working
+    // after the agent forgets it. Treat that specific error as
+    // "expired" and start fresh instead of leaving the tab on a hard
+    // error the user has to reset manually.
+    const adapter = new AcpAdapter('cursor')
+    adapter.startupBytes({ cwd: '/srv', resumeRef: 'sess-stale' })
+    feed(adapter, { jsonrpc: '2.0', id: 1, result: { authMethods: [{ id: 'cursor_login' }] } })
+    feed(adapter, { jsonrpc: '2.0', id: 2, result: null })
+    // session/load fails with the cursor-style "Session not found".
+    const events = feed(adapter, {
+      jsonrpc: '2.0', id: 3,
+      error: {
+        code: -32602,
+        message: 'Invalid params',
+        data: { message: 'Session "sess-stale" not found' }
+      }
+    })
+    // We surface a warning (not a hard error) and queue session/new.
+    expect(events.find(e => e.kind === 'warning')).toBeDefined()
+    const queued = adapter.drainPendingWrites()
+    expect(allMessages(queued).find(m => m.method === 'session/new')).toMatchObject({
+      method: 'session/new',
+      params: { cwd: '/srv', mcpServers: [] }
+    })
+  })
+})
+
 describe('AcpAdapter — formatUserMessage', () => {
   it('emits session/prompt once session is ready', () => {
     const adapter = readyAdapter()
