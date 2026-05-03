@@ -327,6 +327,11 @@ time.
 
 See git log for details. Quick index:
 
+- v0.7.21 — slash-command popup refreshes the moment the CLI's
+  init lands: typing `/` before claude finished booting used to leave
+  the popup stuck on the local `/clear` synthetic until you backspaced
+  and retyped. Now the autocomplete effect re-runs the filter on
+  `available` changes too, not just editor mutations
 - v0.7.20 — slash-command autocomplete + local /clear interception:
   reads `slash_commands` from claude's system/init, surfaces them in a
   popup above the input bar (Up/Down to navigate, Enter to apply +

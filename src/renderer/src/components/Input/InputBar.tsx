@@ -379,29 +379,37 @@ function SlashCommandAutocompletePlugin({
   // Track the editor text. registerUpdateListener fires after every
   // mutation; the read closure runs in the post-update editor state, so
   // root.getTextContent() reflects what the user just typed.
+  //
+  // We also re-run the same filter inline whenever `available` changes,
+  // so a popup opened with `/` *before* the CLI finished booting (its
+  // system/init event populates slashCommands) refreshes the moment the
+  // command list lands — without requiring the user to type another key
+  // to trigger a fresh editor mutation.
   useEffect(() => {
-    return editor.registerUpdateListener(({ editorState }) => {
-      editorState.read(() => {
-        const text = $getRoot().getTextContent()
-        const looksLikeSlash =
-          text.length > 0 && text.startsWith('/') && !/\s/.test(text)
-        if (!looksLikeSlash) {
-          setState(s => (s.visible ? { visible: false, selectedIndex: 0, filtered: [] } : s))
-          return
+    const refilter = (): void => {
+      const text = $getRoot().getTextContent()
+      const looksLikeSlash =
+        text.length > 0 && text.startsWith('/') && !/\s/.test(text)
+      if (!looksLikeSlash) {
+        setState(s => (s.visible ? { visible: false, selectedIndex: 0, filtered: [] } : s))
+        return
+      }
+      const query = text.slice(1).toLowerCase()
+      const filtered = available.filter(c => c.toLowerCase().startsWith(query))
+      setState(prev => {
+        if (filtered.length === 0) {
+          return prev.visible ? { visible: false, selectedIndex: 0, filtered: [] } : prev
         }
-        const query = text.slice(1).toLowerCase()
-        const filtered = available.filter(c => c.toLowerCase().startsWith(query))
-        setState(prev => {
-          if (filtered.length === 0) {
-            return prev.visible ? { visible: false, selectedIndex: 0, filtered: [] } : prev
-          }
-          // Preserve the selected row when the same prefix narrows by
-          // one character — feels less jumpy than always resetting to 0.
-          const selectedIndex =
-            prev.visible && prev.selectedIndex < filtered.length ? prev.selectedIndex : 0
-          return { visible: true, selectedIndex, filtered }
-        })
+        // Preserve the selected row when the same prefix narrows by
+        // one character — feels less jumpy than always resetting to 0.
+        const selectedIndex =
+          prev.visible && prev.selectedIndex < filtered.length ? prev.selectedIndex : 0
+        return { visible: true, selectedIndex, filtered }
       })
+    }
+    editor.getEditorState().read(refilter)
+    return editor.registerUpdateListener(({ editorState }) => {
+      editorState.read(refilter)
     })
   }, [editor, available, setState])
 
