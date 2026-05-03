@@ -121,7 +121,7 @@ export type UserAttachment =
 
 export type NormalizedEvent =
   // Session lifecycle — the spawn ↔ ready ↔ exited boundary.
-  | { kind: 'session.started'; sessionRef: string; model?: string; cwd?: string }
+  | { kind: 'session.started'; sessionRef: string; model?: string; cwd?: string; slashCommands?: string[] }
   | { kind: 'session.stateChanged'; state: SessionState; reason?: string }
   | { kind: 'session.exited'; reason?: string; exitKind: SessionExitKind }
 

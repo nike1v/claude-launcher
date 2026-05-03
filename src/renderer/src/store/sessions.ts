@@ -9,6 +9,11 @@ interface SessionsStore {
   addSession: (session: Session) => void
   updateSession: (sessionId: string, update: Partial<Session>) => void
   removeSession: (sessionId: string) => void
+  // Swap an existing session's id in place — used by /clear, which kills
+  // the underlying CLI and spawns a fresh one but keeps the same tab
+  // slot. Without in-place replacement the new session would land at the
+  // end of tabOrder, looking to the user like a different tab.
+  replaceSession: (oldSessionId: string, next: Session) => void
   setActiveSession: (sessionId: string | null) => void
   markRead: (sessionId: string) => void
 }
@@ -36,6 +41,19 @@ export const useSessionsStore = create<SessionsStore>((set, get) => ({
       return {
         sessions: { ...state.sessions, [sessionId]: { ...existing, ...update } }
       }
+    }),
+
+  replaceSession: (oldSessionId, next) =>
+    set(state => {
+      const existing = state.sessions[oldSessionId]
+      if (!existing) return state
+      const sessions = { ...state.sessions }
+      delete sessions[oldSessionId]
+      sessions[next.id] = next
+      const tabOrder = state.tabOrder.map(id => (id === oldSessionId ? next.id : id))
+      const activeSessionId =
+        state.activeSessionId === oldSessionId ? next.id : state.activeSessionId
+      return { sessions, tabOrder, activeSessionId }
     }),
 
   removeSession: (sessionId) => {

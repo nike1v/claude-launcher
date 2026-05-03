@@ -327,6 +327,12 @@ time.
 
 See git log for details. Quick index:
 
+- v0.7.15 — slash-command autocomplete + local /clear interception:
+  reads `slash_commands` from claude's system/init, surfaces them in a
+  popup above the input bar (Up/Down to navigate, Enter to apply +
+  submit, Tab to apply with trailing space, Esc to dismiss), and
+  intercepts /clear locally (unsupported by SDK stream-json) by
+  restarting the conversation in the same tab slot
 - v0.7.14 — codex history lookup survives WSL routing through
   zsh login shell (single-quoted find pattern + wsl.exe -e bash)
 - v0.7.13 — better diagnostics on codex history lookup failures

@@ -79,6 +79,13 @@ function applyMetadata(sessionId: string, event: NormalizedEvent): void {
     const update: Partial<typeof current> = {}
     if (!current.sessionRef) update.sessionRef = event.sessionRef
     if (event.model && current.lastModel !== event.model) update.lastModel = event.model
+    // Replace on every init — the CLI rediscovers commands per spawn,
+    // so a project that added a new skill should see it without an app
+    // restart. JSON-equality skips the store update on unchanged lists
+    // so subscribers don't re-render needlessly.
+    if (event.slashCommands && JSON.stringify(current.slashCommands) !== JSON.stringify(event.slashCommands)) {
+      update.slashCommands = event.slashCommands
+    }
     if (Object.keys(update).length) updateSession(sessionId, update)
 
     // Mirror metadata on the project record so a fresh sidebar re-open

@@ -86,6 +86,14 @@ export interface Session {
   lastModel?: string
   lastContextWindow?: number
   lastUsedTokens?: number
+  // Slash commands the underlying CLI advertised in its system/init
+  // event. Only Claude in stream-json mode emits this today; for other
+  // providers (or older Claude CLI builds without the field) it stays
+  // undefined and the input bar's autocomplete just shows the
+  // launcher-handled commands (/clear). The list is whatever the CLI
+  // accepts on stdin — built-ins like /compact /context /usage plus any
+  // user/project skills the CLI discovered at startup.
+  slashCommands?: string[]
 }
 
 export interface PersistedTab {
@@ -143,6 +151,12 @@ export interface InitEvent {
   cwd: string
   tools: unknown[]
   mcp_servers: unknown[]
+  // Names of slash commands the CLI will dispatch in this session
+  // (without the leading slash on some versions, with it on others —
+  // we normalise on the way in). Includes built-ins (compact, context,
+  // usage) and any user/project commands the CLI discovered. Optional
+  // because older Claude CLI builds don't emit it.
+  slash_commands?: string[]
 }
 
 export interface AssistantEvent {

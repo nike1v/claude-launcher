@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { LexicalComposer } from '@lexical/react/LexicalComposer'
 import { PlainTextPlugin } from '@lexical/react/LexicalPlainTextPlugin'
 import { ContentEditable } from '@lexical/react/LexicalContentEditable'
@@ -7,18 +7,37 @@ import { HistoryPlugin } from '@lexical/react/LexicalHistoryPlugin'
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext'
 import {
   $getRoot,
+  $createTextNode,
   CLEAR_HISTORY_COMMAND,
   $createParagraphNode,
+  COMMAND_PRIORITY_CRITICAL,
   COMMAND_PRIORITY_HIGH,
-  KEY_ENTER_COMMAND
+  COMMAND_PRIORITY_LOW,
+  KEY_ARROW_DOWN_COMMAND,
+  KEY_ARROW_UP_COMMAND,
+  KEY_ENTER_COMMAND,
+  KEY_ESCAPE_COMMAND,
+  KEY_TAB_COMMAND
 } from 'lexical'
 import { Send, Paperclip, X, FileText, Image as ImageIcon, Square } from 'lucide-react'
 import { interruptSession, sendMessage } from '../../ipc/bridge'
 import { useMessagesStore } from '../../store/messages'
 import { useSessionsStore } from '../../store/sessions'
 import { useSessionProvider } from '../../lib/use-session-provider'
+import { restartConversation } from '../../lib/restart-conversation'
+import { SlashCommandPopup } from './SlashCommandPopup'
 import type { SendAttachment } from '../../../../shared/types'
 import type { UserAttachment } from '../../../../shared/events'
+
+// Slash commands the launcher handles itself rather than forwarding to
+// the provider. The CLI's stream-json mode doesn't intercept /clear
+// (per the Agent SDK docs), so we synthesise it via restartConversation.
+const LOCAL_SLASH_COMMANDS = ['clear'] as const
+type LocalSlashCommand = (typeof LOCAL_SLASH_COMMANDS)[number]
+
+function isLocalSlashCommand(name: string): name is LocalSlashCommand {
+  return (LOCAL_SLASH_COMMANDS as readonly string[]).includes(name)
+}
 
 interface Props {
   sessionId: string
@@ -54,11 +73,32 @@ function useSubmit({
 
   return useCallback(() => {
     let didSend = false
+    let localCommandToHandle: LocalSlashCommand | null = null
     editor.update(() => {
       const root = $getRoot()
       const text = root.getTextContent().trim()
       if (disabled) return
       if (!text && attachments.length === 0) return
+
+      // Locally-handled slash commands bypass sendMessage entirely. We
+      // still clear the editor here (inside the same editor.update so the
+      // selection / history reset is one atomic step) and dispatch the
+      // side-effect after the update returns — restartConversation tears
+      // down this very session, which would otherwise race against the
+      // editor finishing its update on a now-unmounted node.
+      if (attachments.length === 0 && text.startsWith('/')) {
+        const cmd = text.slice(1).trim()
+        if (isLocalSlashCommand(cmd)) {
+          localCommandToHandle = cmd
+          root.clear()
+          const fresh = $createParagraphNode()
+          root.append(fresh)
+          fresh.select()
+          editor.dispatchCommand(CLEAR_HISTORY_COMMAND, undefined)
+          didSend = true
+          return
+        }
+      }
 
       const sendAtts: SendAttachment[] = attachments.map(a => {
         if (a.kind === 'text') return { kind: 'text', name: a.name, text: a.text ?? '' }
@@ -107,6 +147,12 @@ function useSubmit({
       clearAttachments()
       didSend = true
     })
+    if (localCommandToHandle === 'clear') {
+      // Fire-and-forget: the helper toggles the active session out from
+      // under us, so the InputBar this hook lives in unmounts. Awaiting
+      // here would attach to a setState that's already happened.
+      void restartConversation(sessionId)
+    }
     return didSend
   }, [editor, sessionId, disabled, attachments, clearAttachments, appendEvents])
 }
@@ -126,9 +172,62 @@ function ComposerInner({
 }) {
   const submit = useSubmit({ sessionId, disabled: !!disabled, attachments, clearAttachments })
   const provider = useSessionProvider(sessionId)
+  const [editor] = useLexicalComposerContext()
+
+  // Slash commands the CLI advertised in its system/init, plus our
+  // launcher-handled synthetics. Deduped because user-defined commands
+  // could collide with our built-ins (e.g. someone with a custom
+  // /clear skill — the launcher's interception still wins).
+  const cliCommands = useSessionsStore(s => s.sessions[sessionId]?.slashCommands)
+  const availableCommands = useMemo(() => {
+    const set = new Set<string>(LOCAL_SLASH_COMMANDS)
+    for (const c of cliCommands ?? []) set.add(c)
+    return Array.from(set).sort()
+  }, [cliCommands])
+
+  const [autocomplete, setAutocomplete] = useState<{
+    visible: boolean
+    selectedIndex: number
+    filtered: string[]
+  }>({ visible: false, selectedIndex: 0, filtered: [] })
+
+  // Replace the editor's content with `/<cmd>` and either fire submit
+  // (Enter / mouse click) or leave the input populated for the user to
+  // add args (Tab). Closing the popup is implicit — the post-replace
+  // text either has a space (no longer a partial slash command) or
+  // matches a command exactly with nothing to suggest.
+  const applySelection = useCallback(
+    (cmd: string, autoSubmit: boolean) => {
+      editor.update(() => {
+        const root = $getRoot()
+        root.clear()
+        const para = $createParagraphNode()
+        const trailing = autoSubmit ? '' : ' '
+        para.append($createTextNode(`/${cmd}${trailing}`))
+        root.append(para)
+        para.selectEnd()
+      })
+      setAutocomplete({ visible: false, selectedIndex: 0, filtered: [] })
+      if (autoSubmit) {
+        // Defer submit so the editor.update commits its mutation before
+        // submit reads root.getTextContent().
+        queueMicrotask(() => submit())
+      }
+    },
+    [editor, submit]
+  )
+
   return (
     <>
       <div className="flex-1 relative" onPaste={onPaste}>
+        {autocomplete.visible && (
+          <SlashCommandPopup
+            commands={autocomplete.filtered}
+            selectedIndex={autocomplete.selectedIndex}
+            onSelect={(cmd) => applySelection(cmd, true)}
+            onHover={(i) => setAutocomplete(s => ({ ...s, selectedIndex: i }))}
+          />
+        )}
         <PlainTextPlugin
           contentEditable={
             <ContentEditable
@@ -150,6 +249,12 @@ function ComposerInner({
             via Ctrl+Z. Without this plugin mounted, that dispatch was a
             no-op and Ctrl+Z did nothing. */}
         <HistoryPlugin />
+        <SlashCommandAutocompletePlugin
+          available={availableCommands}
+          state={autocomplete}
+          setState={setAutocomplete}
+          applySelection={applySelection}
+        />
         <SubmitOnEnterPlugin submit={submit} />
         <FocusOnSessionChangePlugin sessionId={sessionId} />
       </div>
@@ -243,6 +348,129 @@ function FocusOnSessionChangePlugin({ sessionId }: { sessionId: string }): null 
     const id = requestAnimationFrame(() => editor.focus())
     return () => cancelAnimationFrame(id)
   }, [editor, isActive])
+  return null
+}
+
+// Watches the editor for `/<prefix>` patterns and drives the slash-
+// command autocomplete popup. Owns the keyboard handlers (Up/Down to
+// move selection, Enter/Tab to apply, Esc to dismiss) and registers them
+// at CRITICAL priority so they run before SubmitOnEnterPlugin's Enter
+// handler. When the popup isn't visible, all handlers return false so
+// Lexical falls through to the existing submit / shortcut handlers.
+//
+// Trigger rule: text starts with `/`, contains no whitespace, no
+// newlines, and no attachments are pending. That keeps the popup out of
+// the way of normal prose that happens to contain a slash.
+function SlashCommandAutocompletePlugin({
+  available,
+  state,
+  setState,
+  applySelection
+}: {
+  available: string[]
+  state: { visible: boolean; selectedIndex: number; filtered: string[] }
+  setState: React.Dispatch<
+    React.SetStateAction<{ visible: boolean; selectedIndex: number; filtered: string[] }>
+  >
+  applySelection: (cmd: string, autoSubmit: boolean) => void
+}): null {
+  const [editor] = useLexicalComposerContext()
+
+  // Track the editor text. registerUpdateListener fires after every
+  // mutation; the read closure runs in the post-update editor state, so
+  // root.getTextContent() reflects what the user just typed.
+  useEffect(() => {
+    return editor.registerUpdateListener(({ editorState }) => {
+      editorState.read(() => {
+        const text = $getRoot().getTextContent()
+        const looksLikeSlash =
+          text.length > 0 && text.startsWith('/') && !/\s/.test(text)
+        if (!looksLikeSlash) {
+          setState(s => (s.visible ? { visible: false, selectedIndex: 0, filtered: [] } : s))
+          return
+        }
+        const query = text.slice(1).toLowerCase()
+        const filtered = available.filter(c => c.toLowerCase().startsWith(query))
+        setState(prev => {
+          if (filtered.length === 0) {
+            return prev.visible ? { visible: false, selectedIndex: 0, filtered: [] } : prev
+          }
+          // Preserve the selected row when the same prefix narrows by
+          // one character — feels less jumpy than always resetting to 0.
+          const selectedIndex =
+            prev.visible && prev.selectedIndex < filtered.length ? prev.selectedIndex : 0
+          return { visible: true, selectedIndex, filtered }
+        })
+      })
+    })
+  }, [editor, available, setState])
+
+  // Keys are only relevant while the popup is visible. We re-register on
+  // every state change so the handler closure has fresh selectedIndex /
+  // filtered, instead of using a ref dance.
+  useEffect(() => {
+    if (!state.visible) return
+    const filtered = state.filtered
+    const removeUp = editor.registerCommand(
+      KEY_ARROW_UP_COMMAND,
+      (event) => {
+        event?.preventDefault()
+        setState(s => ({
+          ...s,
+          selectedIndex: (s.selectedIndex - 1 + filtered.length) % filtered.length
+        }))
+        return true
+      },
+      COMMAND_PRIORITY_LOW
+    )
+    const removeDown = editor.registerCommand(
+      KEY_ARROW_DOWN_COMMAND,
+      (event) => {
+        event?.preventDefault()
+        setState(s => ({ ...s, selectedIndex: (s.selectedIndex + 1) % filtered.length }))
+        return true
+      },
+      COMMAND_PRIORITY_LOW
+    )
+    const removeEnter = editor.registerCommand(
+      KEY_ENTER_COMMAND,
+      (event) => {
+        const e = event as KeyboardEvent | null
+        if (e?.shiftKey) return false
+        e?.preventDefault()
+        const cmd = filtered[state.selectedIndex]
+        if (cmd) applySelection(cmd, true)
+        return true
+      },
+      COMMAND_PRIORITY_CRITICAL
+    )
+    const removeTab = editor.registerCommand(
+      KEY_TAB_COMMAND,
+      (event) => {
+        event?.preventDefault()
+        const cmd = filtered[state.selectedIndex]
+        if (cmd) applySelection(cmd, false)
+        return true
+      },
+      COMMAND_PRIORITY_CRITICAL
+    )
+    const removeEsc = editor.registerCommand(
+      KEY_ESCAPE_COMMAND,
+      () => {
+        setState({ visible: false, selectedIndex: 0, filtered: [] })
+        return true
+      },
+      COMMAND_PRIORITY_CRITICAL
+    )
+    return () => {
+      removeUp()
+      removeDown()
+      removeEnter()
+      removeTab()
+      removeEsc()
+    }
+  }, [editor, state.visible, state.selectedIndex, state.filtered, setState, applySelection])
+
   return null
 }
 

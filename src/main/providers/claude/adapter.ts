@@ -161,11 +161,20 @@ export class ClaudeAdapter implements IProviderAdapter {
 
   private translate(event: StreamJsonEvent, out: NormalizedEvent[], timestamp: number): void {
     if (event.type === 'system' && event.subtype === 'init') {
+      // Normalise slash command names: strip a leading `/` if present so
+      // the renderer can render `/${name}` without doubling. Some CLI
+      // builds emit `["compact", ...]`, others `["/compact", ...]`.
+      const slashCommands = Array.isArray(event.slash_commands)
+        ? event.slash_commands
+            .filter((c): c is string => typeof c === 'string')
+            .map(c => (c.startsWith('/') ? c.slice(1) : c))
+        : undefined
       out.push({
         kind: 'session.started',
         sessionRef: event.session_id,
         model: event.model,
-        cwd: event.cwd
+        cwd: event.cwd,
+        slashCommands
       })
       // Live: session-manager flips status to ready on this. Replay
       // skips it — the session is already running by the time we replay
