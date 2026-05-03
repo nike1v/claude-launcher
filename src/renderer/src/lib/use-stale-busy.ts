@@ -2,15 +2,22 @@ import { useEffect, useState } from 'react'
 import { useSessionsStore } from '../store/sessions'
 import { useMessagesStore } from '../store/messages'
 
-const STALE_BUSY_THRESHOLD_MS = 30_000
+// 5 minutes. Long-running tools (Bash builds, big greps, /compact at
+// ~100 s) routinely go a minute or two without surfacing an event;
+// 30 s was firing the "session may be unresponsive" warning on every
+// healthy long turn. The warning is meant to flag truly wedged
+// sessions, not slow ones — bump the bar high enough that it only
+// trips on the genuine article.
+const STALE_BUSY_THRESHOLD_MS = 300_000
 // 5 s is enough resolution for the badge — finer ticks just burn
 // re-renders across every tab and sidebar row.
 const TICK_MS = 5_000
 
-// True when the session is in-flight ('busy' or 'interrupting') AND
-// no live event has arrived for 30 s. Drives the stale-busy warning
-// glyph that appears on MessageList, TabBar and the sidebar so a
-// wedged backgrounded tab is visible without flipping to it.
+// True when the session is in-flight ('busy' / 'compacting' /
+// 'interrupting') AND no live event has arrived for the threshold
+// window. Drives the stale-busy warning glyph that appears on
+// MessageList, TabBar and the sidebar so a wedged backgrounded tab
+// is visible without flipping to it.
 //
 // 'interrupting' is included because a Stop click that the provider
 // never honours stays stuck in that state forever — exactly the case
