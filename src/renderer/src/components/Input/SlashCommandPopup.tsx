@@ -27,7 +27,7 @@ export function SlashCommandPopup({ commands, selectedIndex, onSelect, onHover }
   return (
     <div
       ref={listRef}
-      className="absolute bottom-full left-0 right-0 mb-1 max-h-48 overflow-y-auto rounded border border-divider bg-elevated shadow-lg z-10"
+      className="absolute bottom-full left-0 right-0 mb-1 max-h-48 overflow-y-auto rounded border border-divider bg-card shadow-lg z-20"
     >
       {commands.map((cmd, i) => (
         <div

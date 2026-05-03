@@ -327,6 +327,10 @@ time.
 
 See git log for details. Quick index:
 
+- v0.7.23 — slash-command popup is now opaque. Was using `bg-elevated`
+  (a 6% alpha overlay token meant for hover states) and the chat
+  content underneath bled through. Switched to `bg-card` and bumped
+  z-index so it sits above tool-call cards above the input
 - v0.7.22 — slash-command popup hydrates from a per-project cache so
   a fresh tab shows the full list immediately. claude's stream-json
   mode doesn't emit system/init (which carries `slash_commands`) until
