@@ -38,12 +38,17 @@ import type {
 import type { ControlCommand, IProviderAdapter, SpawnOpts } from '../types'
 import type { ItemStatus, NormalizedEvent, UserAttachment } from '../../../shared/events'
 import { parseStreamJsonLine } from '../../stream-json-parser'
+import { acpLog } from '../../acp-debug-log'
 
 export class ClaudeAdapter implements IProviderAdapter {
   // Live mode: drop user-message echoes (the renderer already pushed
   // them locally via InputBar). Replay mode (transcripts): emit user
   // messages as items because there's no local push.
   private readonly mode: 'live' | 'replay'
+  // Tag for wire-log lines so a paste from the user can be matched
+  // across rx/tx without us threading sessionId through the adapter
+  // constructor. New per adapter instance — ie per session.
+  private readonly logTag = `claude-${Math.random().toString(36).slice(2, 8)}`
 
   private lineBuffer = ''
   // Current open turn. Opened on the first assistant event of a turn,
@@ -73,24 +78,29 @@ export class ClaudeAdapter implements IProviderAdapter {
     const content = attachments.length === 0
       ? text
       : buildContentBlocks(text, attachments)
-    return JSON.stringify({
+    const line = JSON.stringify({
       type: 'user',
       message: { role: 'user', content }
-    }) + '\n'
+    })
+    acpLog('tx', this.logTag, 'claude', line)
+    return line + '\n'
   }
 
   public formatControl(cmd: ControlCommand): string | null {
     switch (cmd.kind) {
-      case 'interrupt':
+      case 'interrupt': {
         // claude's stream-json control protocol: write a control_request
         // with subtype 'interrupt'. claude responds with control_response
         // (which we don't track — the next assistant/result event will
         // confirm the turn ended).
-        return JSON.stringify({
+        const line = JSON.stringify({
           type: 'control_request',
           request_id: `req_${randomUUID()}`,
           request: { subtype: 'interrupt' }
-        }) + '\n'
+        })
+        acpLog('tx', this.logTag, 'claude', line)
+        return line + '\n'
+      }
 
       case 'approval': {
         // Claude's permission-prompt-tool stdio flow: reply with a user
@@ -100,7 +110,7 @@ export class ClaudeAdapter implements IProviderAdapter {
         // session-scoped "always allow", route via the /permissions
         // config rather than collapsing here.
         const allow = cmd.decision === 'accept' || cmd.decision === 'acceptForSession'
-        return JSON.stringify({
+        const line = JSON.stringify({
           type: 'user',
           message: {
             role: 'user',
@@ -110,7 +120,9 @@ export class ClaudeAdapter implements IProviderAdapter {
               content: allow ? 'allow' : 'deny'
             }]
           }
-        }) + '\n'
+        })
+        acpLog('tx', this.logTag, 'claude', line)
+        return line + '\n'
       }
 
       case 'user-input-response':
@@ -127,6 +139,7 @@ export class ClaudeAdapter implements IProviderAdapter {
     this.lineBuffer = lines.pop() ?? ''
     const out: NormalizedEvent[] = []
     for (const line of lines) {
+      if (line.trim()) acpLog('rx', this.logTag, 'claude', line)
       const event = parseStreamJsonLine(line)
       // Live stream-json doesn't carry timestamps; stamping at parse
       // time is accurate within sub-second of when claude printed the
