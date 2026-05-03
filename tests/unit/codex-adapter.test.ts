@@ -266,6 +266,51 @@ describe('CodexAdapter — notification translation', () => {
   })
 })
 
+describe('CodexAdapter — context compaction', () => {
+  it('translates contextCompaction item start/end into session.compactingChanged', () => {
+    const adapter = readyAdapter()
+    const start = feed(adapter, {
+      method: 'item/started',
+      params: { turnId: 't_1', item: { id: 'i_compact', type: 'contextCompaction' } }
+    })
+    expect(start).toContainEqual({ kind: 'session.compactingChanged', isCompacting: true })
+    // Crucially: no item.started leaks through — compaction shouldn't
+    // render as an inline chat row.
+    expect(start.find(e => e.kind === 'item.started')).toBeUndefined()
+
+    const end = feed(adapter, {
+      method: 'item/completed',
+      params: { item: { id: 'i_compact', type: 'contextCompaction' } }
+    })
+    expect(end).toContainEqual({ kind: 'session.compactingChanged', isCompacting: false })
+    expect(end.find(e => e.kind === 'item.completed')).toBeUndefined()
+  })
+
+  it('accepts the deprecated `compacted` alias for the same flow', () => {
+    const adapter = readyAdapter()
+    const events = feed(adapter, {
+      method: 'item/started',
+      params: { turnId: 't_2', item: { id: 'i_old', type: 'compacted' } }
+    })
+    expect(events).toContainEqual({ kind: 'session.compactingChanged', isCompacting: true })
+  })
+
+  it('still emits item events for a compaction that arrives in replay mode', () => {
+    // parseTranscript uses 'replay' mode internally; compactingChanged
+    // is a live-only signal (the StatusBar isn't driven from transcript
+    // playback). Replay should silently drop the start/end without
+    // emitting a session-level signal — the meter state for replays
+    // doesn't track current activity.
+    const adapter = new CodexAdapter('replay')
+    const events = feed(adapter, {
+      method: 'item/started',
+      params: { turnId: 't_3', item: { id: 'i_compact', type: 'contextCompaction' } }
+    })
+    expect(events.find(e => e.kind === 'session.compactingChanged')).toBeUndefined()
+    expect(events.find(e => e.kind === 'item.started')).toBeUndefined()
+  })
+})
+
 describe('CodexAdapter — parseTranscript (rollout files)', () => {
   it('extracts user + assistant messages from a real codex rollout shape', () => {
     // Real shape captured from ~/.codex/sessions/.../rollout-*.jsonl —

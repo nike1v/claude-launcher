@@ -16,6 +16,11 @@
 //                       assistant/result of its own until the trailing
 //                       result arrives — surface a 'compacting' badge so
 //                       the renderer's busy spinner can be relabelled)
+//   system.compact_boundary → tokenUsage.updated (post_tokens). The post-
+//                       /compact result has usage.input_tokens: 0, so
+//                       without this the StatusBar meter would stay
+//                       pinned at the pre-compact total until the next
+//                       real turn.
 //   assistant block   → item.started + content.delta(full text) + item.completed
 //                       (one triple per block; tool_use items wait for matching
 //                        tool_result before item.completed fires)
@@ -206,6 +211,30 @@ export class ClaudeAdapter implements IProviderAdapter {
           kind: 'session.compactingChanged',
           isCompacting: event.status === 'compacting'
         })
+      }
+      return
+    }
+
+    if (event.type === 'system' && event.subtype === 'compact_boundary') {
+      // After /compact, the trailing result event has usage.input_tokens
+      // 0 / cache_read 0 (no model turn ran), so the StatusBar meter
+      // would stay pinned at the *pre-compact* total. compact_boundary
+      // carries the new prompt size in compact_metadata.post_tokens —
+      // emit it as a tokenUsage.updated so the numerator snaps to the
+      // post-compact value before the user sends another turn.
+      if (this.mode === 'live') {
+        const post = event.compact_metadata?.post_tokens
+        if (typeof post === 'number' && Number.isFinite(post) && post >= 0) {
+          // inputTokens carries the whole post-compact total; cachedInputTokens
+          // is zeroed because the listener computes used = inputTokens +
+          // cachedInputTokens, and at the boundary nothing is "cache-read"
+          // distinct from "input" — there's just one count of what's in the
+          // prompt now.
+          out.push({
+            kind: 'tokenUsage.updated',
+            usage: { inputTokens: post, cachedInputTokens: 0 }
+          })
+        }
       }
       return
     }

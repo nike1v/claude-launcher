@@ -23,6 +23,14 @@
 // formatControl({kind:'approval', ...}) — the response id is the server
 // request's id, captured in pendingServerRequests as approval prompts
 // arrive.
+//
+// Compaction: codex's `/compact` surfaces as an `item/started` with
+// `item.type: contextCompaction` (alias `compacted`) followed by the
+// matching `item/completed`. We translate the pair into
+// session.compactingChanged true/false instead of rendering it as an
+// inline chat item. The post-compact token total arrives via the next
+// `thread/tokenUsage/updated` and snaps the StatusBar meter through
+// the existing handler.
 
 import { randomUUID } from 'node:crypto'
 import type { ApprovalDecision, ItemType, NormalizedEvent } from '../../../shared/events'
@@ -70,6 +78,15 @@ export class CodexAdapter implements IProviderAdapter {
   // turn/interrupt, approval responses) can address the right thread.
   private threadId: string | null = null
   private currentTurnId: string | null = null
+
+  // Item ids whose item/started carried `type: contextCompaction` (alias
+  // `compacted`). We swallow start/end of these as a session-level
+  // compactingChanged signal instead of rendering them as items in the
+  // chat — the renderer would otherwise show a "context compaction"
+  // mystery row mid-conversation. The post-compact token total comes
+  // through the next `thread/tokenUsage/updated` (codex re-emits per
+  // turn), so we don't have to synthesise one here.
+  private readonly compactingItemIds = new Set<string>()
 
   // Set on construction (resumeRef from SpawnOpts) so we know whether to
   // dispatch thread/start vs thread/resume after the initialize response.
@@ -456,6 +473,19 @@ export class CodexAdapter implements IProviderAdapter {
       }
 
       case 'item/started': {
+        const item = (params.item ?? {}) as Record<string, unknown>
+        const rawType = typeof item.type === 'string' ? item.type : ''
+        if (rawType === 'contextCompaction' || rawType === 'compacted') {
+          // Don't render compaction as an inline item — it's a session-
+          // level event. Stash the id so item/completed can pair with it
+          // and emit the matching exit signal.
+          const itemId = typeof item.id === 'string' ? item.id : ''
+          if (itemId) this.compactingItemIds.add(itemId)
+          if (this.mode === 'live') {
+            out.push({ kind: 'session.compactingChanged', isCompacting: true })
+          }
+          return
+        }
         emitItemStarted(params, out, this.currentTurnId)
         return
       }
@@ -464,6 +494,13 @@ export class CodexAdapter implements IProviderAdapter {
         const item = (params.item ?? {}) as Record<string, unknown>
         const itemId = typeof item.id === 'string' ? item.id : ''
         if (!itemId) return
+        if (this.compactingItemIds.has(itemId)) {
+          this.compactingItemIds.delete(itemId)
+          if (this.mode === 'live') {
+            out.push({ kind: 'session.compactingChanged', isCompacting: false })
+          }
+          return
+        }
         const isError = !!item.error
         out.push({
           kind: 'item.completed',

@@ -310,6 +310,39 @@ describe('ClaudeAdapter — system.status (compacting)', () => {
     })
     expect(exit).toContainEqual({ kind: 'session.compactingChanged', isCompacting: false })
   })
+
+  it('emits tokenUsage.updated with post_tokens on compact_boundary', () => {
+    const adapter = new ClaudeAdapter()
+    const events = feed(adapter, {
+      type: 'system',
+      subtype: 'compact_boundary',
+      compact_metadata: { trigger: 'manual', pre_tokens: 82833, post_tokens: 6720, duration_ms: 106426 }
+    })
+    expect(events).toContainEqual({
+      kind: 'tokenUsage.updated',
+      usage: { inputTokens: 6720, cachedInputTokens: 0 }
+    })
+  })
+
+  it('drops compact_boundary with no post_tokens (nothing to update)', () => {
+    const adapter = new ClaudeAdapter()
+    const events = feed(adapter, {
+      type: 'system',
+      subtype: 'compact_boundary',
+      compact_metadata: { trigger: 'auto' }
+    })
+    expect(events.find(e => e.kind === 'tokenUsage.updated')).toBeUndefined()
+  })
+
+  it('skips compact_boundary in replay mode (transcript turns supply token state)', () => {
+    const adapter = new ClaudeAdapter('replay')
+    const events = feed(adapter, {
+      type: 'system',
+      subtype: 'compact_boundary',
+      compact_metadata: { post_tokens: 6720 }
+    })
+    expect(events.find(e => e.kind === 'tokenUsage.updated')).toBeUndefined()
+  })
 })
 
 describe('ClaudeAdapter — formatUserMessage', () => {

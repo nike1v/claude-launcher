@@ -97,4 +97,24 @@ describe('parseStreamJsonLine', () => {
     })
     expect(parseStreamJsonLine(line)).toBeNull()
   })
+
+  it('parses system.compact_boundary with metadata', () => {
+    const line = JSON.stringify({
+      type: 'system',
+      subtype: 'compact_boundary',
+      session_id: 'sess-1',
+      compact_metadata: { trigger: 'manual', pre_tokens: 82833, post_tokens: 6720, duration_ms: 106426 }
+    })
+    const result = parseStreamJsonLine(line)
+    expect(result).toMatchObject({
+      type: 'system',
+      subtype: 'compact_boundary',
+      compact_metadata: { post_tokens: 6720 }
+    })
+  })
+
+  it('drops compact_boundary without compact_metadata', () => {
+    const line = JSON.stringify({ type: 'system', subtype: 'compact_boundary' })
+    expect(parseStreamJsonLine(line)).toBeNull()
+  })
 })

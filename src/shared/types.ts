@@ -161,6 +161,23 @@ export interface SystemStatusEvent {
   compact_result?: 'success' | 'error' | string
 }
 
+// Emitted right after a successful /compact, *before* the post-compact
+// init/result. compact_metadata.post_tokens is the new prompt size in
+// tokens — exactly what the StatusBar's "used" half should switch to,
+// since the trailing result event reports usage.input_tokens: 0 (no
+// model turn happened) and would otherwise leave the meter pinned at
+// the pre-compact total.
+export interface SystemCompactBoundaryEvent {
+  type: 'system'
+  subtype: 'compact_boundary'
+  compact_metadata: {
+    trigger?: 'manual' | 'auto' | string
+    pre_tokens?: number
+    post_tokens?: number
+    duration_ms?: number
+  }
+}
+
 export interface AssistantEvent {
   type: 'assistant'
   message: {
@@ -196,7 +213,13 @@ export interface ResultEvent {
   modelUsage?: Record<string, { contextWindow?: number; maxOutputTokens?: number }>
 }
 
-export type StreamJsonEvent = InitEvent | SystemStatusEvent | AssistantEvent | UserEvent | ResultEvent
+export type StreamJsonEvent =
+  | InitEvent
+  | SystemStatusEvent
+  | SystemCompactBoundaryEvent
+  | AssistantEvent
+  | UserEvent
+  | ResultEvent
 
 // ── Subscription usage (scraped from claude's /usage panel) ─────────────────
 
