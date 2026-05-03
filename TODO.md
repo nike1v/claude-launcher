@@ -327,6 +327,12 @@ time.
 
 See git log for details. Quick index:
 
+- v0.7.22 — slash-command popup hydrates from a per-project cache so
+  a fresh tab shows the full list immediately. claude's stream-json
+  mode doesn't emit system/init (which carries `slash_commands`) until
+  *after* the first user message, so the previous build only had
+  /clear available until the user sent something. The cache is
+  refreshed on every session.started and persisted in projects.json
 - v0.7.21 — slash-command popup refreshes the moment the CLI's
   init lands: typing `/` before claude finished booting used to leave
   the popup stuck on the local `/clear` synthetic until you backspaced

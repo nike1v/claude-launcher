@@ -146,7 +146,8 @@ export function AddProjectModal({ onClose, editProject, presetEnvironmentId }: P
       providerKind,
       lastSessionRef: claudeSessionId.trim() || undefined,
       lastModel: editProject?.lastModel,
-      lastContextWindow: editProject?.lastContextWindow
+      lastContextWindow: editProject?.lastContextWindow,
+      slashCommands: editProject?.slashCommands
     }
 
     if (editProject) updateProject(project)

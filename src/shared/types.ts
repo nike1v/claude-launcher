@@ -56,6 +56,15 @@ export interface Project {
   // half of the StatusBar meter so a cold tab restore shows real usage
   // immediately instead of zero until the next assistant reply.
   lastUsedTokens?: number
+  // Cached slash command list from the last session.started event for
+  // this project. Claude's CLI in stream-json mode doesn't emit
+  // system/init (which carries slash_commands) until *after* the first
+  // user message — so a fresh tab would otherwise show only the
+  // launcher's local /clear synthetic until the user sent something
+  // and got an init back. Hydrating the InputBar's autocomplete from
+  // this cache fills the popup immediately on tab open, and the live
+  // session.started event refreshes it whenever a new one arrives.
+  slashCommands?: string[]
 }
 
 export interface Session {

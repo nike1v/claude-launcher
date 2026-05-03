@@ -39,6 +39,16 @@ function requireOptionalNumber(v: unknown, label: string): asserts v is number |
   }
 }
 
+function requireOptionalStringArray(
+  v: unknown,
+  label: string
+): asserts v is string[] | undefined {
+  if (v === undefined) return
+  if (!Array.isArray(v) || v.some(s => typeof s !== 'string')) {
+    throw new Error(`${label} must be a string[] when present (got ${JSON.stringify(v)})`)
+  }
+}
+
 function requireOptionalProviderKind(v: unknown, label: string): void {
   if (v === undefined) return
   if (!isProviderKind(v)) {
@@ -91,6 +101,7 @@ export function validateProject(raw: unknown): asserts raw is Project {
   requireOptionalString(raw.lastModel, 'Project.lastModel')
   requireOptionalNumber(raw.lastContextWindow, 'Project.lastContextWindow')
   requireOptionalNumber(raw.lastUsedTokens, 'Project.lastUsedTokens')
+  requireOptionalStringArray(raw.slashCommands, 'Project.slashCommands')
 }
 
 // ── Environment ──────────────────────────────────────────────────────────

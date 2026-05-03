@@ -23,6 +23,7 @@ import { Send, Paperclip, X, FileText, Image as ImageIcon, Square } from 'lucide
 import { interruptSession, sendMessage } from '../../ipc/bridge'
 import { useMessagesStore } from '../../store/messages'
 import { useSessionsStore } from '../../store/sessions'
+import { useProjectsStore } from '../../store/projects'
 import { useSessionProvider } from '../../lib/use-session-provider'
 import { restartConversation } from '../../lib/restart-conversation'
 import { SlashCommandPopup } from './SlashCommandPopup'
@@ -178,12 +179,24 @@ function ComposerInner({
   // launcher-handled synthetics. Deduped because user-defined commands
   // could collide with our built-ins (e.g. someone with a custom
   // /clear skill — the launcher's interception still wins).
+  //
+  // Falls back to the project-level cache while the live session is
+  // still booting: claude's stream-json mode doesn't emit system/init
+  // until the user sends their first message, so without this fallback
+  // a fresh tab would only show /clear until the user typed something
+  // and got a reply. The cache is repopulated on every session.started
+  // (see ipc/listeners.ts), so a project that added a new skill picks
+  // it up after one round-trip.
   const cliCommands = useSessionsStore(s => s.sessions[sessionId]?.slashCommands)
+  const projectId = useSessionsStore(s => s.sessions[sessionId]?.projectId)
+  const projectCachedCommands = useProjectsStore(s =>
+    projectId ? s.projects.find(p => p.id === projectId)?.slashCommands : undefined
+  )
   const availableCommands = useMemo(() => {
     const set = new Set<string>(LOCAL_SLASH_COMMANDS)
-    for (const c of cliCommands ?? []) set.add(c)
+    for (const c of cliCommands ?? projectCachedCommands ?? []) set.add(c)
     return Array.from(set).sort()
-  }, [cliCommands])
+  }, [cliCommands, projectCachedCommands])
 
   const [autocomplete, setAutocomplete] = useState<{
     visible: boolean

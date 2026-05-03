@@ -97,6 +97,13 @@ function applyMetadata(sessionId: string, event: NormalizedEvent): void {
       const projectUpdate: Partial<typeof project> = {}
       if (!project.lastSessionRef) projectUpdate.lastSessionRef = event.sessionRef
       if (event.model && project.lastModel !== event.model) projectUpdate.lastModel = event.model
+      // Cache slash_commands on the project so the next tab opened for
+      // this project hydrates its autocomplete popup immediately,
+      // instead of waiting for claude's first system/init (which only
+      // fires after the user's first message).
+      if (event.slashCommands && JSON.stringify(project.slashCommands) !== JSON.stringify(event.slashCommands)) {
+        projectUpdate.slashCommands = event.slashCommands
+      }
       if (Object.keys(projectUpdate).length) {
         useProjectsStore.getState().updateProject({ ...project, ...projectUpdate })
       }
