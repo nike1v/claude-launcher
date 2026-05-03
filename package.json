@@ -1,6 +1,6 @@
 {
   "name": "claude-launcher",
-  "version": "0.7.24",
+  "version": "0.7.25",
   "description": "Electron desktop app for running Claude CLI sessions",
   "repository": {
     "type": "git",
