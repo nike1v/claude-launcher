@@ -115,17 +115,18 @@ export function ProjectItem({ project, isActive, onEdit }: Props) {
     setConfirmReset(true)
   }
 
-  // Forget the pinned sessionRef so the next click on this project
-  // starts a fresh conversation instead of resuming. Closes any live tab
-  // for this project first — without that, the open tab keeps its
-  // sessionRef in the sessions store and the user would still be
-  // talking to the now-detached conversation.
+  // Forget the pinned sessionRef and immediately spawn a blank session,
+  // mirroring claude CLI's `/clear`: the previous transcript stays on
+  // disk but is no longer attached, and the user lands in an empty chat
+  // ready to type. Closes any live tab for this project first — without
+  // that, the open tab keeps its sessionRef in the sessions store and
+  // the user would still be talking to the now-detached conversation.
   //
   // Order matters: stop the live process → drop the renderer session
-  // entry → drop messages → finally clear the project pin. listeners.ts
-  // re-pins on the next session's first init, so we're back to the
-  // write-once steady state with a different conversation.
-  const handleResetConfirmed = () => {
+  // entry → drop messages → clear the project pin → start fresh.
+  // listeners.ts re-pins on the new session's first init, so we're back
+  // to the write-once steady state with a different conversation.
+  const handleResetConfirmed = async () => {
     setConfirmReset(false)
     const { sessions, tabOrder } = useSessionsStore.getState()
     for (const id of tabOrder) {
@@ -144,6 +145,31 @@ export function ProjectItem({ project, isActive, onEdit }: Props) {
       lastModel: undefined,
       lastContextWindow: undefined
     })
+
+    // Spawn a blank session right away. No resume ref, no history load —
+    // we're explicitly starting clean. The startingProjects guard
+    // shared with handleClick keeps a rapid double-click from spawning
+    // two tabs.
+    setActiveProjectId(project.id)
+    if (startingProjects.has(project.id)) return
+    startingProjects.add(project.id)
+    try {
+      let sessionId: string
+      try {
+        sessionId = await startSession(project.id)
+      } catch (err) {
+        console.error('[ProjectItem] startSession after reset failed for', project.id, err)
+        return
+      }
+      addSession({
+        id: sessionId,
+        projectId: project.id,
+        status: 'starting',
+        hasUnread: false
+      })
+    } finally {
+      startingProjects.delete(project.id)
+    }
   }
 
   // Tab-count for the open project, surfaced in the confirm copy so the
@@ -190,7 +216,7 @@ export function ProjectItem({ project, isActive, onEdit }: Props) {
             type="button"
             onClick={openResetConfirm}
             className="p-1 rounded hover:bg-elevated text-fg-faint hover:text-fg"
-            title="Start fresh conversation next time"
+            title="Start fresh conversation"
           >
             <MessageSquarePlus size={12} />
           </button>
@@ -219,10 +245,10 @@ export function ProjectItem({ project, isActive, onEdit }: Props) {
           confirmLabel="Reset conversation"
           body={
             <>
-              <p>The transcript on disk stays untouched — this just unpins the resume reference so the next click on this project starts a new claude session.</p>
+              <p>The transcript on disk stays untouched — this unpins the resume reference and opens a new, empty session for this project right away (like claude CLI&apos;s <code>/clear</code>).</p>
               {openTabCount > 0 && (
                 <p className="mt-2 text-danger">
-                  {openTabCount === 1 ? 'The currently open tab' : `${openTabCount} open tabs`} for this project will be closed and reopened blank when you click again.
+                  {openTabCount === 1 ? 'The currently open tab' : `${openTabCount} open tabs`} for this project will be closed and reopened blank.
                 </p>
               )}
             </>
