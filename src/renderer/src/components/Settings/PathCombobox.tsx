@@ -18,6 +18,16 @@ export function PathCombobox({ value, onChange, config, placeholder }: Props) {
   const [open, setOpen] = useState(false)
   const [suggestions, setSuggestions] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
+  // Absolute path the backend actually listed for the current `dir`. Used by
+  // handlePick so that picking from an empty/`~`/relative input still
+  // produces an absolute value (otherwise the next listing resolves against
+  // the Electron process cwd and shows the wrong tree).
+  const [listedCwd, setListedCwd] = useState<string | null>(null)
+  // Tracks the dir the most recently *applied* listing was for. Without
+  // this, a slow listing for an old `dir` could land after the user has
+  // already typed past it — leaving the dropdown showing stale entries
+  // ("the same 2 folders no matter what I type").
+  const lastAppliedDirRef = useRef<string | null>(null)
   const wrapperRef = useRef<HTMLDivElement>(null)
 
   const sep = useMemo(() => detectSeparator(config, value), [config, value])
@@ -40,9 +50,21 @@ export function PathCombobox({ value, onChange, config, placeholder }: Props) {
         const result = await listDir(config, dir)
         if (cancelled) return
         const fLower = fragment.toLowerCase()
+        // Dedupe defensively — a misbehaving remote shell (banner lines,
+        // duplicated find output, symlinks resolving to the same name)
+        // would otherwise render twin <li>s with the same React key.
+        const seen = new Set<string>()
+        const unique: string[] = []
+        for (const name of result.entries) {
+          if (seen.has(name)) continue
+          seen.add(name)
+          unique.push(name)
+        }
         const filtered = fLower
-          ? result.entries.filter(e => e.toLowerCase().startsWith(fLower))
-          : result.entries
+          ? unique.filter(e => e.toLowerCase().startsWith(fLower))
+          : unique
+        lastAppliedDirRef.current = dir
+        setListedCwd(result.cwd ?? null)
         setSuggestions(filtered.slice(0, 50))
       } finally {
         if (!cancelled) setLoading(false)
@@ -52,7 +74,13 @@ export function PathCombobox({ value, onChange, config, placeholder }: Props) {
   }, [config, dir, fragment, open])
 
   const handlePick = (name: string) => {
-    const base = dir
+    // Prefer the absolute cwd the backend resolved for `dir` so picks
+    // always produce a navigable absolute path. Falls back to `dir` only
+    // if we somehow don't have a cwd yet (first paint, race).
+    const useResolved = listedCwd && lastAppliedDirRef.current === dir
+    const base = useResolved
+      ? (listedCwd!.endsWith(sep) ? listedCwd! : `${listedCwd!}${sep}`)
+      : dir
     const joined = base.endsWith(sep) || base === '' ? `${base}${name}` : `${base}${sep}${name}`
     // Append separator so the user can keep diving without typing it.
     onChange(`${joined}${sep}`)
