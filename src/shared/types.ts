@@ -74,7 +74,12 @@ export interface Session {
   // — that was the original "stop and chat hangs forever" symptom.
   // Falls through to 'ready' on turn.completed; closing the tab is
   // the recovery path if the provider never acknowledges.
-  status: 'starting' | 'ready' | 'busy' | 'interrupting' | 'error' | 'closed'
+  // 'compacting' is claude's /compact phase: provider is doing context
+  // summarisation work, not a normal turn. Same in-flight semantics as
+  // 'busy' (input allowed, Stop visible, send-block off — claude ignores
+  // interrupts during compact but typing into the queue is fine), with
+  // a distinct label so the multi-minute pause doesn't read as wedged.
+  status: 'starting' | 'ready' | 'busy' | 'compacting' | 'interrupting' | 'error' | 'closed'
   pid?: number
   hasUnread: boolean
   errorMessage?: string
@@ -159,6 +164,34 @@ export interface InitEvent {
   slash_commands?: string[]
 }
 
+// claude streams these around /compact: 'compacting' on entry, then
+// status:null with compact_result on exit. The session_id and uuid
+// fields are present on the wire but unused here — we only key on
+// status to drive the renderer's compacting badge.
+export interface SystemStatusEvent {
+  type: 'system'
+  subtype: 'status'
+  status: 'compacting' | null
+  compact_result?: 'success' | 'error' | string
+}
+
+// Emitted right after a successful /compact, *before* the post-compact
+// init/result. compact_metadata.post_tokens is the new prompt size in
+// tokens — exactly what the StatusBar's "used" half should switch to,
+// since the trailing result event reports usage.input_tokens: 0 (no
+// model turn happened) and would otherwise leave the meter pinned at
+// the pre-compact total.
+export interface SystemCompactBoundaryEvent {
+  type: 'system'
+  subtype: 'compact_boundary'
+  compact_metadata: {
+    trigger?: 'manual' | 'auto' | string
+    pre_tokens?: number
+    post_tokens?: number
+    duration_ms?: number
+  }
+}
+
 export interface AssistantEvent {
   type: 'assistant'
   message: {
@@ -194,7 +227,13 @@ export interface ResultEvent {
   modelUsage?: Record<string, { contextWindow?: number; maxOutputTokens?: number }>
 }
 
-export type StreamJsonEvent = InitEvent | AssistantEvent | UserEvent | ResultEvent
+export type StreamJsonEvent =
+  | InitEvent
+  | SystemStatusEvent
+  | SystemCompactBoundaryEvent
+  | AssistantEvent
+  | UserEvent
+  | ResultEvent
 
 // ── Subscription usage (scraped from claude's /usage panel) ─────────────────
 

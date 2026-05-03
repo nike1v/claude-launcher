@@ -5,21 +5,34 @@
 //
 // Stream-json shape:
 //   { type: 'system', subtype: 'init', session_id, model, cwd, ... }
+//   { type: 'system', subtype: 'status', status: 'compacting' | null, compact_result? }
 //   { type: 'assistant', message: { content: [text|thinking|tool_use], usage } }
 //   { type: 'user',      message: { content: string | (text|tool_result|image|document)[] } }
 //   { type: 'result',    session_id, modelUsage, ... }
 //
 // Mapping:
-//   system.init     → session.started + session.stateChanged(ready)
-//   assistant block → item.started + content.delta(full text) + item.completed
-//                     (one triple per block; tool_use items wait for matching
-//                      tool_result before item.completed fires)
-//   user (live)     → echo of what the renderer already pushed; dropped
-//                     except tool_results, which complete pending tool items
-//   user (replay)   → emitted as user_message item.started + item.completed
-//                     plus tool_result completions
-//   result          → tokenUsage.updated + turn.completed (closes turn opened
-//                     by the first assistant event of this turn)
+//   system.init       → session.started + session.stateChanged(ready)
+//   system.status     → session.compactingChanged (compact phase has no
+//                       assistant/result of its own until the trailing
+//                       result arrives — surface a 'compacting' badge so
+//                       the renderer's busy spinner can be relabelled)
+//   system.compact_boundary → tokenUsage.updated (post_tokens). The post-
+//                       /compact result has usage.input_tokens: 0, so
+//                       without this the StatusBar meter would stay
+//                       pinned at the pre-compact total until the next
+//                       real turn.
+//   assistant block   → item.started + content.delta(full text) + item.completed
+//                       (one triple per block; tool_use items wait for matching
+//                        tool_result before item.completed fires)
+//   user (live)       → echo of what the renderer already pushed; dropped
+//                       except tool_results, which complete pending tool items
+//   user (replay)     → emitted as user_message item.started + item.completed
+//                       plus tool_result completions
+//   result            → tokenUsage.updated + turn.completed (closes the open
+//                       turn — or a synth one for /compact, which never
+//                       opens a turn through an assistant event but still
+//                       needs the busy→ready trigger; without this the UI
+//                       wedges until restart, observed 2026-05-03)
 
 import { randomUUID } from 'node:crypto'
 import { extname } from 'node:path'
@@ -38,12 +51,17 @@ import type {
 import type { ControlCommand, IProviderAdapter, SpawnOpts } from '../types'
 import type { ItemStatus, NormalizedEvent, UserAttachment } from '../../../shared/events'
 import { parseStreamJsonLine } from '../../stream-json-parser'
+import { acpLog } from '../../acp-debug-log'
 
 export class ClaudeAdapter implements IProviderAdapter {
   // Live mode: drop user-message echoes (the renderer already pushed
   // them locally via InputBar). Replay mode (transcripts): emit user
   // messages as items because there's no local push.
   private readonly mode: 'live' | 'replay'
+  // Tag for wire-log lines so a paste from the user can be matched
+  // across rx/tx without us threading sessionId through the adapter
+  // constructor. New per adapter instance — ie per session.
+  private readonly logTag = `claude-${Math.random().toString(36).slice(2, 8)}`
 
   private lineBuffer = ''
   // Current open turn. Opened on the first assistant event of a turn,
@@ -73,24 +91,29 @@ export class ClaudeAdapter implements IProviderAdapter {
     const content = attachments.length === 0
       ? text
       : buildContentBlocks(text, attachments)
-    return JSON.stringify({
+    const line = JSON.stringify({
       type: 'user',
       message: { role: 'user', content }
-    }) + '\n'
+    })
+    acpLog('tx', this.logTag, 'claude', line)
+    return line + '\n'
   }
 
   public formatControl(cmd: ControlCommand): string | null {
     switch (cmd.kind) {
-      case 'interrupt':
+      case 'interrupt': {
         // claude's stream-json control protocol: write a control_request
         // with subtype 'interrupt'. claude responds with control_response
         // (which we don't track — the next assistant/result event will
         // confirm the turn ended).
-        return JSON.stringify({
+        const line = JSON.stringify({
           type: 'control_request',
           request_id: `req_${randomUUID()}`,
           request: { subtype: 'interrupt' }
-        }) + '\n'
+        })
+        acpLog('tx', this.logTag, 'claude', line)
+        return line + '\n'
+      }
 
       case 'approval': {
         // Claude's permission-prompt-tool stdio flow: reply with a user
@@ -100,7 +123,7 @@ export class ClaudeAdapter implements IProviderAdapter {
         // session-scoped "always allow", route via the /permissions
         // config rather than collapsing here.
         const allow = cmd.decision === 'accept' || cmd.decision === 'acceptForSession'
-        return JSON.stringify({
+        const line = JSON.stringify({
           type: 'user',
           message: {
             role: 'user',
@@ -110,7 +133,9 @@ export class ClaudeAdapter implements IProviderAdapter {
               content: allow ? 'allow' : 'deny'
             }]
           }
-        }) + '\n'
+        })
+        acpLog('tx', this.logTag, 'claude', line)
+        return line + '\n'
       }
 
       case 'user-input-response':
@@ -127,6 +152,7 @@ export class ClaudeAdapter implements IProviderAdapter {
     this.lineBuffer = lines.pop() ?? ''
     const out: NormalizedEvent[] = []
     for (const line of lines) {
+      if (line.trim()) acpLog('rx', this.logTag, 'claude', line)
       const event = parseStreamJsonLine(line)
       // Live stream-json doesn't carry timestamps; stamping at parse
       // time is accurate within sub-second of when claude printed the
@@ -181,6 +207,43 @@ export class ClaudeAdapter implements IProviderAdapter {
       // its transcript, the live status flow is unaffected.
       if (this.mode === 'live') {
         out.push({ kind: 'session.stateChanged', state: 'ready' })
+      }
+      return
+    }
+
+    if (event.type === 'system' && event.subtype === 'status') {
+      // /compact entry/exit. claude streams `status: 'compacting'` on
+      // entry and `status: null` (with `compact_result`) on exit. Replay
+      // ignores it — transcripts don't surface the compacting badge.
+      if (this.mode === 'live') {
+        out.push({
+          kind: 'session.compactingChanged',
+          isCompacting: event.status === 'compacting'
+        })
+      }
+      return
+    }
+
+    if (event.type === 'system' && event.subtype === 'compact_boundary') {
+      // After /compact, the trailing result event has usage.input_tokens
+      // 0 / cache_read 0 (no model turn ran), so the StatusBar meter
+      // would stay pinned at the *pre-compact* total. compact_boundary
+      // carries the new prompt size in compact_metadata.post_tokens —
+      // emit it as a tokenUsage.updated so the numerator snaps to the
+      // post-compact value before the user sends another turn.
+      if (this.mode === 'live') {
+        const post = event.compact_metadata?.post_tokens
+        if (typeof post === 'number' && Number.isFinite(post) && post >= 0) {
+          // inputTokens carries the whole post-compact total; cachedInputTokens
+          // is zeroed because the listener computes used = inputTokens +
+          // cachedInputTokens, and at the boundary nothing is "cache-read"
+          // distinct from "input" — there's just one count of what's in the
+          // prompt now.
+          out.push({
+            kind: 'tokenUsage.updated',
+            usage: { inputTokens: post, cachedInputTokens: 0 }
+          })
+        }
       }
       return
     }
@@ -374,17 +437,21 @@ export class ClaudeAdapter implements IProviderAdapter {
       }
     }
 
-    if (this.openTurnId) {
-      const turnId = this.openTurnId
-      this.openTurnId = null
-      // Replay skips turn.completed — see ensureTurn.
-      if (isReplay) return
-      out.push({
-        kind: 'turn.completed',
-        turnId,
-        status: event.is_error ? 'failed' : 'completed'
-      })
-    }
+    // The post-/compact result event has num_turns: 0 and no preceding
+    // assistant event, so openTurnId is null — yet the user kicked off
+    // a turn (their /compact send flipped the renderer to busy) and we
+    // owe them a busy→ready trigger. Synth a turnId in that case so
+    // turn.completed always fires when claude says it's done. Without
+    // this the spinner wedges until restart (observed 2026-05-03).
+    const turnId = this.openTurnId ?? `turn-${randomUUID()}`
+    this.openTurnId = null
+    // Replay skips turn.completed — see ensureTurn.
+    if (isReplay) return
+    out.push({
+      kind: 'turn.completed',
+      turnId,
+      status: event.is_error ? 'failed' : 'completed'
+    })
   }
 }
 

@@ -19,3 +19,17 @@ export function formatMessageTime(ms: number, clockFormat: ClockFormat): string 
 export function formatMessageTimeFull(ms: number, clockFormat: ClockFormat): string {
   return new Date(ms).toLocaleString(undefined, { hour12: clockFormat === '12h' })
 }
+
+// Elapsed-duration formatter for the in-flight spinner copy ("X is
+// thinking… 47s" / "no activity for 2m 13s"). Shows whole seconds
+// under a minute, then `Xm Ys` once we cross 60 s. Negative or NaN
+// inputs collapse to "0s" so a clock-skewed lastEventAt can't render
+// "-3s".
+export function formatElapsed(ms: number): string {
+  if (!Number.isFinite(ms) || ms < 0) return '0s'
+  const totalSec = Math.floor(ms / 1000)
+  if (totalSec < 60) return `${totalSec}s`
+  const m = Math.floor(totalSec / 60)
+  const s = totalSec % 60
+  return `${m}m ${s}s`
+}

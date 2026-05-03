@@ -327,12 +327,21 @@ time.
 
 See git log for details. Quick index:
 
-- v0.7.15 — slash-command autocomplete + local /clear interception:
+- v0.7.20 — slash-command autocomplete + local /clear interception:
   reads `slash_commands` from claude's system/init, surfaces them in a
   popup above the input bar (Up/Down to navigate, Enter to apply +
   submit, Tab to apply with trailing space, Esc to dismiss), and
-  intercepts /clear locally (unsupported by SDK stream-json) by
-  restarting the conversation in the same tab slot
+  intercepts /clear typed in the input (unsupported by SDK stream-json)
+  by restarting the conversation in the same tab slot via a new
+  replaceSession store action
+- v0.7.19 — project reset button spawns a blank session right away
+  (no more "click again" round trip)
+- v0.7.18 — snap context meter + compacting badge after /compact
+  across claude and codex
+- v0.7.17 — distinct compacting copy + saner stale-busy threshold
+- v0.7.16 — unwedge UI after /compact + surface compacting status as
+  a first-class session state
+- v0.7.15 — claude wire log for /compact freeze diagnosis
 - v0.7.14 — codex history lookup survives WSL routing through
   zsh login shell (single-quoted find pattern + wsl.exe -e bash)
 - v0.7.13 — better diagnostics on codex history lookup failures

@@ -12,6 +12,7 @@ import { deriveItems, type RenderedItem } from '../../lib/derive-items'
 import { groupMessages } from '../../lib/group-messages'
 import { useStaleBusy } from '../../lib/use-stale-busy'
 import { useSessionProvider } from '../../lib/use-session-provider'
+import { formatElapsed } from '../../lib/format-time'
 
 interface Props {
   sessionId: string
@@ -36,7 +37,8 @@ export const MessageList = memo(function MessageList({ sessionId }: Props) {
   // 'interrupting' means main has dispatched the in-band interrupt and
   // is waiting on turn.completed — for the spinner it's still "in
   // progress" from the user's POV, just labeled differently.
-  const isBusy = status === 'busy'
+  const isBusy = status === 'busy' || status === 'compacting'
+  const isCompacting = status === 'compacting'
   const isInterrupting = status === 'interrupting'
   const isInFlight = isBusy || isInterrupting
   const provider = useSessionProvider(sessionId)
@@ -160,17 +162,19 @@ export const MessageList = memo(function MessageList({ sessionId }: Props) {
               <span className="italic">
                 {isInterrupting
                   ? stopUnacknowledged
-                    ? `stopping — no acknowledgement after ${Math.round(stopSentMs / 1000)}s…`
+                    ? `stopping — no acknowledgement after ${formatElapsed(stopSentMs)}…`
                     : `stopping ${provider}…`
-                  : stopAcknowledgePending
-                    ? `stop sent — ${provider} is wrapping up…`
-                    : `${provider} is thinking…`}
+                  : isCompacting
+                    ? `${provider} is compacting context…`
+                    : stopAcknowledgePending
+                      ? `stop sent — ${provider} is wrapping up…`
+                      : `${provider} is thinking…`}
               </span>
             </div>
             {(isInterrupting && stopUnacknowledged) || looksStale ? (
               <div className="text-[11px] text-warn ml-5">
                 {looksStale && lastEventAt !== undefined
-                  ? `No activity for ${Math.round((now - lastEventAt) / 1000)}s — the session may be unresponsive. Close the tab if it stays stuck.`
+                  ? `No activity for ${formatElapsed(now - lastEventAt)} — the session may be unresponsive. Close the tab if it stays stuck.`
                   : 'If the spinner keeps going, close this tab to recover.'}
               </div>
             ) : null}

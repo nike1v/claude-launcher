@@ -27,11 +27,26 @@ export function parseStreamJsonLine(line: string): StreamJsonEvent | null {
 
   switch (type) {
     case 'system': {
-      if (parsed.subtype !== 'init') return null
-      if (typeof parsed.session_id !== 'string') return null
-      if (typeof parsed.model !== 'string') return null
-      if (typeof parsed.cwd !== 'string') return null
-      return parsed as unknown as StreamJsonEvent
+      if (parsed.subtype === 'init') {
+        if (typeof parsed.session_id !== 'string') return null
+        if (typeof parsed.model !== 'string') return null
+        if (typeof parsed.cwd !== 'string') return null
+        return parsed as unknown as StreamJsonEvent
+      }
+      if (parsed.subtype === 'status') {
+        // status is 'compacting' (entry) or null (exit); anything else
+        // is a future variant we don't recognise — drop it.
+        if (parsed.status !== 'compacting' && parsed.status !== null) return null
+        return parsed as unknown as StreamJsonEvent
+      }
+      if (parsed.subtype === 'compact_boundary') {
+        // compact_metadata is the only field we read from this event —
+        // the rest (session_id, uuid) are wire bookkeeping. Require it
+        // to be a record so the adapter can safely look up post_tokens.
+        if (!isRecord(parsed.compact_metadata)) return null
+        return parsed as unknown as StreamJsonEvent
+      }
+      return null
     }
     case 'assistant': {
       if (!isRecord(parsed.message)) return null

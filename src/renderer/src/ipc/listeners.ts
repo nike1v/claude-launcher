@@ -33,7 +33,7 @@ export function useIpcListeners(): void {
         // count as in-flight — keeping the marker through 'interrupting'
         // is what drives the "stop sent…" → "no acknowledgement after
         // Ns…" copy under the spinner.
-        if (status !== 'busy' && status !== 'interrupting') {
+        if (status !== 'busy' && status !== 'compacting' && status !== 'interrupting') {
           useMessagesStore.getState().clearStopRequest(sessionId)
         }
       }

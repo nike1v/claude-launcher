@@ -468,6 +468,18 @@ export class SessionManager {
         session.readyTimer = null
       }
       this.onEvent('session:status', { sessionId: session.sessionId, status: 'ready' })
+      return
+    }
+    if (event.kind === 'session.compactingChanged') {
+      // Provider entered/exited /compact. Entry: surface a distinct
+      // 'compacting' badge so the multi-minute pause doesn't look
+      // wedged. Exit: do nothing here — the trailing result event will
+      // fire turn.completed and flip back to ready. We deliberately
+      // don't restore 'busy' on exit because the result is microseconds
+      // behind and a flicker through 'busy' is just noise.
+      if (event.isCompacting) {
+        this.onEvent('session:status', { sessionId: session.sessionId, status: 'compacting' })
+      }
     }
   }
 }

@@ -124,6 +124,12 @@ export type NormalizedEvent =
   | { kind: 'session.started'; sessionRef: string; model?: string; cwd?: string; slashCommands?: string[] }
   | { kind: 'session.stateChanged'; state: SessionState; reason?: string }
   | { kind: 'session.exited'; reason?: string; exitKind: SessionExitKind }
+  // Provider-side context-compaction phase. Distinct from busy because
+  // claude's compact subsystem doesn't open a turn (no assistant events,
+  // no usable result.stop_reason) — and we want a different label so the
+  // user knows the long pause is intentional. Toggles on system.status
+  // 'compacting' and clears on its trailing 'null' / compact_result.
+  | { kind: 'session.compactingChanged'; isCompacting: boolean }
 
   // Turn lifecycle — one user message → one assistant reply, plus the
   // tool calls / approvals that happen inside.
