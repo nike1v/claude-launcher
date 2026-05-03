@@ -22,7 +22,7 @@ export function useStaleBusy(sessionId: string | undefined): boolean {
   const inFlight = useSessionsStore(s => {
     if (!sessionId) return false
     const status = s.sessions[sessionId]?.status
-    return status === 'busy' || status === 'interrupting'
+    return status === 'busy' || status === 'interrupting' || status === 'compacting'
   })
   const lastEventAt = useMessagesStore(s =>
     sessionId ? s.lastEventAt[sessionId] : undefined

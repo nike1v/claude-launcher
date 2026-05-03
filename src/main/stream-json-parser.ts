@@ -27,11 +27,19 @@ export function parseStreamJsonLine(line: string): StreamJsonEvent | null {
 
   switch (type) {
     case 'system': {
-      if (parsed.subtype !== 'init') return null
-      if (typeof parsed.session_id !== 'string') return null
-      if (typeof parsed.model !== 'string') return null
-      if (typeof parsed.cwd !== 'string') return null
-      return parsed as unknown as StreamJsonEvent
+      if (parsed.subtype === 'init') {
+        if (typeof parsed.session_id !== 'string') return null
+        if (typeof parsed.model !== 'string') return null
+        if (typeof parsed.cwd !== 'string') return null
+        return parsed as unknown as StreamJsonEvent
+      }
+      if (parsed.subtype === 'status') {
+        // status is 'compacting' (entry) or null (exit); anything else
+        // is a future variant we don't recognise — drop it.
+        if (parsed.status !== 'compacting' && parsed.status !== null) return null
+        return parsed as unknown as StreamJsonEvent
+      }
+      return null
     }
     case 'assistant': {
       if (!isRecord(parsed.message)) return null

@@ -271,6 +271,45 @@ describe('ClaudeAdapter — result event', () => {
     expect(events.find(e => e.kind === 'turn.completed'))
       .toMatchObject({ status: 'completed' })
   })
+
+  // Regression: pre-fix the post-/compact result (no preceding assistant
+  // event, num_turns: 0) left openTurnId null and translateResult became
+  // a no-op — so session-manager never saw turn.completed and the UI
+  // wedged on 'busy' until restart. Now we synth a turnId so the
+  // busy→ready transition always fires when claude says it's done.
+  it('emits turn.completed for a result with no preceding assistant event (post-/compact)', () => {
+    const adapter = new ClaudeAdapter()
+    const events = feed(adapter, {
+      type: 'result',
+      subtype: 'success',
+      session_id: 'sess-compact',
+      is_error: false,
+      num_turns: 0
+    })
+    const turnEnd = events.find(e => e.kind === 'turn.completed')
+    expect(turnEnd).toBeDefined()
+    expect(turnEnd).toMatchObject({ status: 'completed' })
+  })
+})
+
+describe('ClaudeAdapter — system.status (compacting)', () => {
+  it('emits session.compactingChanged on entry and exit', () => {
+    const adapter = new ClaudeAdapter()
+    const enter = feed(adapter, {
+      type: 'system',
+      subtype: 'status',
+      status: 'compacting'
+    })
+    expect(enter).toContainEqual({ kind: 'session.compactingChanged', isCompacting: true })
+
+    const exit = feed(adapter, {
+      type: 'system',
+      subtype: 'status',
+      status: null,
+      compact_result: 'success'
+    })
+    expect(exit).toContainEqual({ kind: 'session.compactingChanged', isCompacting: false })
+  })
 })
 
 describe('ClaudeAdapter — formatUserMessage', () => {

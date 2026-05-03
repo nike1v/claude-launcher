@@ -201,7 +201,7 @@ function SendButton({
 function StopButton({ sessionId }: { sessionId: string }) {
   const status = useSessionsStore(s => s.sessions[sessionId]?.status)
   const recordStopRequest = useMessagesStore(s => s.recordStopRequest)
-  const isBusy = status === 'busy'
+  const isBusy = status === 'busy' || status === 'compacting'
   const isInterrupting = status === 'interrupting'
   if (!isBusy && !isInterrupting) return null
   return (

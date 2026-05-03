@@ -71,4 +71,30 @@ describe('parseStreamJsonLine', () => {
     const line = JSON.stringify({ type: 'unknown_future_type', data: 'x' })
     expect(parseStreamJsonLine(line)).toBeNull()
   })
+
+  it('parses system.status compacting and exit events', () => {
+    const enter = parseStreamJsonLine(JSON.stringify({
+      type: 'system',
+      subtype: 'status',
+      status: 'compacting'
+    }))
+    expect(enter).toMatchObject({ type: 'system', subtype: 'status', status: 'compacting' })
+
+    const exit = parseStreamJsonLine(JSON.stringify({
+      type: 'system',
+      subtype: 'status',
+      status: null,
+      compact_result: 'success'
+    }))
+    expect(exit).toMatchObject({ type: 'system', subtype: 'status', status: null })
+  })
+
+  it('drops system.status with unrecognised status values', () => {
+    const line = JSON.stringify({
+      type: 'system',
+      subtype: 'status',
+      status: 'wat-future-phase'
+    })
+    expect(parseStreamJsonLine(line)).toBeNull()
+  })
 })

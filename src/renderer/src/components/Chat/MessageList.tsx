@@ -36,7 +36,7 @@ export const MessageList = memo(function MessageList({ sessionId }: Props) {
   // 'interrupting' means main has dispatched the in-band interrupt and
   // is waiting on turn.completed — for the spinner it's still "in
   // progress" from the user's POV, just labeled differently.
-  const isBusy = status === 'busy'
+  const isBusy = status === 'busy' || status === 'compacting'
   const isInterrupting = status === 'interrupting'
   const isInFlight = isBusy || isInterrupting
   const provider = useSessionProvider(sessionId)

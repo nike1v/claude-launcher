@@ -5,21 +5,29 @@
 //
 // Stream-json shape:
 //   { type: 'system', subtype: 'init', session_id, model, cwd, ... }
+//   { type: 'system', subtype: 'status', status: 'compacting' | null, compact_result? }
 //   { type: 'assistant', message: { content: [text|thinking|tool_use], usage } }
 //   { type: 'user',      message: { content: string | (text|tool_result|image|document)[] } }
 //   { type: 'result',    session_id, modelUsage, ... }
 //
 // Mapping:
-//   system.init     → session.started + session.stateChanged(ready)
-//   assistant block → item.started + content.delta(full text) + item.completed
-//                     (one triple per block; tool_use items wait for matching
-//                      tool_result before item.completed fires)
-//   user (live)     → echo of what the renderer already pushed; dropped
-//                     except tool_results, which complete pending tool items
-//   user (replay)   → emitted as user_message item.started + item.completed
-//                     plus tool_result completions
-//   result          → tokenUsage.updated + turn.completed (closes turn opened
-//                     by the first assistant event of this turn)
+//   system.init       → session.started + session.stateChanged(ready)
+//   system.status     → session.compactingChanged (compact phase has no
+//                       assistant/result of its own until the trailing
+//                       result arrives — surface a 'compacting' badge so
+//                       the renderer's busy spinner can be relabelled)
+//   assistant block   → item.started + content.delta(full text) + item.completed
+//                       (one triple per block; tool_use items wait for matching
+//                        tool_result before item.completed fires)
+//   user (live)       → echo of what the renderer already pushed; dropped
+//                       except tool_results, which complete pending tool items
+//   user (replay)     → emitted as user_message item.started + item.completed
+//                       plus tool_result completions
+//   result            → tokenUsage.updated + turn.completed (closes the open
+//                       turn — or a synth one for /compact, which never
+//                       opens a turn through an assistant event but still
+//                       needs the busy→ready trigger; without this the UI
+//                       wedges until restart, observed 2026-05-03)
 
 import { randomUUID } from 'node:crypto'
 import { extname } from 'node:path'
@@ -185,6 +193,19 @@ export class ClaudeAdapter implements IProviderAdapter {
       // its transcript, the live status flow is unaffected.
       if (this.mode === 'live') {
         out.push({ kind: 'session.stateChanged', state: 'ready' })
+      }
+      return
+    }
+
+    if (event.type === 'system' && event.subtype === 'status') {
+      // /compact entry/exit. claude streams `status: 'compacting'` on
+      // entry and `status: null` (with `compact_result`) on exit. Replay
+      // ignores it — transcripts don't surface the compacting badge.
+      if (this.mode === 'live') {
+        out.push({
+          kind: 'session.compactingChanged',
+          isCompacting: event.status === 'compacting'
+        })
       }
       return
     }
@@ -378,17 +399,21 @@ export class ClaudeAdapter implements IProviderAdapter {
       }
     }
 
-    if (this.openTurnId) {
-      const turnId = this.openTurnId
-      this.openTurnId = null
-      // Replay skips turn.completed — see ensureTurn.
-      if (isReplay) return
-      out.push({
-        kind: 'turn.completed',
-        turnId,
-        status: event.is_error ? 'failed' : 'completed'
-      })
-    }
+    // The post-/compact result event has num_turns: 0 and no preceding
+    // assistant event, so openTurnId is null — yet the user kicked off
+    // a turn (their /compact send flipped the renderer to busy) and we
+    // owe them a busy→ready trigger. Synth a turnId in that case so
+    // turn.completed always fires when claude says it's done. Without
+    // this the spinner wedges until restart (observed 2026-05-03).
+    const turnId = this.openTurnId ?? `turn-${randomUUID()}`
+    this.openTurnId = null
+    // Replay skips turn.completed — see ensureTurn.
+    if (isReplay) return
+    out.push({
+      kind: 'turn.completed',
+      turnId,
+      status: event.is_error ? 'failed' : 'completed'
+    })
   }
 }
 
