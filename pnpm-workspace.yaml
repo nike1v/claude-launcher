@@ -1,0 +1,8 @@
+# pnpm 10 moved the build-script allowlist out of package.json's "pnpm"
+# field into here. Without it, pnpm refuses to run these packages' install
+# scripts and fails with ERR_PNPM_IGNORED_BUILDS (node-pty's native pty.node
+# never builds, breaking the app and the CI release gate).
+onlyBuiltDependencies:
+  - electron
+  - esbuild
+  - node-pty
