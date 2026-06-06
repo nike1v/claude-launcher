@@ -49,6 +49,14 @@ export function respondPermission(
   window.electronAPI.invoke('session:permission', { sessionId, decision, toolUseId })
 }
 
+export function respondUserInput(
+  sessionId: string,
+  requestId: string,
+  answers: Record<string, unknown>
+): void {
+  window.electronAPI.invoke('session:userInput', { sessionId, requestId, answers })
+}
+
 export async function loadSessionHistory(
   projectId: string,
   sessionId: string

@@ -8,6 +8,7 @@ import { ToolUse } from './ToolUse'
 import { Thinking } from './Thinking'
 import { ToolGroup } from './ToolGroup'
 import { PermissionPrompt } from './PermissionPrompt'
+import { QuestionPrompt } from './QuestionPrompt'
 import { deriveItems, type RenderedItem } from '../../lib/derive-items'
 import { groupMessages } from '../../lib/group-messages'
 import { useStaleBusy } from '../../lib/use-stale-busy'
@@ -130,6 +131,16 @@ export const MessageList = memo(function MessageList({ sessionId }: Props) {
             toolUseId={item.id}
             toolName={item.toolName}
             input={item.input}
+            resolved={item.status === 'resolved'}
+          />
+        )
+      case 'question':
+        return (
+          <QuestionPrompt
+            key={item.id}
+            sessionId={sessionId}
+            requestId={item.id}
+            questions={item.questions}
             resolved={item.status === 'resolved'}
           />
         )

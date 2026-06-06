@@ -104,6 +104,10 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): () => Promise<vo
     sessionManager.respondPermission(sessionId, decision, toolUseId)
   })
 
+  handle('session:userInput', ({ sessionId, requestId, answers }) => {
+    sessionManager.respondUserInput(sessionId, requestId, answers)
+  })
+
   handle('projects:save', (projects) => {
     projectStore.save(projects)
   })

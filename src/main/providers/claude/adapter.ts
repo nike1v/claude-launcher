@@ -39,6 +39,7 @@ import { extname } from 'node:path'
 import type {
   AssistantEvent,
   ContentBlock,
+  ControlRequestEvent,
   DocumentBlock,
   ImageBlock,
   ResultEvent,
@@ -49,7 +50,7 @@ import type {
   UserEvent
 } from '../../../shared/types'
 import type { ControlCommand, IProviderAdapter, SpawnOpts } from '../types'
-import type { ItemStatus, NormalizedEvent, UserAttachment } from '../../../shared/events'
+import type { ItemStatus, NormalizedEvent, UserAttachment, UserInputQuestion } from '../../../shared/events'
 import { parseStreamJsonLine } from '../../stream-json-parser'
 import { acpLog } from '../../acp-debug-log'
 
@@ -70,6 +71,14 @@ export class ClaudeAdapter implements IProviderAdapter {
   // Tool-use blocks claude emitted that are awaiting their tool_result
   // (which arrives in a subsequent user event). Maps tool_use.id → itemId.
   private readonly pendingToolItems = new Map<string, string>()
+  // can_use_tool control_requests awaiting an approval decision. Maps the
+  // control request_id → the tool input, so formatControl can echo it back
+  // as updatedInput when the user allows.
+  private readonly pendingPermissions = new Map<string, unknown>()
+  // AskUserQuestion control_requests awaiting an answer. Maps the control
+  // request_id → the parsed questions, so formatControl can phrase the
+  // answer message claude reads back off the gate's deny channel.
+  private readonly pendingQuestions = new Map<string, readonly UserInputQuestion[]>()
 
   public constructor(mode: 'live' | 'replay' = 'live') {
     this.mode = mode
@@ -116,33 +125,59 @@ export class ClaudeAdapter implements IProviderAdapter {
       }
 
       case 'approval': {
-        // Claude's permission-prompt-tool stdio flow: reply with a user
-        // message carrying a tool_result block. Claude itself only
-        // recognises allow/deny today, so acceptForSession collapses to
-        // accept and cancel collapses to decline. When claude grows a
-        // session-scoped "always allow", route via the /permissions
-        // config rather than collapsing here.
+        // Answer claude's can_use_tool control_request with a
+        // control_response keyed on the original request_id. allow must echo
+        // the tool input back as updatedInput; deny carries a message.
+        // Verified against claude 2.1.x — the previous tool_result-message
+        // reply was the wrong shape, so claude stayed blocked and the turn
+        // wedged. acceptForSession collapses to allow and cancel to deny;
+        // when claude grows a session-scoped "always allow" we'll honour the
+        // request's permission_suggestions instead of collapsing here.
         const allow = cmd.decision === 'accept' || cmd.decision === 'acceptForSession'
+        const input = this.pendingPermissions.get(cmd.requestId)
+        this.pendingPermissions.delete(cmd.requestId)
+        const decision = allow
+          ? { behavior: 'allow', updatedInput: input ?? {} }
+          : { behavior: 'deny', message: 'Denied by user' }
         const line = JSON.stringify({
-          type: 'user',
-          message: {
-            role: 'user',
-            content: [{
-              type: 'tool_result',
-              tool_use_id: cmd.requestId,
-              content: allow ? 'allow' : 'deny'
-            }]
+          type: 'control_response',
+          response: {
+            subtype: 'success',
+            request_id: cmd.requestId,
+            response: decision
           }
         })
         acpLog('tx', this.logTag, 'claude', line)
         return line + '\n'
       }
 
-      case 'user-input-response':
-        // claude has no structured user-input flow today. Returning null
-        // signals session-manager that there's no in-band command to
-        // write — the request silently no-ops on this provider.
-        return null
+      case 'user-input-response': {
+        // claude's AskUserQuestion has no answer channel in stream-json mode,
+        // so the only way to deliver the user's choice is to decline the
+        // question's can_use_tool gate with a message claude will read.
+        // Verified against claude 2.1.x — claude parses the answer text and
+        // continues. (Allowing instead would run the tool, which self-
+        // resolves with an empty answer and discards the choice.)
+        const questions = this.pendingQuestions.get(cmd.requestId)
+        if (!questions) return null
+        this.pendingQuestions.delete(cmd.requestId)
+        const lines = questions.map(q => {
+          const a = cmd.answers[q.id]
+          const ans = Array.isArray(a) ? a.join(', ') : a == null ? '(no answer)' : String(a)
+          return `- ${q.prompt}: ${ans}`
+        })
+        const message = `The user answered your question(s):\n${lines.join('\n')}`
+        const line = JSON.stringify({
+          type: 'control_response',
+          response: {
+            subtype: 'success',
+            request_id: cmd.requestId,
+            response: { behavior: 'deny', message }
+          }
+        })
+        acpLog('tx', this.logTag, 'claude', line)
+        return line + '\n'
+      }
     }
   }
 
@@ -262,6 +297,50 @@ export class ClaudeAdapter implements IProviderAdapter {
       this.translateResult(event, out)
       return
     }
+
+    if (event.type === 'control_request') {
+      this.translatePermissionRequest(event, out)
+      return
+    }
+  }
+
+  private translatePermissionRequest(event: ControlRequestEvent, out: NormalizedEvent[]): void {
+    // Transcripts never replay live control_requests (they're answered
+    // in-session, not persisted), so this is live-only.
+    if (this.mode === 'replay') return
+    const req = event.request
+
+    // AskUserQuestion isn't a yes/no gate — it's a question. claude offers
+    // no structured answer channel in stream-json mode (the tool self-
+    // resolves empty), so we surface the choices as a userInput prompt and
+    // feed the answer back through the gate's deny-message (verified: claude
+    // reads it and continues). Falls through to a plain permission gate if
+    // the payload isn't shaped like questions.
+    if (req.tool_name === 'AskUserQuestion') {
+      const questions = extractQuestions(req.input)
+      if (questions) {
+        this.pendingQuestions.set(event.request_id, questions)
+        out.push({ kind: 'userInput.requested', requestId: event.request_id, questions })
+        return
+      }
+    }
+
+    this.pendingPermissions.set(event.request_id, req.input)
+    // Surface as a tool_use item whose name contains "permission" — that's
+    // the renderer's existing gate heuristic, which routes it to
+    // PermissionPrompt. itemId === control request_id so the decision
+    // round-trips on the same id: respondPermission → formatControl →
+    // control_response(request_id). claude has already opened the turn via
+    // the assistant tool_use, so ensureTurn returns that turnId.
+    const turnId = this.ensureTurn(out)
+    out.push({
+      kind: 'item.started',
+      itemId: event.request_id,
+      turnId,
+      itemType: 'tool_use',
+      name: `${req.tool_name} (permission)`,
+      input: req.input
+    })
   }
 
   private ensureTurn(out: NormalizedEvent[], model?: string): string {
@@ -329,6 +408,12 @@ export class ClaudeAdapter implements IProviderAdapter {
         continue
       }
       if (block.type === 'tool_use') {
+        // AskUserQuestion is surfaced as a structured question prompt via
+        // its can_use_tool gate (see translatePermissionRequest), not as a
+        // passive tool record — skip the duplicate tool item, which would
+        // otherwise sit "running" forever (claude emits no tool_result for
+        // it once we answer through the gate).
+        if (block.name === 'AskUserQuestion') continue
         // tool_use items keep the item.started → item.completed pattern
         // in both modes — the result arrives separately in a later
         // user event and needs to find an open item to attach to.
@@ -473,6 +558,35 @@ function extractJsonlTimestamp(line: string): number | undefined {
     // Unparseable line — caller already discarded it via parseStreamJsonLine.
   }
   return undefined
+}
+
+// Parse AskUserQuestion's tool input ({ questions: [{ question, header,
+// multiSelect, options: [{ label, description }] }] }) into the renderer's
+// UserInputQuestion shape. Returns null when the payload isn't shaped like
+// questions, so the caller can fall back to a plain permission gate.
+function extractQuestions(input: unknown): readonly UserInputQuestion[] | null {
+  if (!isRecord(input) || !Array.isArray(input.questions)) return null
+  const out: UserInputQuestion[] = []
+  input.questions.forEach((raw, i) => {
+    if (!isRecord(raw) || typeof raw.question !== 'string') return
+    const options = Array.isArray(raw.options) ? raw.options : []
+    const choices = options
+      .map(o => (isRecord(o) && typeof o.label === 'string' ? o.label : null))
+      .filter((l): l is string => l !== null)
+    out.push({
+      id: String(i),
+      prompt: raw.question,
+      kind: choices.length ? 'choice' : 'text',
+      choices: choices.length ? choices : undefined,
+      header: typeof raw.header === 'string' ? raw.header : undefined,
+      multiSelect: raw.multiSelect === true
+    })
+  })
+  return out.length ? out : null
+}
+
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null && !Array.isArray(v)
 }
 
 function blockToAttachment(block: ImageBlock | DocumentBlock): UserAttachment {

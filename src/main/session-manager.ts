@@ -263,6 +263,35 @@ export class SessionManager {
     if (payload === null) return
     this.writeStdin(sessionId, payload)
     this.drainAdapterWrites(session)
+    // Close the on-screen permission gate. The decision goes out as an
+    // out-of-band control_response, so claude never emits a tool_result to
+    // complete this item — flip it ourselves. Unknown itemId (e.g. a
+    // provider whose gate resolves through other events) is a no-op in
+    // deriveItems, so this is safe across providers.
+    this.onEvent('session:event', {
+      sessionId,
+      events: [{ kind: 'item.completed', itemId: toolUseId, status: decision === 'allow' ? 'completed' : 'declined' }]
+    })
+  }
+
+  // Answer an AskUserQuestion prompt. The adapter encodes the choice into
+  // claude's gate-deny channel (claude has no structured answer path in
+  // stream-json mode). Then we close the on-screen prompt.
+  public respondUserInput(
+    sessionId: string,
+    requestId: string,
+    answers: Readonly<Record<string, unknown>>
+  ): void {
+    const session = this.sessions.get(sessionId)
+    if (!session) return
+    const payload = session.adapter.formatControl({ kind: 'user-input-response', requestId, answers })
+    if (payload === null) return
+    this.writeStdin(sessionId, payload)
+    this.drainAdapterWrites(session)
+    this.onEvent('session:event', {
+      sessionId,
+      events: [{ kind: 'userInput.resolved', requestId, answers }]
+    })
   }
 
   // Drain bytes the adapter queued asynchronously (e.g. after parsing a

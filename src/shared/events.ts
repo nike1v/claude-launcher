@@ -100,6 +100,11 @@ export interface UserInputQuestion {
   prompt: string
   kind: 'text' | 'choice'
   choices?: readonly string[]
+  // claude's AskUserQuestion extras: a short header label for the choice
+  // group, and whether more than one choice may be selected. Optional —
+  // other providers omit them.
+  header?: string
+  multiSelect?: boolean
 }
 
 export type TurnStatus = 'completed' | 'failed' | 'interrupted'

@@ -7,7 +7,7 @@
 // Session/turn events don't produce rendered items but are tracked
 // elsewhere (StatusBar, listeners).
 
-import type { NormalizedEvent, UserAttachment } from '../../../shared/events'
+import type { NormalizedEvent, UserAttachment, UserInputQuestion } from '../../../shared/events'
 
 export type RenderedItem =
   | { id: string; kind: 'user'; text: string; attachments?: readonly UserAttachment[]; timestamp?: number }
@@ -26,6 +26,12 @@ export type RenderedItem =
       kind: 'permission'
       toolName: string
       input: unknown
+      status: 'pending' | 'resolved'
+    }
+  | {
+      id: string
+      kind: 'question'
+      questions: readonly UserInputQuestion[]
       status: 'pending' | 'resolved'
     }
 
@@ -75,6 +81,26 @@ export function deriveItems(events: readonly NormalizedEvent[]): RenderedItem[] 
       } else if (item.kind === 'permission') {
         replace(item.id, { ...item, status: 'resolved' })
       }
+      continue
+    }
+
+    if (event.kind === 'userInput.requested') {
+      const item: RenderedItem = {
+        id: event.requestId,
+        kind: 'question',
+        questions: event.questions,
+        status: 'pending'
+      }
+      idxById.set(item.id, out.length)
+      out.push(item)
+      continue
+    }
+
+    if (event.kind === 'userInput.resolved') {
+      const idx = idxById.get(event.requestId)
+      if (idx === undefined) continue
+      const item = out[idx]
+      if (item.kind === 'question') replace(item.id, { ...item, status: 'resolved' })
       continue
     }
   }

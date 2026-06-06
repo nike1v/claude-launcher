@@ -66,6 +66,17 @@ export function parseStreamJsonLine(line: string): StreamJsonEvent | null {
       if (typeof parsed.is_error !== 'boolean') return null
       return parsed as unknown as StreamJsonEvent
     }
+    case 'control_request': {
+      // claude's permission gate. Only the can_use_tool subtype is
+      // actionable today — other control subtypes are dropped so we never
+      // surface a prompt the renderer can't answer. request / request_id are
+      // required to build the matching control_response.
+      if (typeof parsed.request_id !== 'string') return null
+      if (!isRecord(parsed.request)) return null
+      if (parsed.request.subtype !== 'can_use_tool') return null
+      if (typeof parsed.request.tool_name !== 'string') return null
+      return parsed as unknown as StreamJsonEvent
+    }
     default:
       return null
   }

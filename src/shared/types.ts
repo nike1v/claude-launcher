@@ -236,6 +236,23 @@ export interface ResultEvent {
   modelUsage?: Record<string, { contextWindow?: number; maxOutputTokens?: number }>
 }
 
+// claude's stream-json control protocol: when a tool isn't pre-allowed by
+// the active permission mode / settings rules, claude emits a
+// control_request asking the client to approve the call and BLOCKS until a
+// matching control_response arrives on stdin. Unhandled, the session wedges
+// on the first non-auto-allowed tool — the "stuck on command use" hang.
+// request_id correlates the response; request.input is echoed back as
+// updatedInput when the user allows.
+export interface ControlRequestEvent {
+  type: 'control_request'
+  request_id: string
+  request: {
+    subtype: 'can_use_tool'
+    tool_name: string
+    input?: unknown
+  }
+}
+
 export type StreamJsonEvent =
   | InitEvent
   | SystemStatusEvent
@@ -243,6 +260,7 @@ export type StreamJsonEvent =
   | AssistantEvent
   | UserEvent
   | ResultEvent
+  | ControlRequestEvent
 
 // ── Subscription usage (scraped from claude's /usage panel) ─────────────────
 
@@ -283,6 +301,10 @@ export interface IpcChannels {
   'session:stop': { sessionId: string }
   'session:interrupt': { sessionId: string }
   'session:permission': { sessionId: string; decision: 'allow' | 'deny'; toolUseId: string }
+  // Answer claude's AskUserQuestion. answers maps question id → the chosen
+  // label (single-select) or labels (multi-select). Routed back to claude
+  // as a control_response on the question's can_use_tool gate.
+  'session:userInput': { sessionId: string; requestId: string; answers: Record<string, unknown> }
   'dialog:saveFile': { defaultName: string; mediaType: string; data: string }
   'projects:save': Project[]
   'session:history:load': { projectId: string; sessionId: string }
@@ -334,6 +356,7 @@ export interface IpcChannels {
 export type IpcInvokeChannel = Extract<
   keyof IpcChannels,
   | 'session:start' | 'session:send' | 'session:stop' | 'session:interrupt' | 'session:permission'
+  | 'session:userInput'
   | 'projects:save' | 'session:history:load' | 'session:history:list' | 'projects:load'
   | 'environments:save' | 'environments:load' | 'environments:probe' | 'environments:usage'
   | 'fs:listDir'

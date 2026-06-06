@@ -117,4 +117,30 @@ describe('parseStreamJsonLine', () => {
     const line = JSON.stringify({ type: 'system', subtype: 'compact_boundary' })
     expect(parseStreamJsonLine(line)).toBeNull()
   })
+
+  it('parses control_request can_use_tool', () => {
+    const line = JSON.stringify({
+      type: 'control_request',
+      request_id: 'req-1',
+      request: { subtype: 'can_use_tool', tool_name: 'Bash', input: { command: 'ls' } }
+    })
+    const result = parseStreamJsonLine(line)
+    expect(result).toMatchObject({
+      type: 'control_request',
+      request_id: 'req-1',
+      request: { subtype: 'can_use_tool', tool_name: 'Bash' }
+    })
+  })
+
+  it('drops control_request without request_id or with an unhandled subtype', () => {
+    expect(parseStreamJsonLine(JSON.stringify({
+      type: 'control_request',
+      request: { subtype: 'can_use_tool', tool_name: 'Bash' }
+    }))).toBeNull()
+    expect(parseStreamJsonLine(JSON.stringify({
+      type: 'control_request',
+      request_id: 'req-2',
+      request: { subtype: 'interrupt' }
+    }))).toBeNull()
+  })
 })

@@ -382,6 +382,35 @@ describe('ClaudeAdapter — formatUserMessage', () => {
   })
 })
 
+describe('ClaudeAdapter — can_use_tool permission gate', () => {
+  it('translates a control_request into a permission gate item keyed on request_id', () => {
+    const events = feed(new ClaudeAdapter(), {
+      type: 'control_request',
+      request_id: 'req-42',
+      request: { subtype: 'can_use_tool', tool_name: 'Edit', input: { file_path: '/srv/x' } }
+    })
+    const item = events.find(e => e.kind === 'item.started')
+    expect(item).toMatchObject({
+      kind: 'item.started',
+      itemId: 'req-42',
+      itemType: 'tool_use',
+      name: 'Edit (permission)',
+      input: { file_path: '/srv/x' }
+    })
+    // The renderer's gate heuristic keys on "permission" in the name.
+    expect((item as { name: string }).name.toLowerCase()).toContain('permission')
+  })
+
+  it('does not surface a gate in replay mode', () => {
+    const events = feed(new ClaudeAdapter('replay'), {
+      type: 'control_request',
+      request_id: 'req-43',
+      request: { subtype: 'can_use_tool', tool_name: 'Bash', input: { command: 'ls' } }
+    })
+    expect(events.some(e => e.kind === 'item.started')).toBe(false)
+  })
+})
+
 describe('ClaudeAdapter — formatControl', () => {
   const adapter = new ClaudeAdapter()
 
@@ -394,39 +423,101 @@ describe('ClaudeAdapter — formatControl', () => {
     expect(parsed.request_id).toMatch(/^req_/)
   })
 
-  it('builds an allow tool_result for accept', () => {
-    const line = adapter.formatControl({
-      kind: 'approval',
-      requestId: 'tool-1',
-      decision: 'accept'
-    })
+  it('builds an allow control_response for accept, echoing the tool input', () => {
+    // Parse the request first so the adapter has the input to echo back.
+    const a = new ClaudeAdapter()
+    a.parseChunk(JSON.stringify({
+      type: 'control_request',
+      request_id: 'req-1',
+      request: { subtype: 'can_use_tool', tool_name: 'Bash', input: { command: 'ls' } }
+    }) + '\n')
+    const line = a.formatControl({ kind: 'approval', requestId: 'req-1', decision: 'accept' })
     const parsed = JSON.parse(line!.trim())
-    expect(parsed.message.content[0]).toEqual({
-      type: 'tool_result',
-      tool_use_id: 'tool-1',
-      content: 'allow'
+    expect(parsed.type).toBe('control_response')
+    expect(parsed.response).toEqual({
+      subtype: 'success',
+      request_id: 'req-1',
+      response: { behavior: 'allow', updatedInput: { command: 'ls' } }
     })
   })
 
-  it('builds a deny tool_result for decline / cancel', () => {
+  it('builds a deny control_response for decline / cancel', () => {
     for (const decision of ['decline', 'cancel'] as const) {
-      const line = adapter.formatControl({
-        kind: 'approval',
-        requestId: 'tool-1',
-        decision
-      })
+      const line = adapter.formatControl({ kind: 'approval', requestId: 'req-x', decision })
       const parsed = JSON.parse(line!.trim())
-      expect(parsed.message.content[0].content).toBe('deny')
+      expect(parsed.type).toBe('control_response')
+      expect(parsed.response.request_id).toBe('req-x')
+      expect(parsed.response.response.behavior).toBe('deny')
     }
   })
 
-  it('returns null for user-input-response (claude has no equivalent)', () => {
+  it('returns null for user-input-response with no matching pending question', () => {
     const line = adapter.formatControl({
       kind: 'user-input-response',
-      requestId: 'q-1',
+      requestId: 'q-unknown',
       answers: {}
     })
     expect(line).toBeNull()
+  })
+})
+
+describe('ClaudeAdapter — AskUserQuestion', () => {
+  const askGate = {
+    type: 'control_request',
+    request_id: 'q-1',
+    request: {
+      subtype: 'can_use_tool',
+      tool_name: 'AskUserQuestion',
+      input: {
+        questions: [{
+          question: 'Which color do you prefer?',
+          header: 'Color',
+          multiSelect: false,
+          options: [
+            { label: 'Red', description: 'warm' },
+            { label: 'Blue', description: 'cool' }
+          ]
+        }]
+      }
+    }
+  }
+
+  it('surfaces a userInput.requested with mapped choices instead of a permission gate', () => {
+    const events = feed(new ClaudeAdapter(), askGate)
+    const req = events.find(e => e.kind === 'userInput.requested')
+    expect(req).toMatchObject({
+      kind: 'userInput.requested',
+      requestId: 'q-1',
+      questions: [{
+        id: '0',
+        prompt: 'Which color do you prefer?',
+        kind: 'choice',
+        choices: ['Red', 'Blue'],
+        header: 'Color',
+        multiSelect: false
+      }]
+    })
+    // Not surfaced as a permission tool item.
+    expect(events.some(e => e.kind === 'item.started')).toBe(false)
+  })
+
+  it('skips the duplicate AskUserQuestion tool_use item in the assistant event', () => {
+    const events = feed(new ClaudeAdapter(), assistant([
+      { type: 'tool_use', id: 't1', name: 'AskUserQuestion', input: { questions: [] } }
+    ]))
+    expect(events.some(e => e.kind === 'item.started' && (e as { itemType?: string }).itemType === 'tool_use')).toBe(false)
+  })
+
+  it('answers via a deny control_response carrying the choice', () => {
+    const a = new ClaudeAdapter()
+    feed(a, askGate)
+    const line = a.formatControl({ kind: 'user-input-response', requestId: 'q-1', answers: { '0': 'Red' } })
+    const parsed = JSON.parse(line!.trim())
+    expect(parsed.type).toBe('control_response')
+    expect(parsed.response.request_id).toBe('q-1')
+    expect(parsed.response.response.behavior).toBe('deny')
+    expect(parsed.response.response.message).toContain('Red')
+    expect(parsed.response.response.message).toContain('Which color do you prefer?')
   })
 })
 
