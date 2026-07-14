@@ -133,8 +133,25 @@ jobs:
 
       - run: pnpm install
 
+      # Sign with the Developer ID cert + notarize when the Apple secrets are
+      # configured; otherwise fall back to ad-hoc (unsigned) so a tag push
+      # never fails just because secrets aren't set yet. See docs/mac-signing.md.
       - name: Build
-        run: pnpm exec electron-vite build && pnpm exec electron-builder --mac --publish never
+        run: |
+          pnpm exec electron-vite build
+          if [ -n "$APPLE_ID" ] && [ -n "$CSC_LINK" ]; then
+            echo "Apple signing secrets present — building signed + notarized."
+            pnpm exec electron-builder --mac --publish never
+          else
+            echo "::warning::Apple signing secrets not set — building ad-hoc (unsigned) mac artifacts; downloads will show 'is damaged'. Add secrets per docs/mac-signing.md."
+            pnpm exec electron-builder --mac --publish never -c.mac.notarize=false -c.mac.identity=-
+          fi
+        env:
+          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 
       - name: Upload macOS artifacts to release
         uses: softprops/action-gh-release@v3
