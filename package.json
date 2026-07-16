@@ -1,6 +1,6 @@
 {
   "name": "claude-launcher",
-  "version": "0.7.29",
+  "version": "0.7.30",
   "description": "Electron desktop app for running Claude CLI sessions",
   "repository": {
     "type": "git",
@@ -76,11 +76,7 @@
     "mac": {
       "artifactName": "${name}-${version}-${arch}.${ext}",
       "category": "public.app-category.developer-tools",
-      "hardenedRuntime": true,
-      "gatekeeperAssess": false,
-      "entitlements": "build/entitlements.mac.plist",
-      "entitlementsInherit": "build/entitlements.mac.plist",
-      "notarize": true,
+      "identity": "-",
       "target": [
         {
           "target": "dmg",

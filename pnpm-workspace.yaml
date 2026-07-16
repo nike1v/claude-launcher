@@ -6,3 +6,11 @@ onlyBuiltDependencies:
   - electron
   - esbuild
   - node-pty
+
+# node-pty 1.1.0 pins node-gyp 9.4.1, which can't locate Visual Studio on
+# the current windows-latest runner image ("Could not find any Visual Studio
+# installation"), breaking node-pty's native rebuild for the Electron ABI.
+# node-gyp 11 detects VS 2022 (17.x) correctly and supports node 24. Applied
+# to node-pty and @electron/rebuild, which both shell out to node-gyp.
+overrides:
+  node-gyp: ^11.0.0

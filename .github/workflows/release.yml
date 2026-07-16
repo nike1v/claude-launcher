@@ -136,15 +136,25 @@ jobs:
       # Sign with the Developer ID cert + notarize when the Apple secrets are
       # configured; otherwise fall back to ad-hoc (unsigned) so a tag push
       # never fails just because secrets aren't set yet. See docs/mac-signing.md.
+      # package.json keeps the proven ad-hoc mac config (identity "-"). When
+      # the Apple secrets exist, override on the CLI to sign with the
+      # Developer ID (identity auto-discovered from CSC_LINK), enable the
+      # hardened runtime + entitlements, and notarize. See docs/mac-signing.md.
       - name: Build
         run: |
           pnpm exec electron-vite build
           if [ -n "$APPLE_ID" ] && [ -n "$CSC_LINK" ]; then
             echo "Apple signing secrets present — building signed + notarized."
-            pnpm exec electron-builder --mac --publish never
+            pnpm exec electron-builder --mac --publish never \
+              -c.mac.identity=null \
+              -c.mac.hardenedRuntime=true \
+              -c.mac.gatekeeperAssess=false \
+              -c.mac.entitlements=build/entitlements.mac.plist \
+              -c.mac.entitlementsInherit=build/entitlements.mac.plist \
+              -c.mac.notarize=true
           else
             echo "::warning::Apple signing secrets not set — building ad-hoc (unsigned) mac artifacts; downloads will show 'is damaged'. Add secrets per docs/mac-signing.md."
-            pnpm exec electron-builder --mac --publish never -c.mac.notarize=false -c.mac.identity=-
+            pnpm exec electron-builder --mac --publish never
           fi
         env:
           CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
