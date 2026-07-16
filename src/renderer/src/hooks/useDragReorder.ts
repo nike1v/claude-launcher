@@ -28,9 +28,13 @@ interface Options {
   // Called when the user finishes a valid drop — both ids guaranteed to be
   // in the same group when groupKey is in use.
   onReorder: (fromId: string, toId: string, position: DropPosition) => void
+  // Axis the rows are laid out along. 'vertical' (default) splits the target
+  // on its horizontal midline (before = above); 'horizontal' splits on the
+  // vertical midline (before = left) — used by the tab bar.
+  orientation?: 'vertical' | 'horizontal'
 }
 
-export function useDragReorder({ onReorder }: Options): DragReorder {
+export function useDragReorder({ onReorder, orientation = 'vertical' }: Options): DragReorder {
   const [draggingId, setDraggingId] = useState<string | null>(null)
   const [draggingGroup, setDraggingGroup] = useState<string | undefined>(undefined)
   const [dropTargetId, setDropTargetId] = useState<string | null>(null)
@@ -58,9 +62,11 @@ export function useDragReorder({ onReorder }: Options): DragReorder {
       e.preventDefault()
       e.dataTransfer.dropEffect = 'move'
       const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
-      const half = rect.top + rect.height / 2
+      const before = orientation === 'horizontal'
+        ? e.clientX < rect.left + rect.width / 2
+        : e.clientY < rect.top + rect.height / 2
       setDropTargetId(id)
-      setDropPosition(e.clientY < half ? 'before' : 'after')
+      setDropPosition(before ? 'before' : 'after')
     },
     onDragLeave: (e: React.DragEvent) => {
       // Only clear when leaving for somewhere other than a child element.
@@ -78,7 +84,7 @@ export function useDragReorder({ onReorder }: Options): DragReorder {
       reset()
     },
     onDragEnd: () => reset()
-  }), [draggingId, draggingGroup, dropTargetId, dropPosition, onReorder, reset])
+  }), [draggingId, draggingGroup, dropTargetId, dropPosition, onReorder, reset, orientation])
 
   return {
     draggingId,

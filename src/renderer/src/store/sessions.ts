@@ -1,5 +1,7 @@
 import { create } from 'zustand'
 import type { Session } from '../../../shared/types'
+import { reorderById } from '../lib/reorder'
+import type { DropPosition } from '../hooks/useDragReorder'
 
 interface SessionsStore {
   sessions: Record<string, Session>
@@ -16,6 +18,9 @@ interface SessionsStore {
   replaceSession: (oldSessionId: string, next: Session) => void
   setActiveSession: (sessionId: string | null) => void
   markRead: (sessionId: string) => void
+  // Drag-reorder a tab to land before/after another. Order is persisted by
+  // useTabPersistence, which snapshots tabOrder.
+  reorderTabs: (fromId: string, toId: string, position: DropPosition) => void
 }
 
 export const useSessionsStore = create<SessionsStore>((set, get) => ({
@@ -83,5 +88,16 @@ export const useSessionsStore = create<SessionsStore>((set, get) => ({
       return {
         sessions: { ...state.sessions, [sessionId]: { ...existing, hasUnread: false } }
       }
+    }),
+
+  reorderTabs: (fromId, toId, position) =>
+    set(state => {
+      const next = reorderById(
+        state.tabOrder.map(id => ({ id })),
+        fromId,
+        toId,
+        position
+      )
+      return next ? { tabOrder: next.map(x => x.id) } : state
     })
 }))

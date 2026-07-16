@@ -2,11 +2,13 @@ import { useEffect } from 'react'
 import { useSessionsStore } from '../../store/sessions'
 import { useMessagesStore } from '../../store/messages'
 import { stopSession } from '../../ipc/bridge'
+import { useDragReorder } from '../../hooks/useDragReorder'
 import { Tab } from './Tab'
 
 export function TabBar() {
-  const { sessions, tabOrder, activeSessionId, setActiveSession, removeSession } = useSessionsStore()
+  const { sessions, tabOrder, activeSessionId, setActiveSession, removeSession, reorderTabs } = useSessionsStore()
   const { clearSession } = useMessagesStore()
+  const dnd = useDragReorder({ onReorder: reorderTabs, orientation: 'horizontal' })
 
   const handleClose = (sessionId: string) => {
     stopSession(sessionId)
@@ -43,16 +45,36 @@ export function TabBar() {
       {tabOrder.map(sessionId => {
         const session = sessions[sessionId]
         if (!session) return null
+        const dropping = dnd.isDropTarget(sessionId)
         return (
-          <Tab
+          <div
             key={sessionId}
-            session={session}
-            isActive={sessionId === activeSessionId}
-            onActivate={() => setActiveSession(sessionId)}
-            onClose={() => handleClose(sessionId)}
-          />
+            {...dnd.bindRow(sessionId)}
+            className={`relative min-w-0 ${dnd.isDragging(sessionId) ? 'opacity-40' : ''}`}
+          >
+            {dropping && dnd.dropPosition === 'before' && <DropLine edge="left" />}
+            <Tab
+              session={session}
+              isActive={sessionId === activeSessionId}
+              onActivate={() => setActiveSession(sessionId)}
+              onClose={() => handleClose(sessionId)}
+            />
+            {dropping && dnd.dropPosition === 'after' && <DropLine edge="right" />}
+          </div>
         )
       })}
     </div>
+  )
+}
+
+// Vertical insertion line shown on the left/right edge of the tab a drop
+// targets — the horizontal analogue of the sidebar's project DropLine.
+function DropLine({ edge }: { edge: 'left' | 'right' }) {
+  return (
+    <div
+      className={`absolute inset-y-1 w-0.5 bg-accent/80 rounded-full pointer-events-none z-10 ${
+        edge === 'left' ? 'left-0' : 'right-0'
+      }`}
+    />
   )
 }

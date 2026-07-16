@@ -90,4 +90,24 @@ describe('sessions store — addSession / removeSession indexing', () => {
     s.setActiveSession('a')
     expect(useSessionsStore.getState().sessions['a'].hasUnread).toBe(false)
   })
+
+  it('reorderTabs moves a tab before/after another and leaves activeSessionId alone', () => {
+    const s = useSessionsStore.getState()
+    s.addSession(makeSession('a'))
+    s.addSession(makeSession('b'))
+    s.addSession(makeSession('c')) // active = c
+    s.reorderTabs('c', 'a', 'before')
+    expect(useSessionsStore.getState().tabOrder).toEqual(['c', 'a', 'b'])
+    expect(useSessionsStore.getState().activeSessionId).toBe('c')
+    s.reorderTabs('c', 'b', 'after')
+    expect(useSessionsStore.getState().tabOrder).toEqual(['a', 'b', 'c'])
+  })
+
+  it('reorderTabs is a no-op when dropping a tab onto itself', () => {
+    const s = useSessionsStore.getState()
+    s.addSession(makeSession('a'))
+    s.addSession(makeSession('b'))
+    s.reorderTabs('a', 'a', 'after')
+    expect(useSessionsStore.getState().tabOrder).toEqual(['a', 'b'])
+  })
 })
