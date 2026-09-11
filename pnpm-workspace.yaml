@@ -7,10 +7,13 @@ onlyBuiltDependencies:
   - esbuild
   - node-pty
 
-# node-pty 1.1.0 pins node-gyp 9.4.1, which can't locate Visual Studio on
-# the current windows-latest runner image ("Could not find any Visual Studio
-# installation"), breaking node-pty's native rebuild for the Electron ABI.
-# node-gyp 11 detects VS 2022 (17.x) correctly and supports node 24. Applied
-# to node-pty and @electron/rebuild, which both shell out to node-gyp.
+# node-pty 1.1.0 pins node-gyp 9.4.1, whose imported distutils is gone in
+# Python 3.12; node-gyp 11 supports node 24 and Python 3.11. This only governs
+# node-pty's *install-time* compile on linux (win/mac use its shipped
+# prebuilds). The Electron-ABI rebuild is disabled entirely via
+# build.npmRebuild=false — node-pty is Node-API, so the install-built binary
+# loads under Electron without recompiling (which also sidesteps the
+# @electron/rebuild 3.6.1 + node-gyp >=10 promise-API hang and the VS-2026
+# windows toolchain gap).
 overrides:
   node-gyp: ^11.0.0

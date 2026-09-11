@@ -41,8 +41,8 @@ jobs:
   build-linux:
     needs: verify
     runs-on: ubuntu-latest
-    # Guard against the multi-hour hang seen in the electron-builder step
-    # (v0.7.30): fail fast so logs survive and we can see where it stalls.
+    # Safety net against a wedged build step (see the v0.7.30 @electron/rebuild
+    # hang); a healthy build is a few minutes.
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v6
@@ -56,19 +56,23 @@ jobs:
           node-version: '24'
           cache: 'pnpm'
 
-      # node-gyp 9.x (used by node-pty 1.1.0) imports distutils, which Python
-      # removed in 3.12 — runners default to 3.12+ and the build fails. Pin
-      # to 3.11 across all jobs so node-pty's native build succeeds.
+      # node-pty compiles from source during install on linux (no prebuild
+      # shipped); its node-gyp needs Python < 3.12 (distutils). Pin 3.11.
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
       - run: pnpm install
 
+      # npmRebuild is off (electron-builder can't rebuild node-pty against the
+      # VS-2026 windows runner without hanging @electron/rebuild 3.6.1), so the
+      # install-step native binary is load-bearing. node-pty is Node-API, so it
+      # loads under Electron too — fail in seconds here if the binary is broken.
+      - name: Verify node-pty native binary loads
+        run: node -e "require('node-pty'); console.log('node-pty ok')"
+
       - name: Build
         run: pnpm exec electron-vite build && pnpm exec electron-builder --linux --publish never
-        env:
-          DEBUG: electron-builder
 
       - name: Upload AppImage to release
         uses: softprops/action-gh-release@v3
@@ -105,10 +109,11 @@ jobs:
 
       - run: pnpm install
 
+      - name: Verify node-pty native binary loads
+        run: node -e "require('node-pty'); console.log('node-pty ok')"
+
       - name: Build
         run: pnpm exec electron-vite build && pnpm exec electron-builder --win --publish never
-        env:
-          DEBUG: electron-builder
 
       - name: Upload Windows installer to release
         uses: softprops/action-gh-release@v3
@@ -142,6 +147,9 @@ jobs:
 
       - run: pnpm install
 
+      - name: Verify node-pty native binary loads
+        run: node -e "require('node-pty'); console.log('node-pty ok')"
+
       # Sign with the Developer ID cert + notarize when the Apple secrets are
       # configured; otherwise fall back to ad-hoc (unsigned) so a tag push
       # never fails just because secrets aren't set yet. See docs/mac-signing.md.
@@ -166,7 +174,6 @@ jobs:
             pnpm exec electron-builder --mac --publish never
           fi
         env:
-          DEBUG: electron-builder
           CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
