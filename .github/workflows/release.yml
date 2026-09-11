@@ -41,6 +41,9 @@ jobs:
   build-linux:
     needs: verify
     runs-on: ubuntu-latest
+    # Guard against the multi-hour hang seen in the electron-builder step
+    # (v0.7.30): fail fast so logs survive and we can see where it stalls.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v6
 
@@ -64,6 +67,8 @@ jobs:
 
       - name: Build
         run: pnpm exec electron-vite build && pnpm exec electron-builder --linux --publish never
+        env:
+          DEBUG: electron-builder
 
       - name: Upload AppImage to release
         uses: softprops/action-gh-release@v3
@@ -81,6 +86,7 @@ jobs:
   build-windows:
     needs: verify
     runs-on: windows-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v6
 
@@ -101,6 +107,8 @@ jobs:
 
       - name: Build
         run: pnpm exec electron-vite build && pnpm exec electron-builder --win --publish never
+        env:
+          DEBUG: electron-builder
 
       - name: Upload Windows installer to release
         uses: softprops/action-gh-release@v3
@@ -115,6 +123,7 @@ jobs:
   build-macos:
     needs: verify
     runs-on: macos-latest
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v6
 
@@ -157,6 +166,7 @@ jobs:
             pnpm exec electron-builder --mac --publish never
           fi
         env:
+          DEBUG: electron-builder
           CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
