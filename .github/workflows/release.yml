@@ -127,7 +127,10 @@ jobs:
 
   build-macos:
     needs: verify
-    runs-on: macos-latest
+    # Pinned to macos-14: electron-builder 25.1.8's ad-hoc code signer throws
+    # "not a file" on the macos-latest image (macOS 26 / Darwin 25.6), a runner
+    # regression. macos-14 signs cleanly. Revisit if we move to electron-builder 26.
+    runs-on: macos-14
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v6
@@ -163,14 +166,15 @@ jobs:
           if [ -n "$APPLE_ID" ] && [ -n "$CSC_LINK" ]; then
             echo "Apple signing secrets present — building signed + notarized."
             pnpm exec electron-builder --mac --publish never \
+              -c.mac.identity=null \
               -c.mac.hardenedRuntime=true \
               -c.mac.gatekeeperAssess=false \
               -c.mac.entitlements=build/entitlements.mac.plist \
               -c.mac.entitlementsInherit=build/entitlements.mac.plist \
               -c.mac.notarize=true
           else
-            echo "::warning::Apple signing secrets not set — building UNSIGNED mac artifacts; downloads need the xattr workaround in docs/mac-signing.md. Add secrets for a notarized build."
-            CSC_IDENTITY_AUTO_DISCOVERY=false pnpm exec electron-builder --mac --publish never
+            echo "::warning::Apple signing secrets not set — building ad-hoc (unsigned) mac artifacts; downloads need the xattr workaround in docs/mac-signing.md. Add secrets for a notarized build."
+            pnpm exec electron-builder --mac --publish never
           fi
         env:
           CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
