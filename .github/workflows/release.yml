@@ -150,28 +150,27 @@ jobs:
       - name: Verify node-pty native binary loads
         run: node -e "require('node-pty'); console.log('node-pty ok')"
 
-      # Sign with the Developer ID cert + notarize when the Apple secrets are
-      # configured; otherwise fall back to ad-hoc (unsigned) so a tag push
-      # never fails just because secrets aren't set yet. See docs/mac-signing.md.
-      # package.json keeps the proven ad-hoc mac config (identity "-"). When
-      # the Apple secrets exist, override on the CLI to sign with the
-      # Developer ID (identity auto-discovered from CSC_LINK), enable the
-      # hardened runtime + entitlements, and notarize. See docs/mac-signing.md.
+      # When the Apple secrets exist, CSC_LINK auto-discovers the Developer ID
+      # cert and we enable the hardened runtime + entitlements + notarization.
+      # Otherwise build UNSIGNED (CSC_IDENTITY_AUTO_DISCOVERY=false) — the
+      # electron-builder-25 ad-hoc signer ("identity -") throws "not a file" on
+      # the current macOS runner, and an unsigned build needs the same xattr
+      # workaround anyway (see docs/mac-signing.md). package.json sets no mac
+      # identity so both paths are driven from here.
       - name: Build
         run: |
           pnpm exec electron-vite build
           if [ -n "$APPLE_ID" ] && [ -n "$CSC_LINK" ]; then
             echo "Apple signing secrets present — building signed + notarized."
             pnpm exec electron-builder --mac --publish never \
-              -c.mac.identity=null \
               -c.mac.hardenedRuntime=true \
               -c.mac.gatekeeperAssess=false \
               -c.mac.entitlements=build/entitlements.mac.plist \
               -c.mac.entitlementsInherit=build/entitlements.mac.plist \
               -c.mac.notarize=true
           else
-            echo "::warning::Apple signing secrets not set — building ad-hoc (unsigned) mac artifacts; downloads will show 'is damaged'. Add secrets per docs/mac-signing.md."
-            pnpm exec electron-builder --mac --publish never
+            echo "::warning::Apple signing secrets not set — building UNSIGNED mac artifacts; downloads need the xattr workaround in docs/mac-signing.md. Add secrets for a notarized build."
+            CSC_IDENTITY_AUTO_DISCOVERY=false pnpm exec electron-builder --mac --publish never
           fi
         env:
           CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
